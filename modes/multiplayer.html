@@ -60,6 +60,7 @@
   <div class="sub">Multiplayer · Player vs Player</div>
   <button class="mbtn" id="findBtn">FIND MATCH</button>
   <div class="status" id="status"></div>
+  <div style="margin-top:10px;color:var(--muted);font-size:12px;letter-spacing:2px">MADE BY LIAM HUTSON</div>
 </div>
 
 <div id="wrap" class="hidden">
@@ -88,7 +89,7 @@
 <script>
 const COLS_DEF=180, ROWS_DEF=112;
 let COLS=COLS_DEF, ROWS=ROWS_DEF, mySide=0, palette=[], unlocked=new Set(), tool=3 /*ACID*/;
-let ws=null, started=false;
+let ws=null, started=false, mirror=false;
 
 // ---- element colour lookup (id -> [r,g,b]); cities tinted by owner ----
 const LUT=new Array(256).fill(null).map(()=>[8,22,28]);
@@ -111,7 +112,9 @@ function fit(){ const s=document.getElementById("stage"); const ar=COLS/ROWS; le
 addEventListener("resize",()=>{ if(started) fit(); });
 function unpackRLE(runs){ let p=0; for(let k=0;k<runs.length;k+=2){ const v=runs[k],c=runs[k+1]; for(let n=0;n<c;n++) grid[p++]=v; } }
 function render(){ let p=0; for(let i=0;i<grid.length;i++){ const c=LUT[grid[i]]||LUT[0]; buf[p++]=c[0];buf[p++]=c[1];buf[p++]=c[2];buf[p++]=255; }
-  sctx.putImageData(img,0,0); ctx.imageSmoothingEnabled=false; ctx.clearRect(0,0,cv.width,cv.height); ctx.drawImage(sim,0,0,cv.width,cv.height); }
+  sctx.putImageData(img,0,0); ctx.imageSmoothingEnabled=false; ctx.clearRect(0,0,cv.width,cv.height);
+  if(mirror){ ctx.save(); ctx.translate(cv.width,0); ctx.scale(-1,1); ctx.drawImage(sim,0,0,cv.width,cv.height); ctx.restore(); }
+  else ctx.drawImage(sim,0,0,cv.width,cv.height); }
 
 // ---- networking ----
 function connect(){
@@ -136,9 +139,13 @@ function status(s){ document.getElementById("status").textContent=s; }
 document.getElementById("findBtn").onclick=()=>{ document.getElementById("findBtn").disabled=true; connect(); };
 function startGame(){ started=true; document.getElementById("lobby").classList.add("hidden"); document.getElementById("wrap").classList.remove("hidden");
   document.getElementById("sideName").textContent="P"+(mySide+1);
-  // label cities from your perspective
+  // perspective-relative view: YOUR city is always shown on the LEFT in green, the enemy on the RIGHT in red.
+  // For player 2 we mirror the arena horizontally (and remap input) so it isn't "your red city on the right".
+  mirror = (mySide===1);
+  const mineType = mySide===0?16:8, foeType = mySide===0?8:16;   // 16=PCITY (left), 8=CITY (right)
+  LUT[mineType]=[62,196,107];   // your city → green
+  LUT[foeType]=[224,74,74];     // enemy city → red
   document.getElementById("tagYou").textContent="YOU"; document.getElementById("tagOpp").textContent="OPP";
-  if(mySide===1){ document.getElementById("tagYou").classList.replace("l","r"); document.getElementById("tagOpp").classList.replace("r","l"); }
   fit();
 }
 
@@ -181,7 +188,9 @@ function refreshToolLocks(me){ [...toolsEl.children].forEach(el=>{ const t=+el.d
 // ---- input (send placements, server uses your brush) ----
 let down=false, gx=0, gy=0, sendTimer=0;
 function toGrid(e){ const r=cv.getBoundingClientRect(); const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left, cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
-  gx=Math.floor(cx/r.width*COLS); gy=Math.floor(cy/r.height*ROWS); }
+  gx=Math.floor(cx/r.width*COLS); gy=Math.floor(cy/r.height*ROWS);
+  if(mirror) gx=COLS-1-gx;   // input is in mirrored display space → convert back to true server coords
+}
 function placeNow(){ send({t:"place",tool,x:gx,y:gy}); }
 cv.addEventListener("pointerdown",e=>{ if(!started)return; down=true; toGrid(e); placeNow(); cv.setPointerCapture(e.pointerId); });
 cv.addEventListener("pointermove",e=>{ if(!down)return; toGrid(e); });
