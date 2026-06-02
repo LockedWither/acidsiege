@@ -1,0 +1,11 @@
+# One-click deploy on Render (https://render.com) — supports WebSockets, free TLS, custom domains.
+services:
+  - type: web
+    name: acidsiege
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    autoDeploy: true
+    # Render injects PORT automatically; server.js reads process.env.PORT.

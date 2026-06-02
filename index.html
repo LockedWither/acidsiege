@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ACID SIEGE — Falling-Sand Siege Game</title>
+<meta name="description" content="ACID SIEGE is a 2D falling-sand artillery game. Rain acid, lava, nukes and antimatter on the enemy city — solo against a bot or online against another player. Play free in your browser.">
+<link rel="canonical" href="https://acidsiege.io/">
+<meta name="theme-color" content="#06141b">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Acid Siege">
+<!-- social -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://acidsiege.io/">
+<meta property="og:title" content="ACID SIEGE">
+<meta property="og:description" content="A 2D falling-sand siege game. Rain chemicals on the enemy city — vs Bot or online PvP.">
+<meta property="og:site_name" content="Acid Siege">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ACID SIEGE">
+<meta name="twitter:description" content="A 2D falling-sand siege game. Solo vs Bot or online PvP.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2306141b'/%3E%3Cpath d='M16 5c4 5 7 8 7 12a7 7 0 1 1-14 0c0-4 3-7 7-12z' fill='%238ef02a'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg0:#06141b;--bg1:#0a2531;--bg2:#0e3242;--ink:#dff3ee;--muted:#7fa6a0;
+    --toxic:#8ef02a;--toxic2:#5fae1f;--amber:#ffb627;--danger:#ff5347;--edge:rgba(126,252,74,.18);}
+  *{box-sizing:border-box} html,body{margin:0;min-height:100%}
+  body{font-family:Outfit,system-ui,sans-serif;color:var(--ink);min-height:100vh;
+    background:
+      radial-gradient(1100px 700px at 80% -10%,#133a3f 0,transparent 55%),
+      radial-gradient(900px 600px at -5% 110%,#16263a 0,transparent 50%),
+      linear-gradient(160deg,var(--bg0),var(--bg1) 60%,var(--bg2));}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.05;
+    background-image:repeating-linear-gradient(45deg,#000 0 14px,transparent 14px 28px)}
+  .wrap{max-width:1000px;margin:0 auto;padding:6vh 22px 60px;position:relative}
+  header{text-align:center}
+  .logo{font-family:Bungee,Impact,sans-serif;font-size:clamp(46px,13vw,120px);line-height:.84;margin:0;color:var(--toxic);
+    text-shadow:0 0 40px rgba(126,252,74,.4),5px 5px 0 #07181f;letter-spacing:1px}
+  .tag{margin-top:10px;color:var(--muted);letter-spacing:5px;text-transform:uppercase;font-size:clamp(11px,2.4vw,15px)}
+  .lede{max-width:640px;margin:18px auto 0;color:#bfe0d8;font-size:clamp(14px,2.4vw,17px);line-height:1.6}
+  .cta{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin:34px 0 8px}
+  .play{display:flex;flex-direction:column;align-items:center;gap:4px;text-decoration:none;font-family:Bungee,Impact;
+    padding:20px 30px;border-radius:16px;min-width:240px;transition:.14s;letter-spacing:1px}
+  .play small{font-family:Outfit;font-weight:600;font-size:11px;letter-spacing:1px;opacity:.8;text-transform:uppercase}
+  .play:hover{transform:translateY(-3px)}
+  .solo{color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic2));box-shadow:0 10px 30px rgba(126,252,74,.3);font-size:22px}
+  .online{color:var(--ink);background:rgba(255,255,255,.05);border:1px solid var(--edge);font-size:22px}
+  .online small{color:var(--amber)}
+  .feats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:48px}
+  .feat{background:rgba(10,30,40,.6);border:1px solid var(--edge);border-radius:14px;padding:16px 18px}
+  .feat h3{margin:0 0 6px;font-size:14px;color:var(--toxic);letter-spacing:.5px}
+  .feat p{margin:0;color:var(--muted);font-size:13px;line-height:1.55}
+  footer{text-align:center;margin-top:54px;color:var(--muted);font-size:12px}
+  footer a{color:var(--toxic2);text-decoration:none}
+  .pill{display:inline-block;margin-top:14px;padding:5px 12px;border-radius:20px;font-size:11px;letter-spacing:1px;
+    text-transform:uppercase;color:var(--amber);background:rgba(255,182,39,.08);border:1px solid rgba(255,182,39,.25)}
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <h1 class="logo">ACID<br>SIEGE</h1>
+      <div class="tag">Falling-sand siege warfare</div>
+      <p class="lede">Rain acid, lava, nukes, antimatter and twenty escalating super-weapons on the enemy city.
+        Fortify your own walls, climb the weapon ladder, and out-siege your rival. Runs entirely in your browser.</p>
+      <div class="pill">No install · No sign-up · Free</div>
+      <div class="cta">
+        <a class="play solo" href="/singleplayer">SINGLE&nbsp;PLAYER<small>vs Bot · endless waves</small></a>
+        <a class="play online" href="/multiplayer">MULTIPLAYER<small>online PvP · 1v1</small></a>
+      </div>
+    </header>
+
+    <section class="feats">
+      <div class="feat"><h3>Original sand engine</h3><p>A from-scratch cellular automaton — sand slides, liquids flow, solids stack, and chemicals react.</p></div>
+      <div class="feat"><h3>40+ weapons</h3><p>From acid and fire to TNT, nukes, antimatter, black holes and an Annihilation Core.</p></div>
+      <div class="feat"><h3>Build & defend</h3><p>Spend coins on City Blocks, brush upgrades and exponential armor to keep your city standing.</p></div>
+      <div class="feat"><h3>Online 1v1</h3><p>Authoritative server, shared arena, live chat — siege a real opponent in real time.</p></div>
+    </section>
+
+    <footer>
+      <div>© <span id="yr"></span> Acid Siege · <a href="/singleplayer">Play solo</a> · <a href="/multiplayer">Play online</a></div>
+    </footer>
+  </main>
+  <script>document.getElementById("yr").textContent=new Date().getFullYear();</script>
+</body>
+</html>

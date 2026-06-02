@@ -1,0 +1,12 @@
+{
+  "name": "acid-siege-mp",
+  "version": "1.0.0",
+  "description": "ACID SIEGE — authoritative-server multiplayer (Player vs Player)",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
