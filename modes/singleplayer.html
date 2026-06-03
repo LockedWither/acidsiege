@@ -814,9 +814,8 @@ function step(){
 }
 
 // ---- bot AI ----
-let botTimer=0, botHoldT=0, botCol=-1, botEl=ACID;
-const BOT_HOLD=Math.round(1500/16);   // bot "holds down" on a weapon for ~1.5 seconds
-function botInterval(){ return Math.round((5000-1500)/16); }   // constant: a 1.5s hold starts every ~5s, regardless of wave
+let botNextMs=0, botHoldUntil=0, botCol=-1, botEl=ACID;   // wall-clock so cadence is real-time (not tied to sim ticks/lag/waves)
+const BOT_PERIOD=5000, BOT_HOLD_MS=1500;   // a 1.5s hold starts every 5 real seconds
 const BOMB_PWR={[TNT]:25,[NUKE]:120,[HBOMB]:350};    // bombs aren't in DMG; rough power for ranking
 function powerOf(t){ if(DMG[t]!==undefined) return DMG[t]; if(BOMB_PWR[t]!==undefined) return BOMB_PWR[t]; if(DEFBYID[t]) return DEFBYID[t].dmg; return 0.3; }
 let ALL_WEAPONS=null;   // every damaging tool, ranked weakest→strongest
@@ -848,12 +847,13 @@ function botPickColumn(){   // a surviving player-city column, weighted toward t
   return best;
 }
 function botStep(){
-  if(botHoldT>0){ botHoldT--; botDrop(botCol,botEl); return; }   // mid-hold: keep streaming the weapon
-  botTimer++;
-  if(botTimer<botInterval()) return;
-  botTimer=0;
-  botCol=botPickColumn(); if(botCol<0) return;
-  botEl=botPickElement(); botHoldT=BOT_HOLD;                      // start a ~1.5s hold
+  const now=performance.now();
+  if(now<botHoldUntil){ botDrop(botCol,botEl); return; }          // mid-hold: keep streaming the weapon
+  if(now<botNextMs) return;                                       // waiting for the next 5s slot
+  botCol=botPickColumn(); botNextMs=now+BOT_PERIOD;               // schedule next hold 5s out regardless
+  if(botCol<0) return;
+  botEl=botPickElement(); botHoldUntil=now+BOT_HOLD_MS;           // start a 1.5s hold
+  botDrop(botCol,botEl);
 }
 
 /* ============================================================
@@ -1175,7 +1175,7 @@ rebuildBtn.onclick=()=>{
 function resetGame(){
   coins=STARTING_COINS; playerLevel=1; enemyLevel=1; wave=1; razings=0; gameOver=false;
   unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t));
-  tool=ACID; pops.length=0; botTimer=0; botHoldT=0;
+  tool=ACID; pops.length=0; botNextMs=0; botHoldUntil=0;
   brushLevel=1; brush=brushLevel+1;
   clearArena(); buildCities(); renderTools(); renderBrushBtn();
 }
