@@ -174,12 +174,9 @@
   #map .mtop{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   #map .mtop h2{font-family:"Bungee",sans-serif;color:var(--toxic);margin:0;font-size:clamp(16px,4vw,24px);letter-spacing:1px}
   #map .muted{color:var(--muted);font-size:13px} #map .mcoin{color:var(--amber);font-weight:800;margin-left:auto}
-  #mArea{flex:1;position:relative;border-radius:16px;border:1px solid var(--panel-edge);overflow:hidden;
-    background:linear-gradient(90deg, rgba(62,196,107,.10) 0 48%, rgba(255,255,255,.04) 48% 52%, rgba(226,58,58,.10) 52% 100%)}
-  #mArea::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:repeating-linear-gradient(180deg,var(--amber) 0 8px,transparent 8px 16px);opacity:.4}
-  .citydot{position:absolute;width:28px;height:28px;border-radius:50%;transform:translate(-50%,-50%);cursor:pointer;
-    border:2px solid rgba(0,0,0,.45);box-shadow:0 2px 8px rgba(0,0,0,.4);transition:transform .1s}
-  .citydot:hover{transform:translate(-50%,-50%) scale(1.18)}
+  #mapcv{flex:1;width:100%;min-height:0;border-radius:16px;border:1px solid var(--panel-edge);
+    background:radial-gradient(120% 120% at 50% 0%,#0c2630 0,#06141b 70%);cursor:pointer;display:block}
+  #homeStrip{min-height:24px;display:flex;flex-wrap:wrap;align-items:center;justify-content:center}
   .mhint{color:var(--muted);font-size:12px;text-align:center}
   #howto{max-width:min(560px,90vw);text-align:left;background:var(--panel);border:1px solid var(--panel-edge);
     border-radius:14px;padding:15px 18px;font-size:13.5px;line-height:1.65;color:var(--muted)}
@@ -237,10 +234,13 @@
     <button class="mbtn play" id="playBtn">PLAY · ENDLESS</button>
     <button class="mbtn ghost" id="howtoBtn">HOW TO PLAY</button>
   </div>
-  <div class="diffsel" style="display:flex;gap:8px;justify-content:center">
-    <button class="mbtn ghost conq" data-scale="state"   style="font-size:14px;padding:10px 14px">🗺️ STATE</button>
-    <button class="mbtn ghost conq" data-scale="country" style="font-size:14px;padding:10px 14px">🌎 COUNTRY</button>
-    <button class="mbtn ghost conq" data-scale="world"   style="font-size:14px;padding:10px 14px">🌍 WORLD</button>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:center">
+    <button class="mbtn ghost" id="wavesToggle" style="font-size:12px;padding:7px 16px">MAP MODE: NO WAVES (conquer)</button>
+    <div class="diffsel" style="display:flex;gap:8px;justify-content:center">
+      <button class="mbtn ghost conq" data-scale="state"   style="font-size:14px;padding:10px 14px">🗺️ STATE</button>
+      <button class="mbtn ghost conq" data-scale="country" style="font-size:14px;padding:10px 14px">🌎 COUNTRY</button>
+      <button class="mbtn ghost conq" data-scale="world"   style="font-size:14px;padding:10px 14px">🌍 WORLD</button>
+    </div>
   </div>
   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
     <button class="mbtn ghost" id="lbBtn"     style="font-size:13px;padding:9px 14px">🏆 LEADERBOARD</button>
@@ -273,13 +273,15 @@
 <!-- conquest map -->
 <div id="map" class="hidden">
   <div class="mtop">
+    <button class="mbtn ghost" id="mBack" style="font-size:12px;padding:7px 12px">← BACK</button>
     <h2 id="mTitle">CONQUEST</h2>
     <span id="mStatus" class="muted"></span>
     <span class="mcoin">💰 <b id="mCoins2">0</b></span>
     <button class="mbtn ghost" id="mMenuBtn" style="font-size:12px;padding:7px 12px">MENU</button>
   </div>
-  <div id="mArea"></div>
-  <div class="mhint">Tap an <b style="color:#ff5347">enemy</b> city to siege it · tap your own <b>gray</b> city to rebuild (20k). Destroy every enemy city before the bot razes yours.</div>
+  <canvas id="mapcv"></canvas>
+  <div id="homeStrip"></div>
+  <div class="mhint">Click a <b>territory</b> to zoom in · click a <b>city</b> (white dot) to attack · gray = destroyed</div>
 </div>
 
 <!-- mobile top bar -->
@@ -568,10 +570,13 @@ function damageCity(n,gx,gy){
   const gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel);
   coins+=gain; cityCells-=n; coinFlash=1;
   if(gx!==undefined && Math.random()<0.22) pop(gx,gy,gain);
-  if(!gameOver && enemyRazed()){ if(conquest) conquestWinBattle(); else nextWave(); }   // enemy razed → win battle/wave
+  if(!gameOver && enemyRazed()){
+    if(conquest){ if(mapWaves){ battleWaves++; if(battleWaves>=3) conquestWinBattle(); else nextWave(); } else conquestWinBattle(); }
+    else nextWave();
+  }   // enemy razed → conquer city / advance wave
 }
 function damagePCity(n){ pcityCells-=n;
-  if(playerRazed()) loseGame();                             // your city 90% gone → defeat
+  if(playerRazed()){ if(conquest&&inBattle) conquestLoseBattle(); else loseGame(); }   // your city razed
 }
 function nextWave(){
   razings++; wave++;
@@ -1303,7 +1308,7 @@ function fit(){
   cv.width=COLS*scale; cv.height=ROWS*scale;
   cv.style.width=w+"px"; cv.style.height=h+"px";
 }
-addEventListener("resize",fit); fit();
+addEventListener("resize",()=>{ fit(); if(conquest&&!inBattle) renderMap(); }); fit();
 
 buildCities();
 
@@ -1318,7 +1323,7 @@ const menuEl=document.getElementById("menu"),
       drawerBack=document.getElementById("drawerBack");
 function startGame(){
   if(conquest){ conquest=false; if(botRazeTimer){clearInterval(botRazeTimer);botRazeTimer=null;} mapEl.classList.add("hidden"); }
-  if(gameOver || activeCity!==null){ activeCity=null; resetGame(); }   // fresh endless run
+  if(gameOver || activeLeaf!==null){ activeLeaf=null; resetGame(); }   // fresh endless run
   actxGet();                                                // unlock audio on this user gesture
   menuMsg.classList.add("hidden");
   running=true; menuEl.classList.add("hidden"); closeDrawer(); fit();
@@ -1437,82 +1442,118 @@ document.getElementById("deleteBtn").onclick=()=>{ if(confirm("Delete your saved
 importFile.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ applySave(JSON.parse(r.result),true); }catch{} importFile.value=""; }; r.readAsText(f); };
 
 /* ============================================================
-   CONQUEST — State / Country / World map campaigns
-   Click an enemy city → siege it (no waves). Raze 90% → it goes
-   gray on the map. The bot razes YOUR cities one by one on a timer.
-   Clear all enemy cities to win; lose if all yours fall. Level-ups
-   are global (playerLevel → every city's protection).
+   CONQUEST — hierarchical World › Country › State › City map
+   Drill into territories (drawn with borders); click a city to
+   siege it. Conquered territory greys out and rolls up to its
+   parent. Bot razes your home land on a timer. Win by conquering
+   the whole tree; lose if your home is wiped. Level-ups are global.
+   Map modes: NO WAVES = one raze per city · WAVES = endless siege
+   (defend your own city; conquer a city after surviving 3 waves).
    ============================================================ */
-let conquest=false, inBattle=false, activeCity=null, camp=null, botRazeTimer=null;
-const mapEl=document.getElementById("map"), mArea=document.getElementById("mArea");
-const SCALES={ state:{regions:1,per:5,el:1,razeMs:32000}, country:{regions:7,per:2,el:2,razeMs:24000}, world:{regions:9,per:3,el:3,razeMs:18000} };
-const REGION_COLS=["#8ef02a","#ff9a2a","#4fa3ff","#ff5ad2","#ffd24a","#9b6bff","#3ec46b","#7ce0ff","#ff8a1e","#b428b4"];
-function genSide(owner,cfg){
-  const list=[], xmin=owner==="mine"?0.05:0.55, xmax=owner==="mine"?0.45:0.95;
-  for(let r=0;r<cfg.regions;r++){
-    const col = cfg.regions===1 ? (owner==="mine"?"#3ec46b":"#e24a4a") : REGION_COLS[(owner==="mine"?r:r+3)%REGION_COLS.length];
-    const cx=xmin+Math.random()*(xmax-xmin), cy=0.14+Math.random()*0.72;
-    for(let c=0;c<cfg.per;c++) list.push({
-      x:Math.min(xmax,Math.max(xmin, cx+(Math.random()-0.5)*0.16)),
-      y:Math.min(0.9,Math.max(0.1, cy+(Math.random()-0.5)*0.24)),
-      alive:true, color:col, owner });
-  }
-  return list;
+let conquest=false, inBattle=false, mapWaves=false, battleWaves=0, activeLeaf=null;
+let enemyTree=null, viewPath=[], home=[], botRazeTimer=null;
+const mapEl=document.getElementById("map");
+const mapcv=document.getElementById("mapcv"), mctx=mapcv.getContext("2d");
+const LV=["City","State","Country","World"];
+const REGION_COLS=["#8ef02a","#ff9a2a","#4fa3ff","#ff5ad2","#ffd24a","#9b6bff","#3ec46b","#7ce0ff","#ff5a5a","#b428b4"];
+function hexA(h,a){ const n=parseInt(h.slice(1),16); return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")"; }
+function rrect(c,x,y,w,h,r){ c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
+function blob(cols,rows,count){
+  const cells=[], seen=new Set(); let cx=cols>>1, cy=rows>>1; cells.push({x:cx,y:cy}); seen.add(cx+","+cy);
+  const d=[[1,0],[-1,0],[0,1],[0,-1]]; let guard=0;
+  while(cells.length<count && guard++<800){ const b=cells[(Math.random()*cells.length)|0], m=d[(Math.random()*4)|0], nx=b.x+m[0], ny=b.y+m[1];
+    if(nx<0||ny<0||nx>=cols||ny>=rows) continue; const k=nx+","+ny; if(seen.has(k)) continue; seen.add(k); cells.push({x:nx,y:ny}); }
+  return cells;
+}
+function genNode(depth,color){
+  const node={ depth, color, conquered:false, children:[] };
+  if(depth===0) return node;
+  const count = depth===1 ? 4+(Math.random()*3|0) : 3+(Math.random()*2|0);   // cities 4-6 · states/countries 3-4 (keeps totals sane)
+  const cells=blob(5,5,count);
+  cells.forEach((c,k)=>{ const childCol = depth>=2 ? REGION_COLS[k%REGION_COLS.length] : color;   // states differ; a state's cities share its colour
+    const ch=genNode(depth-1, childCol); ch.gx=c.x; ch.gy=c.y; node.children.push(ch); });
+  return node;
+}
+function isConq(n){ return n.depth===0 ? n.conquered : (n.children.length>0 && n.children.every(isConq)); }
+function leafCount(n){ return n.depth===0 ? 1 : n.children.reduce((s,c)=>s+leafCount(c),0); }
+function bbox(n){ let a=9,b=9,c=-1,d=-1; for(const ch of n.children){ a=Math.min(a,ch.gx);b=Math.min(b,ch.gy);c=Math.max(c,ch.gx);d=Math.max(d,ch.gy);} return {a,b,c,d,w:c-a+1,h:d-b+1}; }
+function cellRect(parent,child,ox,oy,w,h){
+  const bb=bbox(parent), pad=Math.min(w,h)*0.05, aw=w-2*pad, ah=h-2*pad, cell=Math.min(aw/bb.w, ah/bb.h);
+  const offx=ox+pad+(aw-cell*bb.w)/2, offy=oy+pad+(ah-cell*bb.h)/2;
+  return { x:offx+(child.gx-bb.a)*cell, y:offy+(child.gy-bb.b)*cell, s:cell };
 }
 function startConquest(scale){
-  const cfg=SCALES[scale]; conquest=true; inBattle=false; activeCity=null;
-  camp={ scale, cfg, mine:genSide("mine",cfg), foe:genSide("foe",cfg) };
-  coins=STARTING_COINS; playerLevel=1; enemyLevel=cfg.el; razings=0; wave=1; gameOver=false;
+  const depth = scale==="state"?1 : scale==="country"?2 : 3;
+  conquest=true; inBattle=false; activeLeaf=null;
+  enemyTree=genNode(depth,"#e24a4a"); viewPath=[enemyTree];
+  home=Array.from({length:leafCount(enemyTree)},()=>({alive:true}));   // home land matches enemy size → fair race
+  coins=STARTING_COINS; playerLevel=1; enemyLevel=depth; razings=0; wave=1; gameOver=false;
   brushLevel=1; brush=2; unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t));
   renderTools(); renderBrushBtn(); actxGet();
   if(botRazeTimer) clearInterval(botRazeTimer);
-  botRazeTimer=setInterval(botRazeCity, cfg.razeMs);
+  botRazeTimer=setInterval(botRazeCity, 20000);   // bot razes one home city every 20s — win battles faster than that
   menuEl.classList.add("hidden"); showMap();
 }
-function showMap(){ inBattle=false; running=false; document.getElementById("wrap").classList.add("hidden"); renderMap(); mapEl.classList.remove("hidden"); }
+function showMap(){ inBattle=false; running=false; document.getElementById("wrap").classList.add("hidden"); mapEl.classList.remove("hidden"); renderMap(); }
 function renderMap(){
-  if(!camp) return;
-  document.getElementById("mTitle").textContent=camp.scale.toUpperCase()+" CONQUEST";
-  document.getElementById("mStatus").textContent="Yours "+camp.mine.filter(c=>c.alive).length+"/"+camp.mine.length+"  ·  Enemy "+camp.foe.filter(c=>c.alive).length+"/"+camp.foe.length;
-  mArea.innerHTML="";
-  for(const c of camp.mine.concat(camp.foe)){
-    const b=document.createElement("button"); b.className="citydot";
-    b.style.left=(c.x*100)+"%"; b.style.top=(c.y*100)+"%"; b.style.background=c.alive?c.color:"#555";
-    b.onclick=()=>{ if(c.owner==="foe"){ if(c.alive) startBattle(c); } else if(!c.alive){ if(coins>=20000){ coins-=20000; c.alive=true; renderMap(); } } };
-    mArea.appendChild(b);
+  if(!conquest) return;
+  const node=viewPath[viewPath.length-1];
+  document.getElementById("mTitle").textContent = viewPath.map(n=>LV[n.depth]).join(" › ");
+  const left=node.children.filter(c=>!isConq(c)).length;
+  document.getElementById("mStatus").textContent = left+"/"+node.children.length+" "+LV[node.depth-1].toLowerCase()+"s left  ·  home "+home.filter(c=>c.alive).length+"/"+home.length;
+  document.getElementById("mBack").style.visibility = viewPath.length>1?"visible":"hidden";
+  const W=mapcv.clientWidth|0, H=mapcv.clientHeight|0; mapcv.width=W; mapcv.height=H; mctx.clearRect(0,0,W,H);
+  for(const child of node.children){
+    const r=cellRect(node,child,0,0,W,H), g=r.s*0.05, con=isConq(child);
+    mctx.fillStyle = con?"#454b52":hexA(child.color,0.85); rrect(mctx,r.x+g,r.y+g,r.s-2*g,r.s-2*g,r.s*0.1); mctx.fill();
+    mctx.lineWidth=2; mctx.strokeStyle = con?"#2a2f35":"rgba(0,0,0,.55)"; mctx.stroke();
+    if(child.depth===0){ mctx.beginPath(); mctx.arc(r.x+r.s/2,r.y+r.s/2,r.s*0.16,0,7); mctx.fillStyle=con?"#777":"#fff"; mctx.fill(); mctx.lineWidth=1.5; mctx.strokeStyle="rgba(0,0,0,.5)"; mctx.stroke(); }
+    else { mctx.save(); mctx.globalAlpha=0.4;                                   // faint internal borders (its children)
+      for(const gc of child.children){ const rr=cellRect(child,gc,r.x+g,r.y+g,r.s-2*g,r.s-2*g);
+        mctx.fillStyle=isConq(gc)?"#454b52":hexA(gc.color,0.7); rrect(mctx,rr.x+rr.s*0.1,rr.y+rr.s*0.1,rr.s*0.8,rr.s*0.8,rr.s*0.14); mctx.fill();
+        mctx.lineWidth=1; mctx.strokeStyle="rgba(0,0,0,.45)"; mctx.stroke(); }
+      mctx.restore(); }
   }
+  renderHome();
 }
-function startBattle(city){
-  activeCity=city; inBattle=true; gameOver=false;
-  clearArena(); for(let x=0;x<COLS;x++){ grid[I(x,FLOOR_Y)]=WALL; }
-  buildEnemyCity();                                         // only the target city — your side stays empty
+function renderHome(){ const el=document.getElementById("homeStrip");
+  el.innerHTML="<span style='color:var(--muted);font-size:11px;margin-right:6px'>Your land:</span>";
+  home.forEach(c=>{ const d=document.createElement("span"); d.style.cssText="display:inline-block;width:16px;height:16px;border-radius:4px;margin:2px;background:"+(c.alive?"#3ec46b":"#555")+";box-shadow:inset 0 0 0 1px rgba(0,0,0,.45)"; el.appendChild(d); }); }
+mapcv.addEventListener("pointerdown",e=>{
+  if(!conquest||inBattle) return; const node=viewPath[viewPath.length-1], r=mapcv.getBoundingClientRect();
+  const cx=e.clientX-r.left, cy=e.clientY-r.top;
+  for(const child of node.children){ const cr=cellRect(node,child,0,0,mapcv.width,mapcv.height);
+    if(cx>=cr.x&&cx<=cr.x+cr.s&&cy>=cr.y&&cy<=cr.y+cr.s){
+      if(isConq(child)) return;
+      if(child.depth===0) startBattle(child); else { viewPath.push(child); renderMap(); }
+      return; } }
+});
+function startBattle(leaf){
+  activeLeaf=leaf; inBattle=true; gameOver=false; battleWaves=0;
+  if(mapWaves){ buildCities(); }                            // both cities + bot defends
+  else { clearArena(); for(let x=0;x<COLS;x++) grid[I(x,FLOOR_Y)]=WALL; buildEnemyCity(); }
   mapEl.classList.add("hidden"); document.getElementById("wrap").classList.remove("hidden");
   running=true; fit();
 }
-function conquestWinBattle(){
-  if(activeCity) activeCity.alive=false;
-  inBattle=false; activeCity=null; sfx("coin"); showMap(); checkConquestEnd();
-}
-function botRazeCity(){
-  if(!conquest||gameOver) return;
-  const alive=camp.mine.filter(c=>c.alive); if(!alive.length) return;
-  alive[(Math.random()*alive.length)|0].alive=false; sfx("lose");
-  if(!inBattle) renderMap(); checkConquestEnd();
-}
-function checkConquestEnd(){
-  if(!conquest) return;
-  if(!camp.foe.some(c=>c.alive)) conquestOver(true);
-  else if(!camp.mine.some(c=>c.alive)) conquestOver(false);
-}
+function conquestWinBattle(){ if(activeLeaf) activeLeaf.conquered=true; inBattle=false; activeLeaf=null; sfx("coin"); showMap(); checkConquestEnd(); }
+function conquestLoseBattle(){ inBattle=false; activeLeaf=null; gameOver=false; const a=home.filter(c=>c.alive); if(a.length) a[0].alive=false; sfx("lose"); showMap(); checkConquestEnd(); }
+function botRazeCity(){ if(!conquest||gameOver) return; const a=home.filter(c=>c.alive); if(!a.length) return;
+  a[(Math.random()*a.length)|0].alive=false; sfx("lose"); if(!inBattle) renderHome(); checkConquestEnd(); }
+function checkConquestEnd(){ if(!conquest) return;
+  if(isConq(enemyTree)) conquestOver(true); else if(!home.some(c=>c.alive)) conquestOver(false); }
 function conquestOver(win){
   if(botRazeTimer){ clearInterval(botRazeTimer); botRazeTimer=null; }
   conquest=false; inBattle=false; running=false; gameOver=true;
   mapEl.classList.add("hidden"); document.getElementById("wrap").classList.add("hidden");
-  menuMsg.textContent=win?("🏆 You conquered the enemy "+camp.scale+"!"):("💀 Your "+camp.scale+" was wiped out.");
+  menuMsg.textContent = win?("🏆 Territory conquered!"):("💀 Your home land was wiped out.");
   menuMsg.classList.remove("hidden"); playBtn.textContent="PLAY · ENDLESS"; menuEl.classList.remove("hidden");
   sfx(win?"revive":"lose");
 }
-[...document.querySelectorAll(".conq")].forEach(b=>b.onclick=()=>startConquest(b.dataset.scale));
+let mapWavesPref=false;
+const wavesToggle=document.getElementById("wavesToggle");
+wavesToggle.onclick=()=>{ mapWavesPref=!mapWavesPref; wavesToggle.textContent = mapWavesPref?"MAP MODE: WAVES (endless)":"MAP MODE: NO WAVES (conquer)"; };
+[...document.querySelectorAll(".conq")].forEach(b=>b.onclick=()=>{ mapWaves=mapWavesPref; startConquest(b.dataset.scale); });
+document.getElementById("mBack").onclick=()=>{ if(viewPath.length>1){ viewPath.pop(); renderMap(); } };
 document.getElementById("mMenuBtn").onclick=()=>{ if(botRazeTimer){clearInterval(botRazeTimer);botRazeTimer=null;} conquest=false; inBattle=false; running=false; mapEl.classList.add("hidden"); menuEl.classList.remove("hidden"); };
 
 let acc=0,last=performance.now();
@@ -1520,7 +1561,7 @@ function loop(now){
   acc+=now-last; last=now;
   if(running && !gameOver){
     let n=0;
-    while(acc>=16 && n<3){ if(down) place(px,py); step(); if(!conquest) botStep(); acc-=16; n++; }
+    while(acc>=16 && n<3){ if(down) place(px,py); step(); if(!conquest || (inBattle&&mapWaves)) botStep(); acc-=16; n++; }
   } else {
     acc=0;
   }
