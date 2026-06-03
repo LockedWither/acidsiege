@@ -21,6 +21,13 @@ const BASE_HP={ [SAND]:2,[GLASS]:4,[WOOD]:6,[STONE]:12,[CITY]:8,[PCITY]:8 };
 const DMG    ={ [ACID]:4,[FIRE]:2,[NAPALM]:3,[VIRUS]:2,[LAVA]:5,[MAGMA]:8,[PLASMA]:12,[ANTIMATTER]:4000 };
 function cityProt(L){ const a=0.009*(L-1)*(L-1)*(L-1); const e=L>50?L-50:0; return Math.round(a + 0.1*e*e*e); }   // protection tied directly to level (and its colour/pattern); gentle to lv50 then ramps
 function coinLevelMult(L){ return 1 + 0.045*Math.pow(L-1, 1.1); }   // climbs slowly: Lv1 ×1 · Lv10 ×1.5 · Lv100 ×8 · Lv280 ×22
+function genSkyline(arr,x0,x1){   // arr[x] = top row of building (lower = taller); skyscraper silhouette
+  const base=FLOOR_Y-CITY_THICK; let x=x0;
+  while(x<x1){ const w=3+(rnd()*9|0);
+    let ty = rnd()<0.42 ? base-(6+(rnd()*22|0)) : base+(rnd()*4|0);
+    ty=Math.max(CEIL_Y, Math.min(FLOOR_Y-4, ty));
+    for(let k=0;k<w&&x<x1;k++,x++) arr[x]=ty; }
+}
 
 // one-time unlock palette (shared with client UI)
 const PALETTE=[
@@ -76,7 +83,7 @@ NEWDEFS.forEach((d,k)=>{ d.id=NEW_BASE+k;
   let c=150000*Math.pow(COST_RATIO,k); const mag=Math.pow(10,Math.floor(Math.log10(c))-2); d.cost=Math.round(c/mag)*mag;  // top tiers in B–T
   DEFBYID[d.id]=d; PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });
 
-const brushCosts=[200,500,1000,2500,6000,14000,32000,70000];
+const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000];  // brush up to 14
 function upCost(L){ return Math.round(400*Math.pow(L,1.6)); }
 const rnd=Math.random;   // authoritative single sim — no determinism needed
 
@@ -107,15 +114,12 @@ class Game {
     const g=this.grid,h=this.health;
     for(let i=0;i<g.length;i++){ g[i]=EMPTY; h[i]=0; }
     for(let x=0;x<COLS;x++) g[this.I(x,FLOOR_Y)]=WALL;
-    let hp=0;
-    for(let x=0;x<COLS;x++){ if(x%6===0) hp=(rnd()*7)|0; this.skyP[x]=hp; }
-    hp=0; for(let x=0;x<COLS;x++){ if(x%6===0) hp=(rnd()*7)|0; this.skyE[x]=hp; }
-    const top=FLOOR_Y-CITY_THICK;
+    genSkyline(this.skyP,0,P_END); genSkyline(this.skyE,E_START,COLS);
     const php=BASE_HP[PCITY]+cityProt(this.players[0].level);
     const ehp=BASE_HP[CITY]+cityProt(this.players[1].level);
     let pc=0,ec=0;
-    for(let x=0;x<P_END;x++)for(let y=top;y<FLOOR_Y;y++) if(y>=top+this.skyP[x]){ const i=this.I(x,y); g[i]=PCITY; h[i]=php; pc++; }
-    for(let x=E_START;x<COLS;x++)for(let y=top;y<FLOOR_Y;y++) if(y>=top+this.skyE[x]){ const i=this.I(x,y); g[i]=CITY; h[i]=ehp; ec++; }
+    for(let x=0;x<P_END;x++)for(let y=this.skyP[x];y<FLOOR_Y;y++){ const i=this.I(x,y); g[i]=PCITY; h[i]=php; pc++; }
+    for(let x=E_START;x<COLS;x++)for(let y=this.skyE[x];y<FLOOR_Y;y++){ const i=this.I(x,y); g[i]=CITY; h[i]=ehp; ec++; }
     this.cells=[pc,ec]; this.max=[pc,ec];
   }
 
@@ -297,7 +301,7 @@ class Game {
   upgrade(owner,what){ const p=this.players[owner];
     if(what==="level"){ const c=upCost(p.level); if(p.coins>=c){ p.coins-=c; const before=cityProt(p.level); p.level++; const add=cityProt(p.level)-before;
       if(add>0){ const ct=owner===0?PCITY:CITY; for(let i=0;i<this.grid.length;i++) if(this.grid[i]===ct) this.health[i]=(this.health[i]>0?this.health[i]:BASE_HP[ct]+before)+add; } } }
-    else if(what==="brush"){ if(p.brush<9){ const cost=brushCosts[p.brush-2]; if(cost!=null && p.coins>=cost){ p.coins-=cost; p.brush++; } } }
+    else if(what==="brush"){ if(p.brush<14){ const cost=brushCosts[p.brush-2]; if(cost!=null && p.coins>=cost){ p.coins-=cost; p.brush++; } } }
   }
 
   // ---- serialization for broadcast ----
@@ -305,7 +309,7 @@ class Game {
     for(let i=1;i<g.length;i++){ if(g[i]===v&&c<65535){ c++; } else { out.push(v,c); v=g[i]; c=1; } } out.push(v,c); return out; }
   meta(){ return { round:this.round, wave:this.wave, scores:this.scores, over:this.over, winner:this.winner,
     players:this.players.map((p,k)=>({ coins:Math.floor(p.coins), level:p.level, brush:p.brush,
-      cells:this.cells[k], max:this.max[k], upCost:upCost(p.level), brushCost:(p.brush<9?brushCosts[p.brush-2]:null),
+      cells:this.cells[k], max:this.max[k], upCost:upCost(p.level), brushCost:(p.brush<14?brushCosts[p.brush-2]:null),
       unlocked:[...p.unlocked] })) }; }
 }
 

@@ -229,6 +229,7 @@
     <button class="mbtn ghost" id="muteBtn"   style="font-size:13px;padding:9px 14px">🔊 SOUND</button>
     <button class="mbtn ghost" id="exportBtn" style="font-size:13px;padding:9px 14px">⤓ SAVE FILE</button>
     <button class="mbtn ghost" id="importBtn" style="font-size:13px;padding:9px 14px">⤒ LOAD FILE</button>
+    <button class="mbtn ghost" id="deleteBtn" style="font-size:13px;padding:9px 14px;color:var(--danger);border-color:rgba(255,83,71,.4)">🗑 DELETE SAVE</button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none">
   </div>
   <div style="display:flex;gap:6px;align-items:center;justify-content:center;font-size:12px;color:var(--muted)">
@@ -436,7 +437,7 @@ let cityCells=0, cityCellsMax=1, pcityCells=0, pcityCellsMax=1;
 let brushLevel=1, brush=brushLevel+1;
 // per-cell placement is FREE so you can never go bankrupt by placing — coins are only spent on (affordable) unlocks/upgrades
 const placementCost={};   // every lookup defaults to 0
-const brushCosts=[200,500,1000,2500,6000,14000,32000,70000];
+const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000];  // brush up to 14
 function rebuildCost(){ return 30000; }   // rebuild your own razed city — deliberately steep
 const COIN_PER_CELL=1;
 let difficulty = localStorage.getItem("as_diff") || "medium";   // easy | medium | hard
@@ -491,30 +492,31 @@ function clearLoose(){   // between waves: wipe loose particles + old enemy city
     grid[i]=EMPTY; origin[i]=0; health[i]=0;
   }
 }
-function buildEnemyCity(){   // rebuild ONLY the right-hand (enemy) city
-  let h=0;
-  for(let x=0;x<COLS;x++){ if(x%6===0) h=(Math.random()*7)|0; skyE[x]=h; }
-  cityCells=0;
-  const top=FLOOR_Y-CITY_THICK, hp=BASE_HP[CITY]+cityProt(enemyLevel);
-  for(let x=E_START;x<COLS;x++) for(let y=top;y<FLOOR_Y;y++){
-    if(y>=top+skyE[x]){ const i=I(x,y); grid[i]=CITY; origin[i]=0; health[i]=hp; cityCells++; }
+// skyline of skyscrapers: arr[x] = top row of the building at column x (lower y = taller)
+function genSkyline(arr,x0,x1){
+  const base=FLOOR_Y-CITY_THICK;
+  let x=x0;
+  while(x<x1){
+    const w=3+(Math.random()*9|0);                                   // building width
+    let ty = Math.random()<0.42 ? base-(6+(Math.random()*22|0))      // skyscraper tower
+                                 : base+(Math.random()*4|0);          // shorter block
+    ty=Math.max(CEIL_Y, Math.min(FLOOR_Y-4, ty));
+    for(let k=0;k<w && x<x1;k++,x++) arr[x]=ty;
   }
+}
+function buildEnemyCity(){   // rebuild ONLY the right-hand (enemy) city
+  genSkyline(skyE, E_START, COLS);
+  cityCells=0; const hp=BASE_HP[CITY]+cityProt(enemyLevel);
+  for(let x=E_START;x<COLS;x++) for(let y=skyE[x];y<FLOOR_Y;y++){ const i=I(x,y); grid[i]=CITY; origin[i]=0; health[i]=hp; cityCells++; }
   cityCellsMax=cityCells;
 }
 function buildCities(){
   for(let x=0;x<COLS;x++){ const i=I(x,FLOOR_Y); grid[i]=WALL; origin[i]=0; }
-  let h=0;
-  for(let x=0;x<COLS;x++){ if(x%6===0) h=(Math.random()*7)|0; skyP[x]=h; }
-  h=0;
-  for(let x=0;x<COLS;x++){ if(x%6===0) h=(Math.random()*7)|0; skyE[x]=h; }
+  genSkyline(skyP, 0, P_END); genSkyline(skyE, E_START, COLS);
   pcityCells=0; cityCells=0;
-  const top=FLOOR_Y-CITY_THICK, phpv=BASE_HP[PCITY]+cityProt(playerLevel), ehpv=BASE_HP[CITY]+cityProt(enemyLevel);
-  for(let x=0;x<P_END;x++) for(let y=top;y<FLOOR_Y;y++){
-    const i=I(x,y); if(y>=top+skyP[x]){ grid[i]=PCITY; origin[i]=0; health[i]=phpv; pcityCells++; } else { origin[i]=0; health[i]=0; }
-  }
-  for(let x=E_START;x<COLS;x++) for(let y=top;y<FLOOR_Y;y++){
-    const i=I(x,y); if(y>=top+skyE[x]){ grid[i]=CITY; origin[i]=0; health[i]=ehpv; cityCells++; } else { origin[i]=0; health[i]=0; }
-  }
+  const phpv=BASE_HP[PCITY]+cityProt(playerLevel), ehpv=BASE_HP[CITY]+cityProt(enemyLevel);
+  for(let x=0;x<P_END;x++) for(let y=skyP[x];y<FLOOR_Y;y++){ const i=I(x,y); grid[i]=PCITY; origin[i]=0; health[i]=phpv; pcityCells++; }
+  for(let x=E_START;x<COLS;x++) for(let y=skyE[x];y<FLOOR_Y;y++){ const i=I(x,y); grid[i]=CITY; origin[i]=0; health[i]=ehpv; cityCells++; }
   pcityCellsMax=pcityCells; cityCellsMax=cityCells;
 }
 
@@ -551,12 +553,9 @@ function loseGame(){
   else { clearSave(); showDefeat(); }                       // no revive → run is over, drop the save
 }
 function rebuildPCity(){   // restore the player's (left) city to full from its original silhouette
-  const top=FLOOR_Y-CITY_THICK;
   pcityCells=0;
   const hp=BASE_HP[PCITY]+cityProt(playerLevel);
-  for(let x=0;x<P_END;x++) for(let y=top;y<FLOOR_Y;y++){
-    if(y>=top+skyP[x]){ const i=I(x,y); grid[i]=PCITY; origin[i]=ORIGIN_NONE; health[i]=hp; pcityCells++; }
-  }
+  for(let x=0;x<P_END;x++) for(let y=skyP[x];y<FLOOR_Y;y++){ const i=I(x,y); grid[i]=PCITY; origin[i]=ORIGIN_NONE; health[i]=hp; pcityCells++; }
   pcityCellsMax=pcityCells;
 }
 
@@ -1389,6 +1388,7 @@ nameInput.onchange=()=>{ const v=nameInput.value.trim().slice(0,16); if(v){ loca
 document.getElementById("lbBtn").onclick=showLeaderboard;
 document.getElementById("exportBtn").onclick=exportSave;
 document.getElementById("importBtn").onclick=()=>importFile.click();
+document.getElementById("deleteBtn").onclick=()=>{ if(confirm("Delete your saved game? This can't be undone.")){ clearSave(); resetGame(); running=false; menuMsg.textContent="🗑 Saved game deleted."; menuMsg.classList.remove("hidden"); } };
 importFile.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ applySave(JSON.parse(r.result),true); }catch{} importFile.value=""; }; r.readAsText(f); };
 
 let acc=0,last=performance.now();
