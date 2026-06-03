@@ -19,8 +19,8 @@ function coinReward(w){ return 4; }   // flat base 4
 
 const BASE_HP={ [SAND]:2,[GLASS]:4,[WOOD]:6,[STONE]:12,[CITY]:8,[PCITY]:8 };
 const DMG    ={ [ACID]:4,[FIRE]:2,[NAPALM]:3,[VIRUS]:2,[LAVA]:5,[MAGMA]:8,[PLASMA]:12,[ANTIMATTER]:4000 };
-function cityProt(L){ const a=0.009*(L-1)*(L-1)*(L-1); const e=L>50?L-50:0; return Math.round(a + 0.1*e*e*e); }   // protection tied directly to level (and its colour/pattern); gentle to lv50 then ramps
-function coinLevelMult(L){ return 1 + 0.045*Math.pow(L-1, 1.1); }   // climbs slowly: Lv1 ×1 · Lv10 ×1.5 · Lv100 ×8 · Lv280 ×22
+function cityProt(L){ const a=0.02*(L-1)*(L-1)*(L-1); const e=L>40?L-40:0; return Math.round(a + 0.18*e*e*e); }   // faster protection growth; ramps hard past lv40
+function coinLevelMult(L){ const m=Math.min(L,200), c=1+0.045*Math.pow(m-1,1.1); return L>200 ? c+(L-200)*0.05 : c; }   // climbs to ~lv200 then nearly flat — money slows late game
 function genSkyline(arr,x0,x1){   // arr[x] = top row of building (lower = taller); skyscraper silhouette
   const base=FLOOR_Y-CITY_THICK; let x=x0;
   while(x<x1){ const w=3+(rnd()*9|0);
@@ -73,15 +73,38 @@ const NEWDEFS=[
   {nm:"Dark Matter",col:"#2a1840",kind:"anti",dmg:450000000,cost:200000000},
   {nm:"Vacuum Decay",col:"#d0c0ff",kind:"beam",dmg:900000000,cost:225000000},
   {nm:"Annihilation Core",col:"#ffffff",kind:"anti",dmg:2000000000,cost:250000000},
+  {nm:"Plasma Tempest",col:"#c47cff",kind:"beam",dmg:3000000000,cost:400000000},
+  {nm:"Acid Monsoon",col:"#9cff5a",kind:"goo",dmg:4000000000,cost:600000000},
+  {nm:"Bunker Nuke",col:"#9a7a3a",kind:"blast",dmg:5500000000,r:24,fp:0.7,cost:900000000},
+  {nm:"Antiproton Beam",col:"#7ce0ff",kind:"beam",dmg:7000000000,cost:1400000000},
+  {nm:"Graviton Bomb",col:"#5a4a8a",kind:"blast",dmg:9000000000,r:26,fp:0.75,cost:2000000000},
+  {nm:"Dark Pulse",col:"#2a1840",kind:"anti",dmg:12000000000,cost:3000000000},
+  {nm:"Fusion Lance",col:"#9fd8ff",kind:"beam",dmg:16000000000,cost:4500000000},
+  {nm:"Magma Surge",col:"#ff7e3a",kind:"goo",dmg:20000000000,cost:7000000000},
+  {nm:"Photon Nova",col:"#ffe88a",kind:"blast",dmg:27000000000,r:24,fp:0.8,cost:10000000000},
+  {nm:"Tachyon Burst",col:"#7affe0",kind:"beam",dmg:35000000000,cost:15000000000},
+  {nm:"Neutron Star Shard",col:"#cfe0ff",kind:"blast",dmg:45000000000,r:22,fp:0.6,cost:22000000000},
+  {nm:"Void Collapse",col:"#3a2a5a",kind:"anti",dmg:60000000000,cost:33000000000},
+  {nm:"Solar Flare",col:"#ffb24a",kind:"beam",dmg:80000000000,cost:50000000000},
+  {nm:"Plasmoid Swarm",col:"#d27aff",kind:"beam",dmg:100000000000,cost:75000000000},
+  {nm:"Hypernova",col:"#fff0b0",kind:"blast",dmg:130000000000,r:24,fp:0.85,cost:110000000000},
+  {nm:"Gamma Ray Burst",col:"#b6ff7a",kind:"beam",dmg:170000000000,cost:170000000000},
+  {nm:"Strange Matter",col:"#b04aff",kind:"anti",dmg:220000000000,cost:250000000000},
+  {nm:"Quasar Cannon",col:"#7cc0ff",kind:"beam",dmg:280000000000,cost:380000000000},
+  {nm:"Big Rip",col:"#1a1030",kind:"anti",dmg:350000000000,cost:580000000000},
+  {nm:"Entropy Wave",col:"#5a2a7a",kind:"anti",dmg:430000000000,cost:880000000000},
+  {nm:"Cosmic String",col:"#d0c0ff",kind:"beam",dmg:500000000000,cost:1300000000000},
+  {nm:"Reality Tear",col:"#ff4ad2",kind:"anti",dmg:550000000000,cost:2000000000000},
+  {nm:"Doomsday Glitch",col:"#ff5a5a",kind:"blast",dmg:600000000000,r:24,fp:0.9,cost:3000000000000},
+  {nm:"Eternity Engine",col:"#aef0ff",kind:"beam",dmg:650000000000,cost:5000000000000},
+  {nm:"Omega Singularity",col:"#ffffff",kind:"anti",dmg:700000000000,cost:10000000000000},
 ];
 const DEFBYID={};
-const COST_RATIO=Math.pow(1e13/150000, 1/(NEWDEFS.length-1));             // 150k → 10 TRILLION across the ladder
 NEWDEFS.forEach((d,k)=>{ d.id=NEW_BASE+k;
   const f=0.1 + 1.4*Math.pow(k/(NEWDEFS.length-1), 2);                    // early tiers nerfed, newer tiers hit FAR harder
   d.dmg=Math.round(d.dmg*f);
   if(d.r) d.r=Math.min(45, Math.round(d.r*2));                            // blast tiers → city-sized radius
-  let c=150000*Math.pow(COST_RATIO,k); const mag=Math.pow(10,Math.floor(Math.log10(c))-2); d.cost=Math.round(c/mag)*mag;  // top tiers in B–T
-  DEFBYID[d.id]=d; PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });
+  DEFBYID[d.id]=d; PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });   // cost = authored d.cost
 
 const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000];  // brush up to 14
 function upCost(L){ return Math.round(400*Math.pow(L,1.6)); }
@@ -321,6 +344,8 @@ class Game {
   }
   unlock(owner,tool){ const p=this.players[owner]; const it=PALETTE.find(e=>e.t===tool);
     if(!it||p.unlocked.has(tool)) return; if(p.coins>=it.cost){ p.coins-=it.cost; p.unlocked.add(tool); } }
+  sell(owner,tool){ const p=this.players[owner]; const it=PALETTE.find(e=>e.t===tool);
+    if(!it||it.cost<=0||!p.unlocked.has(tool)) return; p.coins+=Math.round(it.cost*0.5); p.unlocked.delete(tool); }   // 50% refund
   upgrade(owner,what){ const p=this.players[owner];
     if(what==="level"){ const c=upCost(p.level); if(p.coins>=c){ p.coins-=c; const before=cityProt(p.level); p.level++; const add=cityProt(p.level)-before;
       if(add>0){ const ct=owner===0?PCITY:CITY; for(let i=0;i<this.grid.length;i++) if(this.grid[i]===ct) this.health[i]=(this.health[i]>0?this.health[i]:BASE_HP[ct]+before)+add; } } }

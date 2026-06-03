@@ -87,7 +87,7 @@
       <button class="btn" id="upBtn">LEVEL UP — <span id="upCost">400</span></button>
       <button class="btn alt" id="brBtn">BRUSH — <span id="brCost">200</span></button>
     </div>
-    <div class="card"><h2>Chemicals</h2><div class="tools" id="tools"></div></div>
+    <div class="card"><h2>Chemicals</h2><button class="btn alt" id="sellBtn" style="width:100%;border:none;border-radius:9px;padding:8px;font-weight:800;font-size:12px;color:#dff3ee;background:rgba(255,255,255,.06);border:1px solid var(--edge);margin-bottom:8px;cursor:pointer">SELL MODE: OFF</button><div class="tools" id="tools"></div></div>
     <div class="card"><h2>Chat</h2><div class="chatlog" id="chatlog"></div>
       <div class="chatin"><input id="chatbox" maxlength="140" placeholder="Say something…"><button id="chatsend">Send</button></div></div>
   </aside>
@@ -199,17 +199,21 @@ document.getElementById("brBtn").onclick=()=>send({t:"upgrade",what:"brush"});
 
 // ---- tools ----
 const toolsEl=document.getElementById("tools");
+let sellMode=false;
 function buildTools(){ toolsEl.innerHTML=""; palette.forEach(p=>{
     const el=document.createElement("div"); el.dataset.t=p.t; el.className="tool";
     el.innerHTML=`<span class="dot" style="background:${p.col}"></span><span><span class="nm">${p.nm}</span><div class="cost"></div></span>`;
     el.onclick=()=>{ const locked=p.cost>0&&!unlocked.has(p.t);
+      if(sellMode && p.cost>0 && unlocked.has(p.t)){ send({t:"sell",tool:p.t}); return; }
       if(locked) send({t:"unlock",tool:p.t}); tool=p.t; markSel(); };
     toolsEl.appendChild(el);
   }); markSel(); }
 function markSel(){ [...toolsEl.children].forEach(el=>el.classList.toggle("sel",+el.dataset.t===tool)); }
 function refreshToolLocks(me){ [...toolsEl.children].forEach(el=>{ const t=+el.dataset.t; const p=palette.find(q=>q.t===t);
     const locked=p.cost>0&&!unlocked.has(t); el.classList.toggle("locked",locked);
-    el.querySelector(".cost").textContent=locked?p.cost.toLocaleString()+"c":""; }); }
+    const sellable=sellMode&&p.cost>0&&unlocked.has(t);
+    el.querySelector(".cost").textContent = locked?p.cost.toLocaleString()+"c" : sellable?("+"+Math.round(p.cost*0.5).toLocaleString()+"c") : ""; }); }
+document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap to refund 50%)":"OFF"); };
 
 // ---- input (send placements, server uses your brush) ----
 let down=false, gx=0, gy=0, sendTimer=0;
