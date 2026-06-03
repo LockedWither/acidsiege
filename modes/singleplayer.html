@@ -224,6 +224,20 @@
     <button class="mbtn play" id="playBtn">PLAY</button>
     <button class="mbtn ghost" id="howtoBtn">HOW TO PLAY</button>
   </div>
+  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+    <button class="mbtn ghost" id="lbBtn"     style="font-size:13px;padding:9px 14px">🏆 LEADERBOARD</button>
+    <button class="mbtn ghost" id="muteBtn"   style="font-size:13px;padding:9px 14px">🔊 SOUND</button>
+    <button class="mbtn ghost" id="exportBtn" style="font-size:13px;padding:9px 14px">⤓ SAVE FILE</button>
+    <button class="mbtn ghost" id="importBtn" style="font-size:13px;padding:9px 14px">⤒ LOAD FILE</button>
+    <input type="file" id="importFile" accept="application/json,.json" style="display:none">
+  </div>
+  <div style="display:flex;gap:6px;align-items:center;justify-content:center;font-size:12px;color:var(--muted)">
+    Name <input id="nameInput" maxlength="16" style="background:rgba(0,0,0,.3);border:1px solid var(--panel-edge);border-radius:8px;color:var(--ink);padding:6px 8px;font-family:inherit;font-size:12px;width:140px">
+  </div>
+  <div id="lboard" class="hidden" style="max-width:min(380px,90vw);text-align:left;background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px;padding:14px 16px;font-size:13px;color:var(--muted);max-height:40vh;overflow:auto">
+    <h3 style="margin:0 0 8px;color:var(--toxic);font-size:13px;letter-spacing:1px">🏆 TOP WAVES</h3>
+    <ol id="lbList" style="margin:0;padding-left:22px;line-height:1.7"></ol>
+  </div>
   <div id="howto" class="hidden">
     <h3>HOW TO PLAY</h3>
     Pick a chemical and paint it on the <b>right</b> city to deal damage and earn <b>coins</b>.
@@ -528,6 +542,7 @@ function nextWave(){
   clearLoose();             // keep the player's (damaged) city — it does NOT regenerate
   buildEnemyCity();         // only the enemy city is rebuilt fresh
   saveGame();               // checkpoint the (alive) run to the server
+  sfx("coin");
 }
 function loseGame(){
   if(gameOver) return;                                      // only fire once
@@ -558,6 +573,7 @@ function setCell(i,t,o){ grid[i]=t; origin[i]=o; moved[i]=1; }
 function swap(i,j){const t=grid[i], o=origin[i], h=health[i]; grid[i]=grid[j]; origin[i]=origin[j]; health[i]=health[j]; grid[j]=t; origin[j]=o; health[j]=h; moved[i]=1; moved[j]=1; }
 
 function explodeR(cx,cy,R,fireProb,dmg){
+  boomFX(R);                                                // sound + screen shake (throttled)
   const oc=origin[I(cx,cy)];                                // explosion debris inherits the bomb's origin
   for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
     if(dx*dx+dy*dy>R*R) continue;
@@ -954,7 +970,7 @@ function evtToGrid(e){
   const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
   px=Math.floor(cx/r.width*COLS); py=Math.floor(cy/r.height*ROWS);
 }
-cv.addEventListener("pointerdown",e=>{if(gameOver||!running)return; down=true;evtToGrid(e);place(px,py);cv.setPointerCapture(e.pointerId);});
+cv.addEventListener("pointerdown",e=>{if(gameOver||!running)return; down=true;evtToGrid(e);place(px,py);sfx("place");cv.setPointerCapture(e.pointerId);});
 cv.addEventListener("pointermove",e=>{evtToGrid(e); if(down&&!gameOver&&running) place(px,py);});
 addEventListener("pointerup",()=>down=false);
 
@@ -1044,7 +1060,7 @@ function renderTools(){
     el.innerHTML=`<span class="dot" style="background:${p.col}"></span>
       <span><span class="nm">${p.nm}</span>${lock?`<div class="cost">${p.cost.toLocaleString()}c</div>`:""}</span>`;
     el.onclick=()=>{
-      if(lock){ if(coins>=p.cost){ coins-=p.cost; unlocked.add(p.t); tool=p.t; } }
+      if(lock){ if(coins>=p.cost){ coins-=p.cost; unlocked.add(p.t); tool=p.t; sfx("unlock"); } }
       else { tool=p.t; }
       renderTools();
     };
@@ -1091,6 +1107,7 @@ upBtn.onclick=()=>{
     const before=cityProt(playerLevel); playerLevel++;
     const add=cityProt(playerLevel)-before;                 // the only sanctioned "regen": added protection health
     if(add>0) for(let i=0;i<grid.length;i++) if(grid[i]===PCITY) health[i]=(health[i]>0?health[i]:BASE_HP[PCITY]+before)+add;
+    sfx("level");
   }
 };
 
@@ -1258,6 +1275,7 @@ const menuEl=document.getElementById("menu"),
       drawerBack=document.getElementById("drawerBack");
 function startGame(){
   if(gameOver) resetGame();                                 // a defeat (or any over state) → fresh run on Play
+  actxGet();                                                // unlock audio on this user gesture
   menuMsg.classList.add("hidden");
   running=true; menuEl.classList.add("hidden"); closeDrawer(); fit();
 }
@@ -1267,6 +1285,7 @@ function openMenu(){   // manual pause
   menuEl.classList.remove("hidden"); closeDrawer();
 }
 function showDefeat(){ // routed from loseGame() when your city is 90% razed
+  sfx("lose"); submitScore();                              // record the run on the leaderboard
   menuMsg.textContent="💀 YOU LOST — razed on wave "+wave;
   menuMsg.classList.remove("hidden");
   playBtn.textContent="PLAY AGAIN";
@@ -1301,7 +1320,7 @@ const CLIENT_ID=(()=>{ let id=localStorage.getItem("as_id"); if(!id){ id="p"+Mat
 function saveGame(){ if(gameOver) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};
   fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state})}).catch(()=>{}); }
 function clearSave(){ fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state:null})}).catch(()=>{}); }
-function applySave(s){ if(!s||running) return;                               // only resume if still on the menu
+function applySave(s,force){ if(!s||(running&&!force)) return;               // only resume if on the menu (force = file import)
   coins=s.coins||0; playerLevel=s.playerLevel||1; wave=s.wave||1; razings=s.razings||0; brushLevel=s.brushLevel||1; brush=brushLevel+1;
   enemyLevel=Math.floor((wave-1)/5)+1; unlocked.clear(); (s.unlocked||[ACID,WATER,SAND,EMPTY]).forEach(t=>unlocked.add(t)); unlocked.add(EMPTY);
   clearArena(); buildCities(); renderTools(); renderBrushBtn(); }
@@ -1323,10 +1342,54 @@ document.getElementById("revYes").onclick=()=>{
   reviveEl.style.display="none";
   if(spendRevive()){
     for(let i=0;i<grid.length;i++){ const t=grid[i]; if(t!==WALL&&t!==CITY&&t!==PCITY){ grid[i]=EMPTY; health[i]=0; } }  // clear incoming fire
-    rebuildPCity(); gameOver=false; running=true; saveGame();
+    rebuildPCity(); gameOver=false; running=true; saveGame(); sfx("revive");
   } else { clearSave(); showDefeat(); }
 };
 document.getElementById("revNo").onclick=()=>{ reviveEl.style.display="none"; clearSave(); showDefeat(); };
+
+/* ---- audio + juice ---- */
+let actx=null, muted=localStorage.getItem("as_mute")==="1";
+function actxGet(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(actx&&actx.state==="suspended") actx.resume(); return actx; }
+function tone(f,dur,type,vol){ if(muted)return; const a=actxGet(); if(!a)return; const o=a.createOscillator(),g=a.createGain(),t=a.currentTime;
+  o.type=type||"sine"; o.frequency.value=f; g.gain.setValueAtTime(vol||0.05,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+dur); }
+function noiseBurst(dur,vol,cut){ if(muted)return; const a=actxGet(); if(!a)return; const n=Math.max(1,(a.sampleRate*dur)|0); const b=a.createBuffer(1,n,a.sampleRate); const d=b.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n); const s=a.createBufferSource(); s.buffer=b; const fl=a.createBiquadFilter(); fl.type="lowpass"; fl.frequency.value=cut||800; const g=a.createGain(); g.gain.value=vol||0.18; s.connect(fl); fl.connect(g); g.connect(a.destination); s.start(); }
+function sfx(name){ if(muted)return;
+  if(name==="coin"){ tone(880,0.07,"square",0.04); }
+  else if(name==="level"){ tone(523,0.08,"square",0.05); setTimeout(()=>tone(784,0.12,"square",0.05),80); }
+  else if(name==="unlock"){ tone(660,0.06,"triangle",0.05); setTimeout(()=>tone(990,0.1,"triangle",0.05),70); }
+  else if(name==="lose"){ tone(330,0.25,"sawtooth",0.06); setTimeout(()=>tone(150,0.5,"sawtooth",0.06),120); }
+  else if(name==="revive"){ tone(440,0.1,"square",0.05); setTimeout(()=>tone(660,0.1,"square",0.05),90); setTimeout(()=>tone(990,0.18,"square",0.05),180); }
+  else if(name==="place"){ tone(190+Math.random()*70,0.03,"sine",0.025); }
+}
+let shakeT=0, lastBoom=0;
+function shake(a){ shakeT=Math.min(1.2, shakeT+a); }
+function boomFX(R){ shake(Math.min(1,R/35)); const now=performance.now(); if(now-lastBoom>45){ lastBoom=now; noiseBurst(Math.min(0.5,0.12+R/120),Math.min(0.35,0.12+R/180),500+R*8); tone(Math.max(35,70-R/2),0.3,"sine",0.18); } }
+const frameEl=document.getElementById("frame");
+
+/* ---- leaderboard ---- */
+function playerName(){ return localStorage.getItem("as_name") || handle; }
+function submitScore(){ if(wave<=1) return; fetch("/score",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:playerName(),wave})}).catch(()=>{}); }
+function showLeaderboard(){ fetch("/leaderboard").then(r=>r.json()).then(list=>{
+    document.getElementById("lbList").innerHTML = list.length ? list.map(e=>`<li><b style="color:var(--ink)">${esc(e.name)}</b> — wave ${e.wave}</li>`).join("") : "<li>No scores yet — be the first!</li>";
+    document.getElementById("lboard").classList.toggle("hidden"); }).catch(()=>{}); }
+
+/* ---- save to file ---- */
+function exportSave(){ const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));
+  a.download="acidsiege-save.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+
+/* ---- menu utility wiring ---- */
+const muteBtn=document.getElementById("muteBtn"), nameInput=document.getElementById("nameInput"), importFile=document.getElementById("importFile");
+function renderMute(){ muteBtn.textContent = muted ? "🔇 MUTED" : "🔊 SOUND"; }
+muteBtn.onclick=()=>{ muted=!muted; localStorage.setItem("as_mute",muted?"1":"0"); renderMute(); if(!muted) sfx("coin"); };
+renderMute();
+nameInput.value=playerName();
+nameInput.onchange=()=>{ const v=nameInput.value.trim().slice(0,16); if(v){ localStorage.setItem("as_name",v); } };
+document.getElementById("lbBtn").onclick=showLeaderboard;
+document.getElementById("exportBtn").onclick=exportSave;
+document.getElementById("importBtn").onclick=()=>importFile.click();
+importFile.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ applySave(JSON.parse(r.result),true); }catch{} importFile.value=""; }; r.readAsText(f); };
 
 let acc=0,last=performance.now();
 function loop(now){
@@ -1338,6 +1401,7 @@ function loop(now){
     acc=0;
   }
   render(); hud();
+  if(shakeT>0){ const s=shakeT*7; frameEl.style.transform="translate("+((Math.random()*2-1)*s)+"px,"+((Math.random()*2-1)*s)+"px)"; shakeT*=0.86; if(shakeT<0.02){ shakeT=0; frameEl.style.transform=""; } }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

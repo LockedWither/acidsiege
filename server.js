@@ -23,6 +23,12 @@ let saves = {}; try { saves = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8")); } 
 let saveTimer = null;
 function persistSaves(){ if(saveTimer) return; saveTimer = setTimeout(()=>{ saveTimer=null; fs.writeFile(SAVE_FILE, JSON.stringify(saves), ()=>{}); }, 800); }
 
+// ---- leaderboard: best wave per name (file-backed) ----
+const LB_FILE = path.join(__dirname, "leaderboard.json");
+let lb = []; try { lb = JSON.parse(fs.readFileSync(LB_FILE, "utf8")); } catch {}
+let lbTimer = null;
+function persistLB(){ if(lbTimer) return; lbTimer = setTimeout(()=>{ lbTimer=null; fs.writeFile(LB_FILE, JSON.stringify(lb), ()=>{}); }, 800); }
+
 // ---- static file server ----
 const MIME = { ".html":"text/html; charset=utf-8", ".js":"text/javascript", ".css":"text/css", ".json":"application/json",
                ".png":"image/png", ".svg":"image/svg+xml", ".ico":"image/x-icon", ".webmanifest":"application/manifest+json" };
@@ -44,6 +50,16 @@ const server = http.createServer((req,res)=>{
     let body=""; req.on("data",c=>{ body+=c; if(body.length>200000) req.destroy(); });
     req.on("end",()=>{ try{ const {id,state}=JSON.parse(body);
         if(id){ if(state==null) delete saves[id]; else saves[id]=state; persistSaves(); } }catch{}
+      res.writeHead(200,{"Content-Type":"application/json"}); res.end('{"ok":true}'); });
+    return;
+  }
+  if(url==="/leaderboard"){ res.writeHead(200,{"Content-Type":"application/json"}); return res.end(JSON.stringify(lb.slice(0,50))); }
+  if(url==="/score" && req.method==="POST"){
+    let body=""; req.on("data",c=>{ body+=c; if(body.length>2000) req.destroy(); });
+    req.on("end",()=>{ try{ const {name,wave}=JSON.parse(body); const w=Math.floor(+wave||0);
+        if(name && w>0){ const nm=String(name).slice(0,16); const ex=lb.find(e=>e.name===nm);
+          if(ex){ if(w>ex.wave) ex.wave=w; } else lb.push({name:nm,wave:w});
+          lb.sort((a,b)=>b.wave-a.wave); lb=lb.slice(0,100); persistLB(); } }catch{}
       res.writeHead(200,{"Content-Type":"application/json"}); res.end('{"ok":true}'); });
     return;
   }

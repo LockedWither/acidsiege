@@ -3,3 +3,4 @@ npm-debug.log
 .DS_Store
 .env
 saves.json
+leaderboard.json
