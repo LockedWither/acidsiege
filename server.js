@@ -83,19 +83,24 @@ const server = http.createServer((req,res)=>{
 
 // ---- game rooms ----
 let nextRoom = 1;
+const MODES = {                                // humansNeeded, side assignment, bot side
+  "1v1":   { need:2, sides:[0,1],     bot:-1 },
+  "2v2":   { need:4, sides:[0,0,1,1], bot:-1 },
+  "2v1bot":{ need:2, sides:[0,0],     bot:1  },
+};
 class Room {
-  constructor(a,b){
-    this.id = nextRoom++;
-    stats.matches++; console.log(`[match #${stats.matches}] started — ${stats.online} online`);
-    this.game = new Game();
-    this.clients = [a,b];
-    a.room=this; a.side=0; b.room=this; b.side=1;
-    a.send(JSON.stringify({ t:"start", side:0, cols:COLS, rows:ROWS, palette:PALETTE }));
-    b.send(JSON.stringify({ t:"start", side:1, cols:COLS, rows:ROWS, palette:PALETTE }));
+  constructor(clients, mode){
+    this.id = nextRoom++; this.mode=mode; const cfg=MODES[mode];
+    stats.matches++; console.log(`[match #${stats.matches}] ${mode} — ${stats.online} online`);
+    this.game = new Game(); this.game.botSide = cfg.bot;
+    this.clients = clients;
+    clients.forEach((c,i)=>{ c.room=this; c.side=cfg.sides[i];
+      c.send(JSON.stringify({ t:"start", side:c.side, mode, cols:COLS, rows:ROWS, palette:PALETTE })); });
     this.timer = setInterval(()=>this.tick(), TICK_MS);
   }
   tick(){
     this.game.step();
+    if(this.game.botSide>=0) this.game.botStep();
     const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta() });
     for(const c of this.clients) if(c.readyState===1) c.send(msg);
     if(this.game.over) clearInterval(this.timer);   // match decided at wave 6 — final state already sent
@@ -107,7 +112,7 @@ class Room {
     else if(m.t==="upgrade") g.upgrade(side, m.what);
   }
   broadcastChat(side,text){
-    const out = JSON.stringify({ t:"chat", from:"P"+(side+1), text:String(text).slice(0,140) });
+    const out = JSON.stringify({ t:"chat", from:"Team "+(side+1), text:String(text).slice(0,140) });
     for(const c of this.clients) if(c.readyState===1) c.send(out);
   }
   close(except){
@@ -116,8 +121,14 @@ class Room {
   }
 }
 
-// ---- matchmaking ----
-let waiting = null;
+// ---- matchmaking (per mode) ----
+const queues = { "1v1":[], "2v2":[], "2v1bot":[] };
+function dequeue(ws){ for(const k in queues){ const i=queues[k].indexOf(ws); if(i>=0) queues[k].splice(i,1); } }
+function tryStart(mode){
+  const q=queues[mode], need=MODES[mode].need;
+  if(q.length>=need){ new Room(q.splice(0,need), mode); }
+  else q.forEach(c=>{ if(c.readyState===1) c.send(JSON.stringify({ t:"waiting", mode, have:q.length, need })); });
+}
 const wss = new WebSocketServer({ server });
 wss.on("connection", ws=>{
   ws.room=null; ws.side=-1;
@@ -126,8 +137,8 @@ wss.on("connection", ws=>{
     let m; try{ m=JSON.parse(buf); }catch{ return; }
     if(m.t==="queue"){
       if(ws.room) return;
-      if(waiting && waiting!==ws && waiting.readyState===1){ const a=waiting; waiting=null; new Room(a,ws); }
-      else { waiting=ws; ws.send(JSON.stringify({ t:"waiting" })); }
+      const mode = MODES[m.mode] ? m.mode : "1v1";
+      dequeue(ws); queues[mode].push(ws); tryStart(mode);
     } else if(ws.room){
       if(m.t==="chat") ws.room.broadcastChat(ws.side, m.text);
       else ws.room.input(ws.side, m);
@@ -135,7 +146,7 @@ wss.on("connection", ws=>{
   });
   ws.on("close", ()=>{
     stats.online=Math.max(0,stats.online-1);
-    if(waiting===ws) waiting=null;
+    dequeue(ws);
     if(ws.room) ws.room.close(ws);
   });
 });

@@ -104,7 +104,30 @@ class Game {
     // players: 0 = left (PCITY), 1 = right (CITY)
     this.players=[this.newPlayer(),this.newPlayer()];
     this.cells=[1,1]; this.max=[1,1]; this.over=false; this.winner=-1;
+    this.botSide=-1; this.botTimer=0;   // set by server for 2v1bot mode
     this.buildCities();
+  }
+  // ---- extreme bot (drives one side in 2v1bot mode) ----
+  botInterval(){ return Math.max(5, 24 - this.wave*3); }   // very aggressive, speeds up each wave
+  botPick(){ const r=rnd(), w=this.wave;
+    if(w>=4 && r<0.16) return ANTIMATTER;
+    if(w>=3 && r<0.40) return PLASMA;
+    if(w>=2 && r<0.62) return MAGMA;
+    if(r<0.82) return LAVA; return ACID; }
+  botStep(){
+    if(this.botSide<0 || this.over) return;
+    if(++this.botTimer < this.botInterval()) return;
+    this.botTimer=0;
+    const foe=this.botSide^1;                               // attack the human team's city
+    const cityT=foe===0?PCITY:CITY, sky=foe===0?this.skyP:this.skyE;
+    const x0=foe===0?2:E_START+2, x1=foe===0?P_END-2:COLS-2;
+    let best=-1,bs=-1;
+    for(let x=x0;x<x1;x++){ let s=0; for(let y=FLOOR_Y-CITY_THICK;y<FLOOR_Y;y++) if(this.grid[this.I(x,y)]===cityT) s++; s+=rnd()*4; if(s>bs){bs=s;best=x;} }
+    if(best<0) best=(x0+x1)>>1;
+    const el=this.botPick(), br=3, surf=sky[best];
+    for(let dy=-br;dy<=br;dy++)for(let dx=-br;dx<=br;dx++){ if(dx*dx+dy*dy>br*br)continue;
+      const nx=best+dx, ny=surf+dy; if(!this.inB(nx,ny))continue; const j=this.I(nx,ny);
+      if(this.grid[j]===EMPTY||isGas(this.grid[j])) this.grid[j]=el; }
   }
   newPlayer(){ return { coins:300, level:1, brush:2, unlocked:new Set([ACID,WATER,SAND,EMPTY]) }; }
   I(x,y){ return y*COLS+x; }

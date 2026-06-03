@@ -64,8 +64,12 @@
 <body>
 <div id="lobby">
   <h1>ACID<br>SIEGE</h1>
-  <div class="sub">Multiplayer · Player vs Player</div>
-  <button class="mbtn" id="findBtn">FIND MATCH</button>
+  <div class="sub">Multiplayer · pick a mode</div>
+  <div style="display:flex;flex-direction:column;gap:10px;width:min(320px,86vw)">
+    <button class="mbtn find" data-mode="1v1">1 v 1</button>
+    <button class="mbtn find" data-mode="2v2">2 v 2 · team</button>
+    <button class="mbtn find" data-mode="2v1bot">2 v 1 EXTREME BOT</button>
+  </div>
   <div class="status" id="status"></div>
   <div style="margin-top:10px;color:var(--muted);font-size:12px;letter-spacing:2px">MADE BY LIAM HUTSON</div>
 </div>
@@ -125,26 +129,31 @@ function render(){ let p=0; for(let i=0;i<grid.length;i++){ const c=LUT[grid[i]]
   else ctx.drawImage(sim,0,0,cv.width,cv.height); }
 
 // ---- networking ----
-function connect(){
+let chosenMode="1v1";
+function connect(mode){
+  chosenMode=mode;
   const proto = location.protocol==="https:"?"wss":"ws";
   ws=new WebSocket(proto+"://"+location.host);
-  ws.onopen=()=>{ ws.send(JSON.stringify({t:"queue"})); status("Searching for an opponent…"); };
+  ws.onopen=()=>{ ws.send(JSON.stringify({t:"queue",mode})); status("Searching…"); };
   ws.onclose=()=>{ status("Disconnected. Refresh to retry."); };
   ws.onerror=()=>{ status("Connection error. Is the server running?"); };
   ws.onmessage=ev=>{ const m=JSON.parse(ev.data); handle(m); };
 }
 function handle(m){
-  if(m.t==="waiting"){ status("Waiting for another player… (open this URL in a second tab/device)"); }
+  if(m.t==="waiting"){ status("Waiting for players… "+(m.have||1)+"/"+(m.need||2)+" — open this URL in more tabs/devices"); }
   else if(m.t==="start"){ COLS=m.cols; ROWS=m.rows; mySide=m.side; palette=m.palette; initBuffers(); buildTools(); startGame(); }
   else if(m.t==="state"){ unpackRLE(m.grid); render(); hud(m.meta); }
   else if(m.t==="chat"){ addChat(m.from, m.text); }
-  else if(m.t==="opponentLeft"){ status("Opponent left."); addChat("system","Opponent disconnected — you win by default!"); }
+  else if(m.t==="opponentLeft"){ status("A player left — match ended."); addChat("system","A player disconnected — match ended."); }
 }
 function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
 function status(s){ document.getElementById("status").textContent=s; }
 
 // ---- lobby / start ----
-document.getElementById("findBtn").onclick=()=>{ document.getElementById("findBtn").disabled=true; connect(); };
+[...document.querySelectorAll(".find")].forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".find").forEach(x=>x.disabled=true);
+  connect(b.dataset.mode);
+});
 function startGame(){ started=true; document.getElementById("lobby").classList.add("hidden"); document.getElementById("wrap").classList.remove("hidden");
   document.getElementById("sideName").textContent="P"+(mySide+1);
   // perspective-relative view: YOUR city is always shown on the LEFT in green, the enemy on the RIGHT in red.
@@ -217,7 +226,7 @@ setInterval(()=>{ if(down&&started){ placeNow(); } }, 55);   // hold-to-paint, t
 // ---- chat ----
 const chatlog=document.getElementById("chatlog"), chatbox=document.getElementById("chatbox");
 function esc(s){ return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function addChat(from,text){ const d=document.createElement("div"); const me=from==="P"+(mySide+1);
+function addChat(from,text){ const d=document.createElement("div"); const me=from==="Team "+(mySide+1);
   d.innerHTML = from==="system" ? `<i style="color:#7fa6a0">${esc(text)}</i>` : `<b style="color:${me?'#8ef02a':'#e24a4a'}">${esc(from)}</b> ${esc(text)}`;
   chatlog.appendChild(d); chatlog.scrollTop=chatlog.scrollHeight; }
 function sendChat(){ const v=chatbox.value.trim(); if(!v)return; send({t:"chat",text:v}); chatbox.value=""; }
