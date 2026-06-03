@@ -17,6 +17,12 @@ const TICK_MS = 33;   // sim + broadcast rate (~30Hz)
 // ---- usage stats (in-memory; resets on restart/redeploy) ----
 const stats = { pageViews:0, singleplayer:0, multiplayer:0, connections:0, matches:0, online:0, peakOnline:0, since:new Date().toISOString() };
 
+// ---- single-player saves: { clientId -> lastGameState } (file-backed; survives restarts, not redeploys) ----
+const SAVE_FILE = path.join(__dirname, "saves.json");
+let saves = {}; try { saves = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8")); } catch {}
+let saveTimer = null;
+function persistSaves(){ if(saveTimer) return; saveTimer = setTimeout(()=>{ saveTimer=null; fs.writeFile(SAVE_FILE, JSON.stringify(saves), ()=>{}); }, 800); }
+
 // ---- static file server ----
 const MIME = { ".html":"text/html; charset=utf-8", ".js":"text/javascript", ".css":"text/css", ".json":"application/json",
                ".png":"image/png", ".svg":"image/svg+xml", ".ico":"image/x-icon", ".webmanifest":"application/manifest+json" };
@@ -32,6 +38,15 @@ const server = http.createServer((req,res)=>{
   if(url==="/healthz"){ res.writeHead(200,{"Content-Type":"text/plain"}); return res.end("ok"); }
   if(url==="/robots.txt"){ res.writeHead(200,{"Content-Type":"text/plain"}); return res.end("User-agent: *\nAllow: /\n"); }
   if(url==="/stats"){ res.writeHead(200,{"Content-Type":"application/json"}); return res.end(JSON.stringify(stats,null,2)); }
+  if(url==="/load"){ const id=new URL(req.url,"http://x").searchParams.get("id");
+    res.writeHead(200,{"Content-Type":"application/json"}); return res.end(JSON.stringify((id&&saves[id])||null)); }
+  if(url==="/save" && req.method==="POST"){
+    let body=""; req.on("data",c=>{ body+=c; if(body.length>200000) req.destroy(); });
+    req.on("end",()=>{ try{ const {id,state}=JSON.parse(body);
+        if(id){ if(state==null) delete saves[id]; else saves[id]=state; persistSaves(); } }catch{}
+      res.writeHead(200,{"Content-Type":"application/json"}); res.end('{"ok":true}'); });
+    return;
+  }
   if(ROUTES[url]){ stats.pageViews++;                              // count page loads (not assets)
     if(url==="/singleplayer"||url==="/play") stats.singleplayer++;
     if(url==="/multiplayer"||url==="/online") stats.multiplayer++;

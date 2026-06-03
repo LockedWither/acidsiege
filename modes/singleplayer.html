@@ -167,6 +167,7 @@
   .mbtn:active{transform:scale(.97)}
   .mbtn.play{color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic-dim));box-shadow:0 8px 26px rgba(126,252,74,.3)}
   .mbtn.ghost{color:var(--ink);background:rgba(255,255,255,.05);border:1px solid var(--panel-edge);font-size:14px}
+  .diff.sel{color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic2));border-color:var(--toxic)}
   #howto{max-width:min(560px,90vw);text-align:left;background:var(--panel);border:1px solid var(--panel-edge);
     border-radius:14px;padding:15px 18px;font-size:13.5px;line-height:1.65;color:var(--muted)}
   #howto.hidden{display:none}
@@ -214,6 +215,11 @@
   <h1 class="logo">ACID<br>SIEGE</h1>
   <div class="sub">Falling-sand siege · Player vs Bot</div>
   <div id="menuMsg" class="hidden"></div>
+  <div class="diffsel" style="display:flex;gap:8px;justify-content:center;margin-bottom:2px">
+    <button class="mbtn ghost diff" data-diff="easy"   style="font-size:14px;padding:10px 16px">EASY</button>
+    <button class="mbtn ghost diff" data-diff="medium" style="font-size:14px;padding:10px 16px">MEDIUM</button>
+    <button class="mbtn ghost diff" data-diff="hard"   style="font-size:14px;padding:10px 16px">HARD</button>
+  </div>
   <div class="menubtns">
     <button class="mbtn play" id="playBtn">PLAY</button>
     <button class="mbtn ghost" id="howtoBtn">HOW TO PLAY</button>
@@ -419,7 +425,8 @@ const placementCost={};   // every lookup defaults to 0
 const brushCosts=[200,500,1000,2500,6000,14000,32000,70000];
 function rebuildCost(){ return 30000; }   // rebuild your own razed city — deliberately steep
 const COIN_PER_CELL=1;
-function coinReward(w){ return 4; }   // flat base 4 (× wStep × coinLevelMult)
+let difficulty = localStorage.getItem("as_diff") || "medium";   // easy | medium | hard
+function coinReward(w){ return difficulty==="easy" ? 9 : 4; }   // easy pays 9, else 4 (× wStep × coinLevelMult)
 function coinLevelMult(L){ return 1 + 0.045*Math.pow(L-1, 1.1); }   // climbs slowly: Lv1 ×1 · Lv10 ×1.5 · Lv100 ×8 · Lv280 ×22
 function mult(L){return 1+(L-1)*0.6;}
 function upCost(L){return Math.round(400*Math.pow(L,1.6));}
@@ -520,11 +527,13 @@ function nextWave(){
   coins += 200*wave;                                          // linear raze bonus (was quadratic)
   clearLoose();             // keep the player's (damaged) city — it does NOT regenerate
   buildEnemyCity();         // only the enemy city is rebuilt fresh
+  saveGame();               // checkpoint the (alive) run to the server
 }
 function loseGame(){
   if(gameOver) return;                                      // only fire once
   gameOver=true; running=false;                             // freeze the sim
-  showDefeat();                                             // "you lost" → back to menu (defined in menu wiring)
+  if(reviveCount()>0) showRevivePrompt();                   // offer a revive (1 token, regen 1 / 20 min)
+  else { clearSave(); showDefeat(); }                       // no revive → run is over, drop the save
 }
 function rebuildPCity(){   // restore the player's (left) city to full from its original silhouette
   const top=FLOOR_Y-CITY_THICK;
@@ -783,13 +792,14 @@ function step(){
 // ---- bot AI ----
 let botTimer=0;
 function botInterval(){ return Math.max(30, 140 - wave*4); }
-const BOT_AGGRO=0.9;   // bot uses weapons slightly BELOW the player's protection → survivable siege (tunable)
-function botPickElement(){
-  const cap=cityProt(playerLevel)*BOT_AGGRO;
-  let idx=0;                                          // default weakest
-  for(let k=0;k<BOT_WEAPONS.length;k++){ if(BOT_WEAPONS[k].dmg<=cap) idx=k; else break; }
-  const lo=Math.max(0,idx-1);                         // pick from the top two eligible for a little variety
-  return BOT_WEAPONS[lo+((Math.random()*(idx-lo+1))|0)].id;
+const BOMB_PWR={[TNT]:25,[NUKE]:120,[HBOMB]:350};    // bombs aren't in DMG; rough power for ranking
+function powerOf(t){ if(DMG[t]!==undefined) return DMG[t]; if(BOMB_PWR[t]!==undefined) return BOMB_PWR[t]; if(DEFBYID[t]) return DEFBYID[t].dmg; return 0.3; }
+function botPickElement(){                            // bot draws from the player's unlocked items, capped by difficulty
+  const opts=[...unlocked].filter(t=>t!==EMPTY).sort((a,b)=>powerOf(a)-powerOf(b));
+  if(!opts.length) return ACID;
+  const cap = difficulty==="easy"?0.4 : difficulty==="medium"?0.8 : 1.0;   // easy: way worse · medium: slightly worse · hard: same
+  const maxIdx=Math.floor((opts.length-1)*cap);
+  return opts[(Math.random()*(maxIdx+1))|0];
 }
 function botStep(){
   botTimer++;
@@ -805,7 +815,7 @@ function botStep(){
   }
   if(best<0) return;
   const el=botPickElement();
-  const br=2;
+  const br=brush;   // same brush size as the player
   const surfaceY=(FLOOR_Y-CITY_THICK)+skyP[best];            // drop right onto the city surface, not from the sky
   for(let dy=-br;dy<=br;dy++)for(let dx=-br;dx<=br;dx++){
     if(dx*dx+dy*dy>br*br) continue;
@@ -1266,11 +1276,57 @@ function openDrawer(){ sideEl.classList.add("open"); drawerBack.classList.add("s
 function closeDrawer(){ sideEl.classList.remove("open"); drawerBack.classList.remove("show"); }
 playBtn.onclick=startGame;
 howtoBtn.onclick=()=>howtoEl.classList.toggle("hidden");
+const diffBtns=[...document.querySelectorAll(".diff")];
+function renderDiff(){ diffBtns.forEach(b=>b.classList.toggle("sel", b.dataset.diff===difficulty)); }
+diffBtns.forEach(b=>b.onclick=()=>{ difficulty=b.dataset.diff; localStorage.setItem("as_diff",difficulty); renderDiff(); });
+renderDiff();
 document.getElementById("pauseBtn").onclick=openMenu;
 document.getElementById("openMenuBtn").onclick=openMenu;
 document.getElementById("drawerToggle").onclick=()=>{ sideEl.classList.contains("open")?closeDrawer():openDrawer(); };
 document.getElementById("drawerClose").onclick=closeDrawer;
 drawerBack.onclick=closeDrawer;
+
+/* ---- revive tokens (1 regenerates every 20 min, banked up to 3) ---- */
+const REVIVE_MS=20*60*1000, REVIVE_CAP=3;
+function reviveState(){ let s=null; try{ s=JSON.parse(localStorage.getItem("as_revive")); }catch{}
+  if(!s||typeof s.count!=="number") s={count:REVIVE_CAP, last:Date.now()};
+  const g=Math.floor((Date.now()-s.last)/REVIVE_MS);
+  if(g>0){ s.count=Math.min(REVIVE_CAP, s.count+g); s.last = s.count>=REVIVE_CAP ? Date.now() : s.last+g*REVIVE_MS; }
+  localStorage.setItem("as_revive", JSON.stringify(s)); return s; }
+function reviveCount(){ return reviveState().count; }
+function spendRevive(){ const s=reviveState(); if(s.count<=0) return false; if(s.count>=REVIVE_CAP) s.last=Date.now(); s.count--; localStorage.setItem("as_revive",JSON.stringify(s)); return true; }
+
+/* ---- server save of the last (non-death) game ---- */
+const CLIENT_ID=(()=>{ let id=localStorage.getItem("as_id"); if(!id){ id="p"+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("as_id",id); } return id; })();
+function saveGame(){ if(gameOver) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};
+  fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state})}).catch(()=>{}); }
+function clearSave(){ fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state:null})}).catch(()=>{}); }
+function applySave(s){ if(!s||running) return;                               // only resume if still on the menu
+  coins=s.coins||0; playerLevel=s.playerLevel||1; wave=s.wave||1; razings=s.razings||0; brushLevel=s.brushLevel||1; brush=brushLevel+1;
+  enemyLevel=Math.floor((wave-1)/5)+1; unlocked.clear(); (s.unlocked||[ACID,WATER,SAND,EMPTY]).forEach(t=>unlocked.add(t)); unlocked.add(EMPTY);
+  clearArena(); buildCities(); renderTools(); renderBrushBtn(); }
+fetch("/load?id="+CLIENT_ID).then(r=>r.json()).then(applySave).catch(()=>{});
+setInterval(()=>{ if(running&&!gameOver) saveGame(); }, 30000);              // periodic checkpoint
+
+/* ---- revive overlay ---- */
+const reviveEl=document.createElement("div");
+reviveEl.style.cssText="position:fixed;inset:0;z-index:70;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:20px;background:rgba(4,12,16,.86);backdrop-filter:blur(5px)";
+reviveEl.innerHTML=`<div style="font-family:Bungee,Impact,sans-serif;font-size:clamp(30px,8vw,56px);color:#ff5347;text-shadow:0 0 24px rgba(255,83,71,.4)">CITY RAZED</div>
+  <div id="revInfo" style="color:#7fa6a0;font-size:15px;max-width:420px"></div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
+    <button id="revYes" style="font-family:Bungee,Impact,sans-serif;font-size:18px;padding:14px 26px;border:none;border-radius:14px;cursor:pointer;color:#06141b;background:linear-gradient(180deg,#8ef02a,#5fae1f)">REVIVE — 1 ⟳</button>
+    <button id="revNo" style="font-family:Bungee,Impact,sans-serif;font-size:16px;padding:14px 22px;border:none;border-radius:14px;cursor:pointer;color:#dff3ee;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)">GIVE UP</button>
+  </div>`;
+document.body.appendChild(reviveEl);
+function showRevivePrompt(){ document.getElementById("revInfo").textContent="Revive your city and keep going? You have "+reviveCount()+" revive token(s). One regenerates every 20 minutes."; reviveEl.style.display="flex"; }
+document.getElementById("revYes").onclick=()=>{
+  reviveEl.style.display="none";
+  if(spendRevive()){
+    for(let i=0;i<grid.length;i++){ const t=grid[i]; if(t!==WALL&&t!==CITY&&t!==PCITY){ grid[i]=EMPTY; health[i]=0; } }  // clear incoming fire
+    rebuildPCity(); gameOver=false; running=true; saveGame();
+  } else { clearSave(); showDefeat(); }
+};
+document.getElementById("revNo").onclick=()=>{ reviveEl.style.display="none"; clearSave(); showDefeat(); };
 
 let acc=0,last=performance.now();
 function loop(now){
