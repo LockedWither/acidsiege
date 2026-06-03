@@ -15,11 +15,12 @@ const FLOOR_Y=ROWS-1, CITY_THICK=18, GAP=10;
 const MID=(COLS/2)|0, P_END=MID-GAP/2, E_START=MID+GAP/2;
 const CEIL_Y=FLOOR_Y-45;
 const RAZE_RATIO=0.10;
-const COIN_REWARD=4;
+function coinReward(w){ return 4; }   // flat base 4
 
 const BASE_HP={ [SAND]:2,[GLASS]:4,[WOOD]:6,[STONE]:12,[CITY]:8,[PCITY]:8 };
-const DMG    ={ [ACID]:4,[FIRE]:2,[NAPALM]:3,[VIRUS]:2,[LAVA]:5,[MAGMA]:8,[PLASMA]:12,[ANTIMATTER]:125000 };
-function cityProt(L){ return Math.round(0.02*(L-1)*(L-1)*(L-1)); }
+const DMG    ={ [ACID]:4,[FIRE]:2,[NAPALM]:3,[VIRUS]:2,[LAVA]:5,[MAGMA]:8,[PLASMA]:12,[ANTIMATTER]:4000 };
+function cityProt(L){ const a=0.009*(L-1)*(L-1)*(L-1); const e=L>50?L-50:0; return Math.round(a + 0.1*e*e*e); }   // protection tied directly to level (and its colour/pattern); gentle to lv50 then ramps
+function coinLevelMult(L){ return 1 + 0.045*Math.pow(L-1, 1.1); }   // climbs slowly: Lv1 ×1 · Lv10 ×1.5 · Lv100 ×8 · Lv280 ×22
 
 // one-time unlock palette (shared with client UI)
 const PALETTE=[
@@ -27,38 +28,53 @@ const PALETTE=[
   {t:SAND,nm:"Sand",col:"#d9c17a",cost:0},   {t:WOOD,nm:"Wood",col:"#7a4a23",cost:40},
   {t:OIL,nm:"Oil",col:"#3a2820",cost:60},    {t:GLASS,nm:"Glass",col:"#bce3ec",cost:70},
   {t:STONE,nm:"Stone",col:"#6e6c68",cost:80},{t:FIRE,nm:"Fire",col:"#ff6a1e",cost:100},
-  {t:TNT,nm:"TNT",col:"#e23a3a",cost:250},   {t:LAVA,nm:"Lava",col:"#ff5a14",cost:500},
+  {t:TNT,nm:"TNT",col:"#e23a3a",cost:100000}, {t:LAVA,nm:"Lava",col:"#ff5a14",cost:500},
   {t:MAGMA,nm:"Magma",col:"#ff9a2a",cost:1500},{t:NAPALM,nm:"Napalm",col:"#ff8a1e",cost:2000},
   {t:PLASMA,nm:"Plasma",col:"#c47cff",cost:1200},{t:VIRUS,nm:"Virus",col:"#b428b4",cost:12000},
-  {t:NUKE,nm:"Nuke",col:"#6c8030",cost:8000},{t:HBOMB,nm:"H-Bomb",col:"#46505c",cost:25000},
-  {t:ANTIMATTER,nm:"Antimatter",col:"#7a00c8",cost:40000},
+  {t:NUKE,nm:"Nuke",col:"#6c8030",cost:1000000},{t:HBOMB,nm:"H-Bomb",col:"#46505c",cost:1500000},
+  {t:ANTIMATTER,nm:"Antimatter",col:"#7a00c8",cost:2000000},
   {t:PCITY,nm:"City Block",col:"#3ec46b",cost:800},{t:EMPTY,nm:"Eraser",col:"#3a4a52",cost:0},
 ];
 const NEWDEFS=[
   {nm:"Thermite",col:"#ffb24a",kind:"goo",dmg:60,cost:150000},
+  {nm:"Caustic Wave",col:"#9cff5a",kind:"goo",dmg:90,cost:250000},
   {nm:"Cluster Bomb",col:"#c8d24a",kind:"blast",dmg:2500,r:22,fp:0.6,cost:300000},
   {nm:"Daisy Cutter",col:"#e0a832",kind:"blast",dmg:5000,r:26,fp:0.65,cost:600000},
   {nm:"Bunker Buster",col:"#9a7a3a",kind:"blast",dmg:10000,r:24,fp:0.5,cost:1200000},
   {nm:"Fuel-Air Bomb",col:"#ff7e3a",kind:"blast",dmg:20000,r:30,fp:0.75,cost:2000000},
   {nm:"Neutron Bomb",col:"#aef0c0",kind:"beam",dmg:40000,cost:3500000},
+  {nm:"Sulfur Deluge",col:"#d8d24a",kind:"goo",dmg:120,cost:4500000},
+  {nm:"Mercury Flood",col:"#c0c8d0",kind:"goo",dmg:240,cost:5500000},
   {nm:"Cobalt Bomb",col:"#5a8fd0",kind:"blast",dmg:80000,r:32,fp:0.7,cost:6000000},
+  {nm:"Gamma Burst",col:"#b6ff7a",kind:"beam",dmg:120000,cost:8000000},
   {nm:"Tsar Bomba",col:"#ff5a2a",kind:"blast",dmg:160000,r:38,fp:0.8,cost:10000000},
   {nm:"Plasma Cannon",col:"#c47cff",kind:"beam",dmg:350000,cost:16000000},
+  {nm:"Rail Mortar",col:"#8fbfff",kind:"blast",dmg:500000,r:30,fp:0.6,cost:20000000},
+  {nm:"Corrosive Tide",col:"#7affc0",kind:"goo",dmg:700,cost:22000000},
   {nm:"Railgun Slug",col:"#9fd8ff",kind:"blast",dmg:700000,r:28,fp:0.4,cost:25000000},
   {nm:"Ion Storm",col:"#7ce0ff",kind:"beam",dmg:1500000,cost:38000000},
+  {nm:"Void Lance",col:"#6a4aff",kind:"anti",dmg:2500000,cost:46000000},
   {nm:"Black Hole",col:"#3a2a5a",kind:"anti",dmg:4000000,cost:55000000},
+  {nm:"Quicksilver Sea",col:"#aeb6c4",kind:"goo",dmg:1600,cost:65000000},
   {nm:"Singularity",col:"#5a2a7a",kind:"anti",dmg:9000000,cost:75000000},
+  {nm:"Meteor Strike",col:"#ff9a5a",kind:"blast",dmg:13000000,r:40,fp:0.8,cost:88000000},
   {nm:"Nova Charge",col:"#ffd24a",kind:"blast",dmg:18000000,r:42,fp:0.85,cost:100000000},
   {nm:"Supernova",col:"#ffe88a",kind:"blast",dmg:40000000,r:46,fp:0.9,cost:130000000},
   {nm:"Quark Bomb",col:"#ff4ad2",kind:"anti",dmg:90000000,cost:160000000},
+  {nm:"Neutronium Slug",col:"#cfe0ff",kind:"blast",dmg:140000000,r:34,fp:0.5,cost:172000000},
   {nm:"Strangelet",col:"#b04aff",kind:"anti",dmg:200000000,cost:185000000},
   {nm:"Dark Matter",col:"#2a1840",kind:"anti",dmg:450000000,cost:200000000},
   {nm:"Vacuum Decay",col:"#d0c0ff",kind:"beam",dmg:900000000,cost:225000000},
   {nm:"Annihilation Core",col:"#ffffff",kind:"anti",dmg:2000000000,cost:250000000},
 ];
 const DEFBYID={};
-NEWDEFS.forEach((d,k)=>{ d.id=NEW_BASE+k; d.dmg=Math.round(d.dmg*0.5); DEFBYID[d.id]=d;
-  PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });
+const COST_RATIO=Math.pow(1e13/150000, 1/(NEWDEFS.length-1));             // 150k → 10 TRILLION across the ladder
+NEWDEFS.forEach((d,k)=>{ d.id=NEW_BASE+k;
+  const f=0.1 + 1.4*Math.pow(k/(NEWDEFS.length-1), 2);                    // early tiers nerfed, newer tiers hit FAR harder
+  d.dmg=Math.round(d.dmg*f);
+  if(d.r) d.r=Math.min(45, Math.round(d.r*2));                            // blast tiers → city-sized radius
+  let c=150000*Math.pow(COST_RATIO,k); const mag=Math.pow(10,Math.floor(Math.log10(c))-2); d.cost=Math.round(c/mag)*mag;  // top tiers in B–T
+  DEFBYID[d.id]=d; PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });
 
 const brushCosts=[200,500,1000,2500,6000,14000,32000,70000];
 function upCost(L){ return Math.round(400*Math.pow(L,1.6)); }
@@ -107,12 +123,20 @@ class Game {
   protOf(i){ const t=this.grid[i]; return t===PCITY?cityProt(this.players[0].level): t===CITY?cityProt(this.players[1].level):0; }
   hurtCity(owner){ // a cell of `owner`'s city died → opponent earns, check raze
     this.cells[owner]--; const foe=owner^1;
-    this.players[foe].coins += COIN_REWARD*this.wave;
+    const wStep=Math.floor((this.wave-1)/5)*5+1;                  // reward steps every 5 waves
+    this.players[foe].coins += coinReward(wStep)*wStep*coinLevelMult(this.players[foe].level);   // boosted by attacker's level
+
     if(this.cells[owner]/this.max[owner] <= RAZE_RATIO) this.razed(owner);
   }
   razed(owner){ // owner's city destroyed → opponent wins the round
     if(this.over) return;
-    const foe=owner^1; this.scores[foe]++; this.round++; this.wave++;
+    const foe=owner^1; this.scores[foe]++;
+    if(this.wave>=6){ // match ends at wave 6 — higher score wins (-1 = draw)
+      this.over=true;
+      this.winner = this.scores[0]===this.scores[1] ? -1 : (this.scores[0]>this.scores[1]?0:1);
+      return;
+    }
+    this.round++; this.wave++;
     this.players.forEach(p=>p.coins += 200*this.wave);
     this.buildCities();
   }
@@ -140,7 +164,7 @@ class Game {
       if(tj===WALL||tj===TNT||tj===NUKE||tj===HBOMB)continue;
       if(BASE_HP[tj]!==undefined){ this.applyDamage(j,dmg); continue; }
       if(rnd()<fp){ g[j]=FIRE; } else { g[j]=EMPTY; } this.moved[j]=1; } }
-  detonate(x,y,t){ if(t===HBOMB)this.explodeR(x,y,40,0.75,3000); else if(t===NUKE)this.explodeR(x,y,22,0.65,750); else this.explodeR(x,y,6,0.45,20); }
+  detonate(x,y,t){ if(t===HBOMB)this.explodeR(x,y,46,0.45,350); else if(t===NUKE)this.explodeR(x,y,42,0.40,120); else this.explodeR(x,y,20,0.30,25); }   // city-sized radius, low damage
 
   swap(i,j){ const g=this.grid,h=this.health; const t=g[i],hh=h[i]; g[i]=g[j];h[i]=h[j]; g[j]=t;h[j]=hh; this.moved[i]=1;this.moved[j]=1; }
 
@@ -169,9 +193,9 @@ class Game {
           case LAVA: this.sLava(x,y,i); break;
           case PLASMA: this.sPlasma(x,y,i); break;
           case FIRE: this.sFire(x,y,i); break;
-          case TNT: if(this.nearHeat(x,y))this.detonate(x,y,TNT); else this.mSolid(x,y,i); break;
-          case NUKE: if(this.nearHeat(x,y))this.detonate(x,y,NUKE); else this.mSolid(x,y,i); break;
-          case HBOMB: if(this.nearHeat(x,y))this.detonate(x,y,HBOMB); else this.mSolid(x,y,i); break;
+          case TNT:   if(y+1<ROWS&&solidPass(g[this.I(x,y+1)])){this.swap(i,this.I(x,y+1));} else { this.detonate(x,y,TNT);  g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; } break;   // explode on impact, then consumed
+          case NUKE:  if(y+1<ROWS&&solidPass(g[this.I(x,y+1)])){this.swap(i,this.I(x,y+1));} else { this.detonate(x,y,NUKE); g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; } break;
+          case HBOMB: if(y+1<ROWS&&solidPass(g[this.I(x,y+1)])){this.swap(i,this.I(x,y+1));} else { this.detonate(x,y,HBOMB);g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; } break;
           case MAGMA: this.sMagma(x,y,i); break;
           case NAPALM: this.sNapalm(x,y,i); break;
           case ANTIMATTER: this.sAnti(x,y,i); break;
@@ -241,7 +265,7 @@ class Game {
       else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS)&&rnd()<0.04){ this.applyDamage(j,DMG[VIRUS],VIRUS); } }
     if(rnd()<0.04){ g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; return; } this.mSolid(x,y,i); }
   sNew(x,y,i){ const g=this.grid; const d=DEFBYID[g[i]];
-    if(d.kind==="blast"){ if(this.nearHeat(x,y)){ this.explodeR(x,y,d.r,d.fp,d.dmg); return; } this.mSolid(x,y,i); return; }
+    if(d.kind==="blast"){ if(y+1<ROWS){ const dd=this.I(x,y+1); if(solidPass(g[dd])){ this.swap(i,dd); return; } } this.explodeR(x,y,d.r,d.fp,d.dmg); g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; return; }   // explode on impact, then consumed
     for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
       if(BASE_HP[tj]!==undefined){ this.applyDamage(j,d.dmg); }
       else if(tj===TNT||tj===NUKE||tj===HBOMB){ this.detonate(nx,ny,tj); }
@@ -279,7 +303,7 @@ class Game {
   // ---- serialization for broadcast ----
   rleGrid(){ const g=this.grid, out=[]; let v=g[0],c=1;
     for(let i=1;i<g.length;i++){ if(g[i]===v&&c<65535){ c++; } else { out.push(v,c); v=g[i]; c=1; } } out.push(v,c); return out; }
-  meta(){ return { round:this.round, wave:this.wave, scores:this.scores,
+  meta(){ return { round:this.round, wave:this.wave, scores:this.scores, over:this.over, winner:this.winner,
     players:this.players.map((p,k)=>({ coins:Math.floor(p.coins), level:p.level, brush:p.brush,
       cells:this.cells[k], max:this.max[k], upCost:upCost(p.level), brushCost:(p.brush<9?brushCosts[p.brush-2]:null),
       unlocked:[...p.unlocked] })) }; }

@@ -284,7 +284,12 @@
     <div class="card">
       <h2>Chemicals</h2>
       <div class="tools" id="tools"></div>
-      <button class="btn alt" id="brushBtn" style="margin-top:11px">BRUSH 2 — Upgrade 200</button>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:11px">
+        <button class="btn alt" id="brushMinus" style="width:auto;padding:9px 14px">−</button>
+        <span id="brushSize" style="flex:1;text-align:center;font-weight:800;font-size:13px">Brush 2</span>
+        <button class="btn alt" id="brushPlus" style="width:auto;padding:9px 14px">+</button>
+      </div>
+      <button class="btn alt" id="brushBtn" style="margin-top:6px">Upgrade max — 200</button>
     </div>
 
     <div class="card">
@@ -414,7 +419,8 @@ const placementCost={};   // every lookup defaults to 0
 const brushCosts=[200,500,1000,2500,6000,14000,32000,70000];
 function rebuildCost(){ return 30000; }   // rebuild your own razed city — deliberately steep
 const COIN_PER_CELL=1;
-const COIN_REWARD=4;   // coins per razed enemy cell = COIN_REWARD * wave (linear — keeps income from exploding)
+function coinReward(w){ return 4; }   // flat base 4 (× wStep × coinLevelMult)
+function coinLevelMult(L){ return 1 + 0.045*Math.pow(L-1, 1.1); }   // climbs slowly: Lv1 ×1 · Lv10 ×1.5 · Lv100 ×8 · Lv280 ×22
 function mult(L){return 1+(L-1)*0.6;}
 function upCost(L){return Math.round(400*Math.pow(L,1.6));}
 // ---- combat: per-cell HP + flat protection (a damage MINUSER, never a multiplier) ----
@@ -422,8 +428,8 @@ function upCost(L){return Math.round(400*Math.pow(L,1.6));}
 // BOTH bonus HP and a flat subtraction from incoming damage. Nothing regenerates except a Level Up
 // topping up protection. Overkill damage spills into a touching material (else it dies with no target).
 const BASE_HP={ [SAND]:2,[GLASS]:4,[WOOD]:6,[STONE]:12,[CITY]:8,[PCITY]:8 };
-const DMG    ={ [ACID]:4,[FIRE]:2,[NAPALM]:3,[VIRUS]:2,[LAVA]:5,[MAGMA]:8,[PLASMA]:12,[ANTIMATTER]:125000 };  // reduced ~½ to slow razing
-function cityProt(L){ return Math.round(0.02*(L-1)*(L-1)*(L-1)); }    // cubic: very slow early, then ramps hard to match weapon tiers
+const DMG    ={ [ACID]:4,[FIRE]:2,[NAPALM]:3,[VIRUS]:2,[LAVA]:5,[MAGMA]:8,[PLASMA]:12,[ANTIMATTER]:4000 };  // antimatter massively nerfed (was carrying to ~lv185)
+function cityProt(L){ const a=0.009*(L-1)*(L-1)*(L-1); const e=L>50?L-50:0; return Math.round(a + 0.1*e*e*e); }   // protection tied directly to level (and its colour/pattern); gentle to lv50 then ramps
 function coinMult(L){ return 1+cityProt(L)*0.3; }                     // enemy protection multiplies coins per break
 function protOf(i){ const t=grid[i]; return t===PCITY?cityProt(playerLevel) : t===CITY?cityProt(enemyLevel) : 0; }
 function spreadDamage(i,dmg,deathType){
@@ -499,7 +505,8 @@ const RAZE_RATIO=0.10;                                       // a city is "razed
 function enemyRazed(){  return cityCells/cityCellsMax   <= RAZE_RATIO; }
 function playerRazed(){ return pcityCells/pcityCellsMax <= RAZE_RATIO; }
 function damageCity(n,gx,gy){
-  const gain=n*COIN_REWARD*wave;   // linear in wave — NOT in cubic protection or player level (prevents the money exploit)
+  const wStep=Math.floor((wave-1)/5)*5+1;                          // reward steps every 5 waves (same cadence as level/protection)
+  const gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel);
   coins+=gain; cityCells-=n; coinFlash=1;
   if(gx!==undefined && Math.random()<0.22) pop(gx,gy,gain);
   if(!gameOver && enemyRazed()) nextWave();                 // enemy 90% gone → win the wave, level up
@@ -508,7 +515,8 @@ function damagePCity(n){ pcityCells-=n;
   if(playerRazed()) loseGame();                             // your city 90% gone → defeat
 }
 function nextWave(){
-  razings++; wave++; enemyLevel++;
+  razings++; wave++;
+  enemyLevel=Math.floor((wave-1)/5)+1;                        // enemy level (colour/pattern + protection) steps every 5 waves
   coins += 200*wave;                                          // linear raze bonus (was quadratic)
   clearLoose();             // keep the player's (damaged) city — it does NOT regenerate
   buildEnemyCity();         // only the enemy city is rebuilt fresh
@@ -552,10 +560,11 @@ function explodeR(cx,cy,R,fireProb,dmg){
     moved[j]=1;
   }
 }
-function explode(cx,cy){ explodeR(cx,cy,6,0.45,20); }      // TNT
+// bombs: HUGE city-sized blast radius, LOW per-cell damage (area weapons that pepper a whole city)
+function explode(cx,cy){ explodeR(cx,cy,20,0.30,25); }     // TNT
 function detonate(x,y,t){                                  // bomb yield by type
-  if(t===HBOMB) explodeR(x,y,40,0.75,3000);
-  else if(t===NUKE) explodeR(x,y,22,0.65,750);
+  if(t===HBOMB) explodeR(x,y,46,0.45,350);                 // covers a whole city, lightly
+  else if(t===NUKE) explodeR(x,y,42,0.40,120);             // one nuke blankets a city
   else explode(x,y);
 }
 
@@ -645,17 +654,18 @@ function stepFire(x,y,i){
   if(Math.random()<0.12){ if(Math.random()<0.5){ grid[i]=SMOKE; } else { grid[i]=EMPTY; origin[i]=ORIGIN_NONE; } moved[i]=1; return; }
   if(y>0){ const u=I(x,y-1); if(grid[u]===EMPTY && Math.random()<0.5){ swap(i,u); } }
 }
+// bombs now explode ON IMPACT: fall while they can, detonate the moment they land on something
 function stepTNT(x,y,i){
-  if(nearHeat(x,y)){ explode(x,y); return; }
-  stepSolid(x,y,i);                                               // TNT is a strong material — vertical stack
+  if(y+1<ROWS){ const d=I(x,y+1); if(solidPass(grid[d])){ swap(i,d); return; } }
+  explode(x,y); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1;        // bomb consumed by its own blast
 }
 function stepNuke(x,y,i){
-  if(nearHeat(x,y)){ detonate(x,y,NUKE); return; }               // huge blast — light a fire next to it
-  stepSolid(x,y,i);
+  if(y+1<ROWS){ const d=I(x,y+1); if(solidPass(grid[d])){ swap(i,d); return; } }
+  detonate(x,y,NUKE); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1;
 }
 function stepHbomb(x,y,i){
-  if(nearHeat(x,y)){ detonate(x,y,HBOMB); return; }              // city-flattening yield
-  stepSolid(x,y,i);
+  if(y+1<ROWS){ const d=I(x,y+1); if(solidPass(grid[d])){ swap(i,d); return; } }
+  detonate(x,y,HBOMB); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1;
 }
 function stepMagma(x,y,i){
   // hotter, thicker lava: spits fire, melts structure, devours cities
@@ -723,7 +733,7 @@ function stepGas(x,y,i){
 
 function stepNew(x,y,i){   // generic driver for the data-defined super-weapon tiers (ids NEW_BASE+)
   const d=DEFBYID[grid[i]];
-  if(d.kind==="blast"){ if(nearHeat(x,y)){ explodeR(x,y,d.r,d.fp,d.dmg); return; } stepSolid(x,y,i); return; }
+  if(d.kind==="blast"){ if(y+1<ROWS){ const dd=I(x,y+1); if(solidPass(grid[dd])){ swap(i,dd); return; } } explodeR(x,y,d.r,d.fp,d.dmg); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }   // explode on impact, then consumed
   for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){
     if(!inB(nx,ny)) continue; const j=I(nx,ny), tj=grid[j];
     if(BASE_HP[tj]!==undefined){ applyDamage(j,d.dmg); }
@@ -796,9 +806,10 @@ function botStep(){
   if(best<0) return;
   const el=botPickElement();
   const br=2;
+  const surfaceY=(FLOOR_Y-CITY_THICK)+skyP[best];            // drop right onto the city surface, not from the sky
   for(let dy=-br;dy<=br;dy++)for(let dx=-br;dx<=br;dx++){
     if(dx*dx+dy*dy>br*br) continue;
-    const nx=best+dx, ny=2+dy;
+    const nx=best+dx, ny=surfaceY+dy;
     if(!inB(nx,ny)) continue;
     const j=I(nx,ny);
     if(grid[j]===EMPTY||isGas(grid[j])){ grid[j]=el; origin[j]=ORIGIN_BOT; }
@@ -949,15 +960,15 @@ const PALETTE=[
   {t:GLASS, nm:"Glass",  col:"#bce3ec", cost:70},
   {t:STONE, nm:"Stone",  col:"#6e6c68", cost:80},
   {t:FIRE,  nm:"Fire",   col:"#ff6a1e", cost:100},
-  {t:TNT,   nm:"TNT",    col:"#e23a3a", cost:250},
+  {t:TNT,   nm:"TNT",    col:"#e23a3a", cost:100000},
   {t:LAVA,  nm:"Lava",   col:"#ff5a14", cost:500},
   {t:MAGMA, nm:"Magma",  col:"#ff9a2a", cost:1500},
   {t:NAPALM,nm:"Napalm", col:"#ff8a1e", cost:2000},
   {t:PLASMA,nm:"Plasma", col:"#c47cff", cost:1200},
   {t:VIRUS, nm:"Virus",  col:"#b428b4", cost:12000},
-  {t:NUKE,  nm:"Nuke",   col:"#6c8030", cost:8000},
-  {t:HBOMB, nm:"H-Bomb", col:"#46505c", cost:25000},
-  {t:ANTIMATTER,nm:"Antimatter", col:"#7a00c8", cost:40000},
+  {t:NUKE,  nm:"Nuke",   col:"#6c8030", cost:1000000},
+  {t:HBOMB, nm:"H-Bomb", col:"#46505c", cost:1500000},
+  {t:ANTIMATTER,nm:"Antimatter", col:"#7a00c8", cost:2000000},
   {t:PCITY, nm:"City Block", col:"#3ec46b", cost:800},
   {t:EMPTY, nm:"Eraser", col:"#3a4a52", cost:0},
 ];
@@ -965,29 +976,45 @@ const PALETTE=[
    kind: blast = heat-triggered bomb (r,fp,dmg) · beam = rising area hit · goo = damaging liquid · anti = annihilator liquid */
 const NEWDEFS=[
   {nm:"Thermite",         col:"#ffb24a", kind:"goo",   dmg:60,                       cost:150000},
+  {nm:"Caustic Wave",     col:"#9cff5a", kind:"goo",   dmg:90,                       cost:250000},
   {nm:"Cluster Bomb",     col:"#c8d24a", kind:"blast", dmg:2500,    r:22,fp:0.60,    cost:300000},
   {nm:"Daisy Cutter",     col:"#e0a832", kind:"blast", dmg:5000,    r:26,fp:0.65,    cost:600000},
   {nm:"Bunker Buster",    col:"#9a7a3a", kind:"blast", dmg:10000,   r:24,fp:0.50,    cost:1200000},
   {nm:"Fuel-Air Bomb",    col:"#ff7e3a", kind:"blast", dmg:20000,   r:30,fp:0.75,    cost:2000000},
   {nm:"Neutron Bomb",     col:"#aef0c0", kind:"beam",  dmg:40000,                    cost:3500000},
+  {nm:"Sulfur Deluge",    col:"#d8d24a", kind:"goo",   dmg:120,                      cost:4500000},
+  {nm:"Mercury Flood",    col:"#c0c8d0", kind:"goo",   dmg:240,                      cost:5500000},
   {nm:"Cobalt Bomb",      col:"#5a8fd0", kind:"blast", dmg:80000,   r:32,fp:0.70,    cost:6000000},
+  {nm:"Gamma Burst",      col:"#b6ff7a", kind:"beam",  dmg:120000,                   cost:8000000},
   {nm:"Tsar Bomba",       col:"#ff5a2a", kind:"blast", dmg:160000,  r:38,fp:0.80,    cost:10000000},
   {nm:"Plasma Cannon",    col:"#c47cff", kind:"beam",  dmg:350000,                   cost:16000000},
+  {nm:"Rail Mortar",      col:"#8fbfff", kind:"blast", dmg:500000,  r:30,fp:0.60,    cost:20000000},
+  {nm:"Corrosive Tide",   col:"#7affc0", kind:"goo",   dmg:700,                      cost:22000000},
   {nm:"Railgun Slug",     col:"#9fd8ff", kind:"blast", dmg:700000,  r:28,fp:0.40,    cost:25000000},
   {nm:"Ion Storm",        col:"#7ce0ff", kind:"beam",  dmg:1500000,                  cost:38000000},
+  {nm:"Void Lance",       col:"#6a4aff", kind:"anti",  dmg:2500000,                  cost:46000000},
   {nm:"Black Hole",       col:"#3a2a5a", kind:"anti",  dmg:4000000,                  cost:55000000},
+  {nm:"Quicksilver Sea",  col:"#aeb6c4", kind:"goo",   dmg:1600,                     cost:65000000},
   {nm:"Singularity",      col:"#5a2a7a", kind:"anti",  dmg:9000000,                  cost:75000000},
+  {nm:"Meteor Strike",    col:"#ff9a5a", kind:"blast", dmg:13000000, r:40,fp:0.80,   cost:88000000},
   {nm:"Nova Charge",      col:"#ffd24a", kind:"blast", dmg:18000000, r:42,fp:0.85,   cost:100000000},
   {nm:"Supernova",        col:"#ffe88a", kind:"blast", dmg:40000000, r:46,fp:0.90,   cost:130000000},
+  {nm:"Plasma Sludge",    col:"#d27aff", kind:"goo",   dmg:5000,                     cost:145000000},
   {nm:"Quark Bomb",       col:"#ff4ad2", kind:"anti",  dmg:90000000,                 cost:160000000},
+  {nm:"Neutronium Slug",  col:"#cfe0ff", kind:"blast", dmg:140000000,r:34,fp:0.50,   cost:172000000},
   {nm:"Strangelet",       col:"#b04aff", kind:"anti",  dmg:200000000,                cost:185000000},
   {nm:"Dark Matter",      col:"#2a1840", kind:"anti",  dmg:450000000,                cost:200000000},
   {nm:"Vacuum Decay",     col:"#d0c0ff", kind:"beam",  dmg:900000000,                cost:225000000},
   {nm:"Annihilation Core",col:"#ffffff", kind:"anti",  dmg:2000000000,               cost:250000000},
 ];
 const DEFBYID={}, NEWCOL={};
+const COST_RATIO=Math.pow(1e13/150000, 1/(NEWDEFS.length-1));            // 150k → 10 TRILLION across the ladder
 NEWDEFS.forEach((d,k)=>{
-  const id=NEW_BASE+k; d.id=id; d.dmg=Math.round(d.dmg*0.5);              // reduced ~½ to slow razing
+  const id=NEW_BASE+k; d.id=id;
+  const f=0.1 + 1.4*Math.pow(k/(NEWDEFS.length-1), 2);                   // early tiers nerfed, newer tiers hit FAR harder
+  d.dmg=Math.round(d.dmg*f);
+  if(d.r) d.r=Math.min(45, Math.round(d.r*2));                           // blast tiers → city-sized radius
+  let c=150000*Math.pow(COST_RATIO,k); const mag=Math.pow(10,Math.floor(Math.log10(c))-2); d.cost=Math.round(c/mag)*mag;  // top tiers in B–T
   DEFBYID[id]=d; NEWCOL[id]=hexToRgb(d.col);                             // placement free (default 0)
   PALETTE.splice(PALETTE.length-2, 0, {t:id, nm:d.nm, col:d.col, cost:d.cost});  // insert before City Block + Eraser
 });
@@ -1016,18 +1043,27 @@ function renderTools(){
 }
 renderTools();
 
-const brushBtn=document.getElementById("brushBtn");
-function brushUpCost(){ return brushLevel<brushCosts.length ? brushCosts[brushLevel-1] : null; }  // null = maxed (brush 9)
+const brushBtn=document.getElementById("brushBtn"), brushSizeEl=document.getElementById("brushSize"),
+      brushMinus=document.getElementById("brushMinus"), brushPlus=document.getElementById("brushPlus");
+function brushUpCost(){ return brushLevel<brushCosts.length ? brushCosts[brushLevel-1] : null; }  // null = maxed (cap 9)
+function setBrush(n){ brush=Math.max(1,Math.min(brushLevel+1, n)); renderBrushBtn(); }   // current size, 1..unlocked max
 function renderBrushBtn(){
-  brush=brushLevel+1;
+  const max=brushLevel+1;
+  if(brush>max) brush=max; if(brush<1) brush=1;
+  brushSizeEl.textContent="Brush "+brush+" / "+max;
+  brushMinus.disabled=brush<=1; brushPlus.disabled=brush>=max;
   const c=brushUpCost();
-  if(c===null){ brushBtn.textContent="BRUSH "+brush+" — MAX"; brushBtn.disabled=true; }
-  else { brushBtn.textContent="BRUSH "+brush+" — Upgrade "+c.toLocaleString(); brushBtn.disabled=coins<c; }
+  if(c===null){ brushBtn.textContent="Max size unlocked"; brushBtn.disabled=true; }
+  else { brushBtn.textContent="Upgrade max "+max+"→"+(max+1)+" — "+c.toLocaleString(); brushBtn.disabled=coins<c; }
 }
+brushMinus.onclick=()=>setBrush(brush-1);
+brushPlus.onclick=()=>setBrush(brush+1);
 brushBtn.onclick=()=>{
   const c=brushUpCost();
-  if(c!==null && coins>=c){ coins-=c; brushLevel++; renderBrushBtn(); }
+  if(c!==null && coins>=c){ coins-=c; brushLevel++; brush=brushLevel+1; renderBrushBtn(); }  // unlock + jump to new max
 };
+cv.addEventListener("wheel",e=>{ e.preventDefault(); setBrush(brush+(e.deltaY<0?1:-1)); },{passive:false});
+addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT")return; if(e.key==="[")setBrush(brush-1); else if(e.key==="]")setBrush(brush+1); });
 renderBrushBtn();
 
 document.getElementById("clearBtn").onclick=()=>{
@@ -1165,7 +1201,7 @@ function hud(){
   if(coinFlash){ coinN.classList.remove("pulse"); void coinN.offsetWidth; coinN.classList.add("pulse"); coinFlash=0; }
   pSwatch.style.background=swatchBG(playerLevel);
   pLv.textContent=playerLevel; pName.textContent=levelName(playerLevel);
-  pMult.textContent="🪙"+(COIN_REWARD*wave)+"/cell";        // current coin reward per razed enemy cell
+  pMult.textContent="🪙×"+coinLevelMult(playerLevel).toFixed(1);   // level cash multiplier
   pDef.textContent="🛡"+cityProt(playerLevel);                // flat protection (damage minuser) from Level Ups
   pFill.style.background=rgb(groupTint(TIERS[tIdx(playerLevel)].c, gIdx(playerLevel)));
   pFill.style.transform="scaleX("+Math.max(0,pcityCells/pcityCellsMax)+")";

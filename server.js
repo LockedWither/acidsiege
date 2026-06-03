@@ -14,6 +14,9 @@ const { Game, PALETTE, COLS, ROWS } = require("./engine");
 const PORT = process.env.PORT || 8080;
 const TICK_MS = 33;   // sim + broadcast rate (~30Hz)
 
+// ---- usage stats (in-memory; resets on restart/redeploy) ----
+const stats = { pageViews:0, singleplayer:0, multiplayer:0, connections:0, matches:0, online:0, peakOnline:0, since:new Date().toISOString() };
+
 // ---- static file server ----
 const MIME = { ".html":"text/html; charset=utf-8", ".js":"text/javascript", ".css":"text/css", ".json":"application/json",
                ".png":"image/png", ".svg":"image/svg+xml", ".ico":"image/x-icon", ".webmanifest":"application/manifest+json" };
@@ -28,7 +31,11 @@ const server = http.createServer((req,res)=>{
   let url = req.url.split("?")[0];
   if(url==="/healthz"){ res.writeHead(200,{"Content-Type":"text/plain"}); return res.end("ok"); }
   if(url==="/robots.txt"){ res.writeHead(200,{"Content-Type":"text/plain"}); return res.end("User-agent: *\nAllow: /\n"); }
-  if(ROUTES[url]) url = ROUTES[url];
+  if(url==="/stats"){ res.writeHead(200,{"Content-Type":"application/json"}); return res.end(JSON.stringify(stats,null,2)); }
+  if(ROUTES[url]){ stats.pageViews++;                              // count page loads (not assets)
+    if(url==="/singleplayer"||url==="/play") stats.singleplayer++;
+    if(url==="/multiplayer"||url==="/online") stats.multiplayer++;
+    url = ROUTES[url]; }
   const safe = path.normalize(url).replace(/^(\.\.[/\\])+/,"");
   const file = path.join(__dirname, safe);
   fs.readFile(file,(err,data)=>{
@@ -48,6 +55,7 @@ let nextRoom = 1;
 class Room {
   constructor(a,b){
     this.id = nextRoom++;
+    stats.matches++; console.log(`[match #${stats.matches}] started — ${stats.online} online`);
     this.game = new Game();
     this.clients = [a,b];
     a.room=this; a.side=0; b.room=this; b.side=1;
@@ -59,6 +67,7 @@ class Room {
     this.game.step();
     const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta() });
     for(const c of this.clients) if(c.readyState===1) c.send(msg);
+    if(this.game.over) clearInterval(this.timer);   // match decided at wave 6 — final state already sent
   }
   input(side,m){
     const g=this.game;
@@ -81,6 +90,7 @@ let waiting = null;
 const wss = new WebSocketServer({ server });
 wss.on("connection", ws=>{
   ws.room=null; ws.side=-1;
+  stats.connections++; stats.online++; if(stats.online>stats.peakOnline) stats.peakOnline=stats.online;
   ws.on("message", buf=>{
     let m; try{ m=JSON.parse(buf); }catch{ return; }
     if(m.t==="queue"){
@@ -93,6 +103,7 @@ wss.on("connection", ws=>{
     }
   });
   ws.on("close", ()=>{
+    stats.online=Math.max(0,stats.online-1);
     if(waiting===ws) waiting=null;
     if(ws.room) ws.room.close(ws);
   });

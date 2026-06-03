@@ -50,6 +50,13 @@
   #lobby .mbtn{font-family:Bungee,Impact;font-size:18px;padding:15px 30px;border:none;border-radius:14px;cursor:pointer;color:#06141b;
     background:linear-gradient(180deg,var(--toxic),var(--toxic2));box-shadow:0 8px 24px rgba(126,252,74,.3)}
   #lobby .status{color:var(--muted);font-size:14px;min-height:20px}
+  #result{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+    text-align:center;background:rgba(4,12,16,.86);backdrop-filter:blur(5px)}
+  #result h2{font-family:Bungee,Impact;font-size:clamp(40px,11vw,84px);margin:0;text-shadow:0 0 28px rgba(0,0,0,.6)}
+  #result.win h2{color:var(--toxic)} #result.lose h2{color:var(--danger)} #result.draw h2{color:var(--amber)}
+  #result p{color:var(--muted);font-size:16px;margin:0}
+  #result .mbtn{font-family:Bungee,Impact;font-size:18px;padding:14px 28px;border:none;border-radius:14px;cursor:pointer;color:#06141b;
+    background:linear-gradient(180deg,var(--toxic),var(--toxic2));margin-top:6px}
   .hidden{display:none!important}
   @media(max-width:820px){ #wrap{grid-template-columns:1fr;gap:8px;padding:8px} #side{flex-direction:row;flex-wrap:wrap} #side .card{flex:1 1 46%} }
 </style>
@@ -80,6 +87,7 @@
     <div class="card"><h2>Chat</h2><div class="chatlog" id="chatlog"></div>
       <div class="chatin"><input id="chatbox" maxlength="140" placeholder="Say something…"><button id="chatsend">Send</button></div></div>
   </aside>
+  <div id="result" class="hidden"><h2 id="rtitle">VICTORY</h2><p id="rscore"></p><button class="mbtn" onclick="location.reload()">PLAY AGAIN</button></div>
   <main id="stage"><div id="frame">
     <div class="tag l" id="tagYou">YOU</div><div class="tag r" id="tagOpp">OPP</div>
     <canvas id="cv"></canvas>
@@ -89,7 +97,7 @@
 <script>
 const COLS_DEF=180, ROWS_DEF=112;
 let COLS=COLS_DEF, ROWS=ROWS_DEF, mySide=0, palette=[], unlocked=new Set(), tool=3 /*ACID*/;
-let ws=null, started=false, mirror=false;
+let ws=null, started=false, mirror=false, gameOver=false;
 
 // ---- element colour lookup (id -> [r,g,b]); cities tinted by owner ----
 const LUT=new Array(256).fill(null).map(()=>[8,22,28]);
@@ -167,6 +175,15 @@ function hud(meta){
   document.getElementById("upBtn").disabled=me.coins<me.upCost;
   document.getElementById("brBtn").disabled=me.brushCost==null||me.coins<me.brushCost;
   unlocked=new Set(me.unlocked); refreshToolLocks(me);
+  if(meta.over && !gameOver){ gameOver=true; showResult(meta); }
+}
+function showResult(meta){
+  const res=document.getElementById("result"), title=document.getElementById("rtitle");
+  if(meta.winner===-1){ res.className="draw"; title.textContent="DRAW"; }
+  else if(meta.winner===mySide){ res.className="win"; title.textContent="VICTORY"; }
+  else { res.className="lose"; title.textContent="DEFEAT"; }
+  document.getElementById("rscore").textContent="Final score  "+meta.scores[mySide]+" – "+meta.scores[mySide^1]+"  ·  ended at wave 6";
+  res.classList.remove("hidden");
 }
 document.getElementById("upBtn").onclick=()=>send({t:"upgrade",what:"level"});
 document.getElementById("brBtn").onclick=()=>send({t:"upgrade",what:"brush"});
@@ -191,7 +208,7 @@ function toGrid(e){ const r=cv.getBoundingClientRect(); const cx=(e.touches?e.to
   gx=Math.floor(cx/r.width*COLS); gy=Math.floor(cy/r.height*ROWS);
   if(mirror) gx=COLS-1-gx;   // input is in mirrored display space → convert back to true server coords
 }
-function placeNow(){ send({t:"place",tool,x:gx,y:gy}); }
+function placeNow(){ if(gameOver)return; send({t:"place",tool,x:gx,y:gy}); }
 cv.addEventListener("pointerdown",e=>{ if(!started)return; down=true; toGrid(e); placeNow(); cv.setPointerCapture(e.pointerId); });
 cv.addEventListener("pointermove",e=>{ if(!down)return; toGrid(e); });
 addEventListener("pointerup",()=>down=false);
