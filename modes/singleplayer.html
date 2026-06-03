@@ -168,6 +168,19 @@
   .mbtn.play{color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic-dim));box-shadow:0 8px 26px rgba(126,252,74,.3)}
   .mbtn.ghost{color:var(--ink);background:rgba(255,255,255,.05);border:1px solid var(--panel-edge);font-size:14px}
   .diff.sel{color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic2));border-color:var(--toxic)}
+  #map{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;padding:12px;gap:10px;
+    background:radial-gradient(900px 600px at 50% -10%,#15414a 0,transparent 60%),linear-gradient(160deg,var(--bg0),var(--bg2))}
+  #map.hidden{display:none!important}
+  #map .mtop{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  #map .mtop h2{font-family:"Bungee",sans-serif;color:var(--toxic);margin:0;font-size:clamp(16px,4vw,24px);letter-spacing:1px}
+  #map .muted{color:var(--muted);font-size:13px} #map .mcoin{color:var(--amber);font-weight:800;margin-left:auto}
+  #mArea{flex:1;position:relative;border-radius:16px;border:1px solid var(--panel-edge);overflow:hidden;
+    background:linear-gradient(90deg, rgba(62,196,107,.10) 0 48%, rgba(255,255,255,.04) 48% 52%, rgba(226,58,58,.10) 52% 100%)}
+  #mArea::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:repeating-linear-gradient(180deg,var(--amber) 0 8px,transparent 8px 16px);opacity:.4}
+  .citydot{position:absolute;width:28px;height:28px;border-radius:50%;transform:translate(-50%,-50%);cursor:pointer;
+    border:2px solid rgba(0,0,0,.45);box-shadow:0 2px 8px rgba(0,0,0,.4);transition:transform .1s}
+  .citydot:hover{transform:translate(-50%,-50%) scale(1.18)}
+  .mhint{color:var(--muted);font-size:12px;text-align:center}
   #howto{max-width:min(560px,90vw);text-align:left;background:var(--panel);border:1px solid var(--panel-edge);
     border-radius:14px;padding:15px 18px;font-size:13.5px;line-height:1.65;color:var(--muted)}
   #howto.hidden{display:none}
@@ -221,8 +234,13 @@
     <button class="mbtn ghost diff" data-diff="hard"   style="font-size:14px;padding:10px 16px">HARD</button>
   </div>
   <div class="menubtns">
-    <button class="mbtn play" id="playBtn">PLAY</button>
+    <button class="mbtn play" id="playBtn">PLAY · ENDLESS</button>
     <button class="mbtn ghost" id="howtoBtn">HOW TO PLAY</button>
+  </div>
+  <div class="diffsel" style="display:flex;gap:8px;justify-content:center">
+    <button class="mbtn ghost conq" data-scale="state"   style="font-size:14px;padding:10px 14px">🗺️ STATE</button>
+    <button class="mbtn ghost conq" data-scale="country" style="font-size:14px;padding:10px 14px">🌎 COUNTRY</button>
+    <button class="mbtn ghost conq" data-scale="world"   style="font-size:14px;padding:10px 14px">🌍 WORLD</button>
   </div>
   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
     <button class="mbtn ghost" id="lbBtn"     style="font-size:13px;padding:9px 14px">🏆 LEADERBOARD</button>
@@ -250,6 +268,18 @@
     If <b>your</b> city hits 90% destroyed, you lose.
   </div>
   <div class="foot">A single-file browser prototype · tap PLAY to begin</div>
+</div>
+
+<!-- conquest map -->
+<div id="map" class="hidden">
+  <div class="mtop">
+    <h2 id="mTitle">CONQUEST</h2>
+    <span id="mStatus" class="muted"></span>
+    <span class="mcoin">💰 <b id="mCoins2">0</b></span>
+    <button class="mbtn ghost" id="mMenuBtn" style="font-size:12px;padding:7px 12px">MENU</button>
+  </div>
+  <div id="mArea"></div>
+  <div class="mhint">Tap an <b style="color:#ff5347">enemy</b> city to siege it · tap your own <b>gray</b> city to rebuild (20k). Destroy every enemy city before the bot razes yours.</div>
 </div>
 
 <!-- mobile top bar -->
@@ -287,6 +317,12 @@
         <span><b id="pMult" style="color:var(--toxic)">×1.0</b> · <b id="pDef" style="color:var(--amber)">🛡0%</b></span>
       </div>
       <button class="btn" id="upBtn" style="margin-top:8px">LEVEL UP — <span id="upCost">400</span></button>
+      <div style="display:flex;gap:5px;margin-top:5px">
+        <button class="btn alt" id="up5"   style="flex:1;padding:6px 0;font-size:11px">×5</button>
+        <button class="btn alt" id="up10"  style="flex:1;padding:6px 0;font-size:11px">×10</button>
+        <button class="btn alt" id="up100" style="flex:1;padding:6px 0;font-size:11px">×100</button>
+        <button class="btn alt" id="upMax" style="flex:1;padding:6px 0;font-size:11px">MAX</button>
+      </div>
       <button class="btn alt" id="rebuildBtn" style="margin-top:8px">REBUILD CITY — <span id="rebuildCost">30,000</span></button>
     </div>
 
@@ -532,7 +568,7 @@ function damageCity(n,gx,gy){
   const gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel);
   coins+=gain; cityCells-=n; coinFlash=1;
   if(gx!==undefined && Math.random()<0.22) pop(gx,gy,gain);
-  if(!gameOver && enemyRazed()) nextWave();                 // enemy 90% gone → win the wave, level up
+  if(!gameOver && enemyRazed()){ if(conquest) conquestWinBattle(); else nextWave(); }   // enemy razed → win battle/wave
 }
 function damagePCity(n){ pcityCells-=n;
   if(playerRazed()) loseGame();                             // your city 90% gone → defeat
@@ -1099,16 +1135,24 @@ document.getElementById("clearBtn").onclick=()=>{
 };
 
 const upBtn=document.getElementById("upBtn");
-upBtn.onclick=()=>{
+function levelUpOnce(){
   const c=upCost(playerLevel);
-  if(coins>=c){
-    coins-=c;
-    const before=cityProt(playerLevel); playerLevel++;
-    const add=cityProt(playerLevel)-before;                 // the only sanctioned "regen": added protection health
-    if(add>0) for(let i=0;i<grid.length;i++) if(grid[i]===PCITY) health[i]=(health[i]>0?health[i]:BASE_HP[PCITY]+before)+add;
-    sfx("level");
-  }
-};
+  if(coins<c) return false;
+  coins-=c;
+  const before=cityProt(playerLevel); playerLevel++;
+  const add=cityProt(playerLevel)-before;                   // the only sanctioned "regen": added protection health
+  if(add>0) for(let i=0;i<grid.length;i++) if(grid[i]===PCITY) health[i]=(health[i]>0?health[i]:BASE_HP[PCITY]+before)+add;
+  return true;
+}
+function buyLevels(n){   // n = how many to attempt (Infinity = max affordable); buys until count hit or broke
+  let got=0; while(got<n && levelUpOnce()) got++;
+  if(got>0) sfx("level");
+}
+upBtn.onclick=()=>buyLevels(1);
+document.getElementById("up5").onclick=()=>buyLevels(5);
+document.getElementById("up10").onclick=()=>buyLevels(10);
+document.getElementById("up100").onclick=()=>buyLevels(100);
+document.getElementById("upMax").onclick=()=>buyLevels(Infinity);
 
 const rebuildBtn=document.getElementById("rebuildBtn"), rebuildCostEl=document.getElementById("rebuildCost");
 rebuildBtn.onclick=()=>{
@@ -1273,7 +1317,8 @@ const menuEl=document.getElementById("menu"),
       sideEl=document.getElementById("side"),
       drawerBack=document.getElementById("drawerBack");
 function startGame(){
-  if(gameOver) resetGame();                                 // a defeat (or any over state) → fresh run on Play
+  if(conquest){ conquest=false; if(botRazeTimer){clearInterval(botRazeTimer);botRazeTimer=null;} mapEl.classList.add("hidden"); }
+  if(gameOver || activeCity!==null){ activeCity=null; resetGame(); }   // fresh endless run
   actxGet();                                                // unlock audio on this user gesture
   menuMsg.classList.add("hidden");
   running=true; menuEl.classList.add("hidden"); closeDrawer(); fit();
@@ -1391,15 +1436,95 @@ document.getElementById("importBtn").onclick=()=>importFile.click();
 document.getElementById("deleteBtn").onclick=()=>{ if(confirm("Delete your saved game? This can't be undone.")){ clearSave(); resetGame(); running=false; menuMsg.textContent="🗑 Saved game deleted."; menuMsg.classList.remove("hidden"); } };
 importFile.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{ applySave(JSON.parse(r.result),true); }catch{} importFile.value=""; }; r.readAsText(f); };
 
+/* ============================================================
+   CONQUEST — State / Country / World map campaigns
+   Click an enemy city → siege it (no waves). Raze 90% → it goes
+   gray on the map. The bot razes YOUR cities one by one on a timer.
+   Clear all enemy cities to win; lose if all yours fall. Level-ups
+   are global (playerLevel → every city's protection).
+   ============================================================ */
+let conquest=false, inBattle=false, activeCity=null, camp=null, botRazeTimer=null;
+const mapEl=document.getElementById("map"), mArea=document.getElementById("mArea");
+const SCALES={ state:{regions:1,per:5,el:1,razeMs:32000}, country:{regions:7,per:2,el:2,razeMs:24000}, world:{regions:9,per:3,el:3,razeMs:18000} };
+const REGION_COLS=["#8ef02a","#ff9a2a","#4fa3ff","#ff5ad2","#ffd24a","#9b6bff","#3ec46b","#7ce0ff","#ff8a1e","#b428b4"];
+function genSide(owner,cfg){
+  const list=[], xmin=owner==="mine"?0.05:0.55, xmax=owner==="mine"?0.45:0.95;
+  for(let r=0;r<cfg.regions;r++){
+    const col = cfg.regions===1 ? (owner==="mine"?"#3ec46b":"#e24a4a") : REGION_COLS[(owner==="mine"?r:r+3)%REGION_COLS.length];
+    const cx=xmin+Math.random()*(xmax-xmin), cy=0.14+Math.random()*0.72;
+    for(let c=0;c<cfg.per;c++) list.push({
+      x:Math.min(xmax,Math.max(xmin, cx+(Math.random()-0.5)*0.16)),
+      y:Math.min(0.9,Math.max(0.1, cy+(Math.random()-0.5)*0.24)),
+      alive:true, color:col, owner });
+  }
+  return list;
+}
+function startConquest(scale){
+  const cfg=SCALES[scale]; conquest=true; inBattle=false; activeCity=null;
+  camp={ scale, cfg, mine:genSide("mine",cfg), foe:genSide("foe",cfg) };
+  coins=STARTING_COINS; playerLevel=1; enemyLevel=cfg.el; razings=0; wave=1; gameOver=false;
+  brushLevel=1; brush=2; unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t));
+  renderTools(); renderBrushBtn(); actxGet();
+  if(botRazeTimer) clearInterval(botRazeTimer);
+  botRazeTimer=setInterval(botRazeCity, cfg.razeMs);
+  menuEl.classList.add("hidden"); showMap();
+}
+function showMap(){ inBattle=false; running=false; document.getElementById("wrap").classList.add("hidden"); renderMap(); mapEl.classList.remove("hidden"); }
+function renderMap(){
+  if(!camp) return;
+  document.getElementById("mTitle").textContent=camp.scale.toUpperCase()+" CONQUEST";
+  document.getElementById("mStatus").textContent="Yours "+camp.mine.filter(c=>c.alive).length+"/"+camp.mine.length+"  ·  Enemy "+camp.foe.filter(c=>c.alive).length+"/"+camp.foe.length;
+  mArea.innerHTML="";
+  for(const c of camp.mine.concat(camp.foe)){
+    const b=document.createElement("button"); b.className="citydot";
+    b.style.left=(c.x*100)+"%"; b.style.top=(c.y*100)+"%"; b.style.background=c.alive?c.color:"#555";
+    b.onclick=()=>{ if(c.owner==="foe"){ if(c.alive) startBattle(c); } else if(!c.alive){ if(coins>=20000){ coins-=20000; c.alive=true; renderMap(); } } };
+    mArea.appendChild(b);
+  }
+}
+function startBattle(city){
+  activeCity=city; inBattle=true; gameOver=false;
+  clearArena(); for(let x=0;x<COLS;x++){ grid[I(x,FLOOR_Y)]=WALL; }
+  buildEnemyCity();                                         // only the target city — your side stays empty
+  mapEl.classList.add("hidden"); document.getElementById("wrap").classList.remove("hidden");
+  running=true; fit();
+}
+function conquestWinBattle(){
+  if(activeCity) activeCity.alive=false;
+  inBattle=false; activeCity=null; sfx("coin"); showMap(); checkConquestEnd();
+}
+function botRazeCity(){
+  if(!conquest||gameOver) return;
+  const alive=camp.mine.filter(c=>c.alive); if(!alive.length) return;
+  alive[(Math.random()*alive.length)|0].alive=false; sfx("lose");
+  if(!inBattle) renderMap(); checkConquestEnd();
+}
+function checkConquestEnd(){
+  if(!conquest) return;
+  if(!camp.foe.some(c=>c.alive)) conquestOver(true);
+  else if(!camp.mine.some(c=>c.alive)) conquestOver(false);
+}
+function conquestOver(win){
+  if(botRazeTimer){ clearInterval(botRazeTimer); botRazeTimer=null; }
+  conquest=false; inBattle=false; running=false; gameOver=true;
+  mapEl.classList.add("hidden"); document.getElementById("wrap").classList.add("hidden");
+  menuMsg.textContent=win?("🏆 You conquered the enemy "+camp.scale+"!"):("💀 Your "+camp.scale+" was wiped out.");
+  menuMsg.classList.remove("hidden"); playBtn.textContent="PLAY · ENDLESS"; menuEl.classList.remove("hidden");
+  sfx(win?"revive":"lose");
+}
+[...document.querySelectorAll(".conq")].forEach(b=>b.onclick=()=>startConquest(b.dataset.scale));
+document.getElementById("mMenuBtn").onclick=()=>{ if(botRazeTimer){clearInterval(botRazeTimer);botRazeTimer=null;} conquest=false; inBattle=false; running=false; mapEl.classList.add("hidden"); menuEl.classList.remove("hidden"); };
+
 let acc=0,last=performance.now();
 function loop(now){
   acc+=now-last; last=now;
   if(running && !gameOver){
     let n=0;
-    while(acc>=16 && n<3){ if(down) place(px,py); step(); botStep(); acc-=16; n++; }
+    while(acc>=16 && n<3){ if(down) place(px,py); step(); if(!conquest) botStep(); acc-=16; n++; }
   } else {
     acc=0;
   }
+  if(conquest) document.getElementById("mCoins2").textContent=Math.floor(coins).toLocaleString();
   render(); hud();
   if(shakeT>0){ const s=shakeT*7; frameEl.style.transform="translate("+((Math.random()*2-1)*s)+"px,"+((Math.random()*2-1)*s)+"px)"; shakeT*=0.86; if(shakeT<0.02){ shakeT=0; frameEl.style.transform=""; } }
   requestAnimationFrame(loop);
