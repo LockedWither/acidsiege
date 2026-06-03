@@ -99,12 +99,14 @@ const NEWDEFS=[
   {nm:"Eternity Engine",col:"#aef0ff",kind:"beam",dmg:650000000000,cost:5000000000000},
   {nm:"Omega Singularity",col:"#ffffff",kind:"anti",dmg:700000000000,cost:10000000000000},
 ];
-const DEFBYID={};
+const DEFBYID={}, ORIG=NEWDEFS.length-25;
 NEWDEFS.forEach((d,k)=>{ d.id=NEW_BASE+k;
   const f=0.1 + 1.4*Math.pow(k/(NEWDEFS.length-1), 2);                    // early tiers nerfed, newer tiers hit FAR harder
   d.dmg=Math.round(d.dmg*f);
   if(d.r) d.r=Math.min(45, Math.round(d.r*2));                            // blast tiers → city-sized radius
-  DEFBYID[d.id]=d; PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });   // cost = authored d.cost
+  let cost = k<ORIG ? 150000*Math.pow(1e13/150000, k/(ORIG-1)) : 1e13*Math.pow(100,(k-ORIG+1)/25);   // originals 150k→10T · new 10T→1Q
+  const mag=Math.pow(10,Math.floor(Math.log10(cost))-2); d.cost=Math.round(cost/mag)*mag;
+  DEFBYID[d.id]=d; PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });
 
 const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000];  // brush up to 14
 function upCost(L){ return Math.round(400*Math.pow(L,1.6)); }

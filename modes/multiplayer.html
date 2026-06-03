@@ -167,20 +167,21 @@ function startGame(){ started=true; document.getElementById("lobby").classList.a
 }
 
 // ---- HUD ----
+function fmtCoin(n){ n=Math.floor(n); return n>=1e12 ? (n/1e12).toLocaleString(undefined,{maximumFractionDigits:2})+"T" : n.toLocaleString(); }
 function hud(meta){
   const me=meta.players[mySide], opp=meta.players[mySide^1];
   document.getElementById("roundN").textContent=meta.round;
   document.getElementById("waveN").textContent=meta.wave;
   document.getElementById("score").textContent=meta.scores[mySide]+"–"+meta.scores[mySide^1];
-  document.getElementById("cYou").textContent=me.coins.toLocaleString();
-  document.getElementById("cOpp").textContent=opp.coins.toLocaleString();
+  document.getElementById("cYou").textContent=fmtCoin(me.coins);
+  document.getElementById("cOpp").textContent=fmtCoin(opp.coins);
   document.getElementById("barYou").style.transform="scaleX("+Math.max(0,me.cells/me.max)+")";
   document.getElementById("barOpp").style.transform="scaleX("+Math.max(0,opp.cells/opp.max)+")";
   document.getElementById("lvN").textContent=me.level;
   document.getElementById("protN").textContent=Math.round(0.02*(me.level-1)**3);
   document.getElementById("brushN").textContent=me.brush;
-  document.getElementById("upCost").textContent=me.upCost.toLocaleString();
-  document.getElementById("brCost").textContent=me.brushCost?me.brushCost.toLocaleString():"MAX";
+  document.getElementById("upCost").textContent=fmtCoin(me.upCost);
+  document.getElementById("brCost").textContent=me.brushCost?fmtCoin(me.brushCost):"MAX";
   document.getElementById("upBtn").disabled=me.coins<me.upCost;
   document.getElementById("brBtn").disabled=me.brushCost==null||me.coins<me.brushCost;
   unlocked=new Set(me.unlocked); refreshToolLocks(me);
@@ -212,7 +213,7 @@ function markSel(){ [...toolsEl.children].forEach(el=>el.classList.toggle("sel",
 function refreshToolLocks(me){ [...toolsEl.children].forEach(el=>{ const t=+el.dataset.t; const p=palette.find(q=>q.t===t);
     const locked=p.cost>0&&!unlocked.has(t); el.classList.toggle("locked",locked);
     const sellable=sellMode&&p.cost>0&&unlocked.has(t);
-    el.querySelector(".cost").textContent = locked?p.cost.toLocaleString()+"c" : sellable?("+"+Math.round(p.cost*0.5).toLocaleString()+"c") : ""; }); }
+    el.querySelector(".cost").textContent = locked?fmtCoin(p.cost)+"c" : sellable?("+"+fmtCoin(Math.round(p.cost*0.5))+"c") : ""; }); }
 document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap to refund 50%)":"OFF"); };
 
 // ---- input (send placements, server uses your brush) ----

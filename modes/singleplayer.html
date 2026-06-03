@@ -216,9 +216,10 @@
   <div class="sub">Falling-sand siege · Player vs Bot</div>
   <div id="menuMsg" class="hidden"></div>
   <div class="diffsel" style="display:flex;gap:8px;justify-content:center;margin-bottom:2px">
-    <button class="mbtn ghost diff" data-diff="easy"   style="font-size:14px;padding:10px 16px">EASY</button>
-    <button class="mbtn ghost diff" data-diff="medium" style="font-size:14px;padding:10px 16px">MEDIUM</button>
-    <button class="mbtn ghost diff" data-diff="hard"   style="font-size:14px;padding:10px 16px">HARD</button>
+    <button class="mbtn ghost diff" data-diff="easy"    style="font-size:13px;padding:10px 12px">EASY</button>
+    <button class="mbtn ghost diff" data-diff="medium"  style="font-size:13px;padding:10px 12px">MEDIUM</button>
+    <button class="mbtn ghost diff" data-diff="hard"    style="font-size:13px;padding:10px 12px">HARD</button>
+    <button class="mbtn ghost diff" data-diff="extreme" style="font-size:13px;padding:10px 12px;color:var(--danger)">EXTREME</button>
   </div>
   <div class="menubtns">
     <button class="mbtn play" id="playBtn">PLAY</button>
@@ -449,6 +450,7 @@ function rebuildCost(){ return 30000; }   // rebuild your own razed city — del
 const COIN_PER_CELL=1;
 let difficulty = localStorage.getItem("as_diff") || "medium";   // easy | medium | hard
 function coinReward(w){ return difficulty==="easy" ? 9 : 4; }   // easy pays 9, else 4 (× wStep × coinLevelMult)
+function fmtCoin(n){ n=Math.floor(n); return n>=1e12 ? (n/1e12).toLocaleString(undefined,{maximumFractionDigits:2})+"T" : n.toLocaleString(); }   // trillions+ → "10T"
 function coinLevelMult(L){ const m=Math.min(L,200), c=1+0.045*Math.pow(m-1,1.1); return L>200 ? c+(L-200)*0.05 : c; }   // climbs to ~lv200 then nearly flat — money slows late game
 function mult(L){return 1+(L-1)*0.6;}
 function upCost(L){return Math.round(400*Math.pow(L,1.6));}
@@ -812,40 +814,46 @@ function step(){
 }
 
 // ---- bot AI ----
-let botTimer=0;
-function botInterval(){ return Math.max(30, 140 - wave*4); }
+let botTimer=0, botHoldT=0, botCol=-1, botEl=ACID;
+const BOT_HOLD=Math.round(1500/16);   // bot "holds down" on a weapon for ~1.5 seconds
+function botInterval(){ return Math.round((5000-1500)/16); }   // constant: a 1.5s hold starts every ~5s, regardless of wave
 const BOMB_PWR={[TNT]:25,[NUKE]:120,[HBOMB]:350};    // bombs aren't in DMG; rough power for ranking
 function powerOf(t){ if(DMG[t]!==undefined) return DMG[t]; if(BOMB_PWR[t]!==undefined) return BOMB_PWR[t]; if(DEFBYID[t]) return DEFBYID[t].dmg; return 0.3; }
-function botPickElement(){                            // bot draws from the player's unlocked items, capped by difficulty
-  const opts=[...unlocked].filter(t=>t!==EMPTY).sort((a,b)=>powerOf(a)-powerOf(b));
-  if(!opts.length) return ACID;
-  const cap = difficulty==="easy"?0.4 : difficulty==="medium"?0.8 : 1.0;   // easy: way worse · medium: slightly worse · hard: same
-  const maxIdx=Math.floor((opts.length-1)*cap);
-  return opts[(Math.random()*(maxIdx+1))|0];
-}
-function botStep(){
-  botTimer++;
-  if(botTimer<botInterval()) return;
-  botTimer=0;
-  // pick a column on the player half, weighted by surviving city cells per column
-  let best=-1, bestScore=-1;
-  for(let x=2;x<P_END-2;x++){
-    let s=0;
-    for(let y=FLOOR_Y-CITY_THICK;y<FLOOR_Y;y++) if(grid[I(x,y)]===PCITY) s++;
-    s+=Math.random()*4;                                         // jitter so it doesn't only hammer one column
-    if(s>bestScore){ bestScore=s; best=x; }
+let ALL_WEAPONS=null;   // every damaging tool, ranked weakest→strongest
+function allWeapons(){ if(!ALL_WEAPONS) ALL_WEAPONS=PALETTE.map(p=>p.t).filter(t=>t!==EMPTY&&powerOf(t)>1).sort((a,b)=>powerOf(a)-powerOf(b)); return ALL_WEAPONS; }
+function botPickElement(){
+  const owned=[...unlocked].filter(t=>t!==EMPTY&&powerOf(t)>1).sort((a,b)=>powerOf(a)-powerOf(b));
+  if(difficulty==="extreme"){                                  // a couple tiers ABOVE your best (even if you don't own it)
+    const bestP = owned.length?powerOf(owned[owned.length-1]):0;
+    const above = allWeapons().filter(t=>powerOf(t)>bestP);
+    return above.length ? above[Math.min(1,above.length-1)] : (owned.length?owned[owned.length-1]:ACID);
   }
-  if(best<0) return;
-  const el=botPickElement();
-  const br=brush;   // same brush size as the player
-  const surfaceY=(FLOOR_Y-CITY_THICK)+skyP[best];            // drop right onto the city surface, not from the sky
+  if(!owned.length) return ACID;
+  const back = difficulty==="hard"?0 : difficulty==="easy"?4 : 1;   // best · 5th best · 2nd best (medium)
+  return owned[Math.max(0, owned.length-1-back)];
+}
+function botDrop(cx,el){   // one brush stamp on the city surface at column cx
+  if(cx<0) return; const br=brush, surfaceY=skyP[cx];
   for(let dy=-br;dy<=br;dy++)for(let dx=-br;dx<=br;dx++){
     if(dx*dx+dy*dy>br*br) continue;
-    const nx=best+dx, ny=surfaceY+dy;
-    if(!inB(nx,ny)) continue;
+    const nx=cx+dx, ny=surfaceY+dy; if(!inB(nx,ny)) continue;
     const j=I(nx,ny);
     if(grid[j]===EMPTY||isGas(grid[j])){ grid[j]=el; origin[j]=ORIGIN_BOT; }
   }
+}
+function botPickColumn(){   // a surviving player-city column, weighted toward the most-intact
+  let best=-1,bs=-1;
+  for(let x=2;x<P_END-2;x++){ let s=0; for(let y=FLOOR_Y-CITY_THICK;y<FLOOR_Y;y++) if(grid[I(x,y)]===PCITY) s++;
+    if(s>0){ s+=Math.random()*5; if(s>bs){ bs=s; best=x; } } }
+  return best;
+}
+function botStep(){
+  if(botHoldT>0){ botHoldT--; botDrop(botCol,botEl); return; }   // mid-hold: keep streaming the weapon
+  botTimer++;
+  if(botTimer<botInterval()) return;
+  botTimer=0;
+  botCol=botPickColumn(); if(botCol<0) return;
+  botEl=botPickElement(); botHoldT=BOT_HOLD;                      // start a ~1.5s hold
 }
 
 /* ============================================================
@@ -1064,13 +1072,16 @@ const NEWDEFS=[
   {nm:"Eternity Engine",  col:"#aef0ff", kind:"beam",  dmg:650000000000,cost:5000000000000},
   {nm:"Omega Singularity",col:"#ffffff", kind:"anti",  dmg:700000000000,cost:10000000000000},
 ];
-const DEFBYID={}, NEWCOL={};
+const DEFBYID={}, NEWCOL={}, ORIG=NEWDEFS.length-25;                     // first ORIG (30) = the original ladder
 NEWDEFS.forEach((d,k)=>{
   const id=NEW_BASE+k; d.id=id;
   const f=0.1 + 1.4*Math.pow(k/(NEWDEFS.length-1), 2);                   // early tiers nerfed, newer tiers hit FAR harder
   d.dmg=Math.round(d.dmg*f);
   if(d.r) d.r=Math.min(45, Math.round(d.r*2));                           // blast tiers → city-sized radius
-  DEFBYID[id]=d; NEWCOL[id]=hexToRgb(d.col);                             // cost = authored d.cost (no rescale)
+  let cost = k<ORIG ? 150000*Math.pow(1e13/150000, k/(ORIG-1))           // originals: 150k → 10T (unchanged)
+                    : 1e13*Math.pow(100,(k-ORIG+1)/25);                  // new 25: 10T → 1 quadrillion
+  const mag=Math.pow(10,Math.floor(Math.log10(cost))-2); d.cost=Math.round(cost/mag)*mag;   // 3 sig figs
+  DEFBYID[id]=d; NEWCOL[id]=hexToRgb(d.col);
   PALETTE.splice(PALETTE.length-2, 0, {t:id, nm:d.nm, col:d.col, cost:d.cost});  // insert before City Block + Eraser
 });
 // immediate-acting weapons the bot can drop (no heat-triggered bombs), sorted ascending by damage
@@ -1089,8 +1100,8 @@ function renderTools(){
     const lock=p.cost>0 && !unlocked.has(p.t);
     const sellable=sellMode && p.cost>0 && unlocked.has(p.t);
     el.className="tool"+(p.t===tool?" sel":"")+(lock?" locked":"");
-    const tag = lock ? `<div class="cost">${p.cost.toLocaleString()}c</div>`
-              : sellable ? `<div class="cost" style="color:var(--danger)">+${Math.round(p.cost*SELL_RATE).toLocaleString()}c</div>` : "";
+    const tag = lock ? `<div class="cost">${fmtCoin(p.cost)}c</div>`
+              : sellable ? `<div class="cost" style="color:var(--danger)">+${fmtCoin(Math.round(p.cost*SELL_RATE))}c</div>` : "";
     el.innerHTML=`<span class="dot" style="background:${p.col}"></span>
       <span><span class="nm">${p.nm}</span>${tag}</span>`;
     el.onclick=()=>{
@@ -1116,7 +1127,7 @@ function renderBrushBtn(){
   brushMinus.disabled=brush<=1; brushPlus.disabled=brush>=max;
   const c=brushUpCost();
   if(c===null){ brushBtn.textContent="Max size unlocked"; brushBtn.disabled=true; }
-  else { brushBtn.textContent="Upgrade max "+max+"→"+(max+1)+" — "+c.toLocaleString(); brushBtn.disabled=coins<c; }
+  else { brushBtn.textContent="Upgrade max "+max+"→"+(max+1)+" — "+fmtCoin(c); brushBtn.disabled=coins<c; }
 }
 brushMinus.onclick=()=>setBrush(brush-1);
 brushPlus.onclick=()=>setBrush(brush+1);
@@ -1164,7 +1175,7 @@ rebuildBtn.onclick=()=>{
 function resetGame(){
   coins=STARTING_COINS; playerLevel=1; enemyLevel=1; wave=1; razings=0; gameOver=false;
   unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t));
-  tool=ACID; pops.length=0; botTimer=0;
+  tool=ACID; pops.length=0; botTimer=0; botHoldT=0;
   brushLevel=1; brush=brushLevel+1;
   clearArena(); buildCities(); renderTools(); renderBrushBtn();
 }
@@ -1267,7 +1278,7 @@ function swatchBG(L){
 }
 const mCoins=document.getElementById("mCoins");
 function hud(){
-  const coinStr=Math.floor(coins).toLocaleString();
+  const coinStr=fmtCoin(coins);
   coinN.textContent=coinStr; mCoins.textContent=coinStr;
   if(coinFlash){ coinN.classList.remove("pulse"); void coinN.offsetWidth; coinN.classList.add("pulse"); coinFlash=0; }
   pSwatch.style.background=swatchBG(playerLevel);
@@ -1283,10 +1294,10 @@ function hud(){
   eFill.style.transform="scaleX("+Math.max(0,cityCells/cityCellsMax)+")";
   razeN.textContent=razings; waveN.textContent=wave;
   const c=upCost(playerLevel);
-  upCostEl.textContent=c.toLocaleString();
+  upCostEl.textContent=fmtCoin(c);
   upBtn.disabled=coins<c;
   const rc=rebuildCost();
-  rebuildCostEl.textContent=rc.toLocaleString();
+  rebuildCostEl.textContent=fmtCoin(rc);
   rebuildBtn.disabled = coins<rc || pcityCells>=pcityCellsMax;   // nothing to rebuild at full health
   renderBrushBtn();
 }
