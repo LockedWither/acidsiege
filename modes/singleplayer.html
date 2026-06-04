@@ -1094,7 +1094,7 @@ const BOT_WEAPONS=[ {id:FIRE,dmg:DMG[FIRE]},{id:ACID,dmg:DMG[ACID]},{id:NAPALM,d
 const unlocked=new Set([ACID,WATER,SAND,EMPTY]);
 const toolsEl=document.getElementById("tools");
 let sellMode=false;
-const SELL_RATE=0.5;   // refund 50% of the unlock cost
+const SELL_RATE=1;   // refund 100% of the unlock cost (anti-softlock only)
 function renderTools(){
   toolsEl.innerHTML="";
   PALETTE.forEach(p=>{
@@ -1115,7 +1115,7 @@ function renderTools(){
     toolsEl.appendChild(el);
   });
 }
-document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap a weapon to refund 50%)":"OFF"); renderTools(); };
+document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap a weapon to refund 100%)":"OFF"); renderTools(); };
 renderTools();
 
 const brushBtn=document.getElementById("brushBtn"), brushSizeEl=document.getElementById("brushSize"),

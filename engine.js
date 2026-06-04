@@ -349,7 +349,7 @@ class Game {
   unlock(owner,tool){ const p=this.players[owner]; const it=PALETTE.find(e=>e.t===tool);
     if(!it||p.unlocked.has(tool)) return; if(p.coins>=it.cost){ p.coins-=it.cost; p.unlocked.add(tool); } }
   sell(owner,tool){ const p=this.players[owner]; const it=PALETTE.find(e=>e.t===tool);
-    if(!it||it.cost<=0||!p.unlocked.has(tool)) return; p.coins+=Math.round(it.cost*0.5); p.unlocked.delete(tool); }   // 50% refund
+    if(!it||it.cost<=0||!p.unlocked.has(tool)) return; p.coins+=it.cost; p.unlocked.delete(tool); }   // 100% refund (anti-softlock only)
   upgrade(owner,what){ const p=this.players[owner];
     if(what==="level"){ const c=upCost(p.level); if(p.coins>=c){ p.coins-=c; const before=cityProt(p.level); p.level++; const add=cityProt(p.level)-before;
       if(add>0){ const ct=owner===0?PCITY:CITY; for(let i=0;i<this.grid.length;i++) if(this.grid[i]===ct) this.health[i]=(this.health[i]>0?this.health[i]:BASE_HP[ct]+before)+add; } } }

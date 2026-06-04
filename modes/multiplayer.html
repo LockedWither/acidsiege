@@ -298,7 +298,7 @@ function refreshToolLocks(me){ [...toolsEl.children].forEach(el=>{ const t=+el.d
     const locked=p.cost>0&&!unlocked.has(t); el.classList.toggle("locked",locked);
     const sellable=sellMode&&p.cost>0&&unlocked.has(t);
     el.querySelector(".cost").textContent = locked?fmtCoin(p.cost)+"c" : sellable?("+"+fmtCoin(Math.round(p.cost*0.5))+"c") : ""; }); }
-document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap to refund 50%)":"OFF"); };
+document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap to refund 100%)":"OFF"); };
 
 // ---- input (send placements, server uses your brush) ----
 let down=false, gx=0, gy=0, sendTimer=0;
