@@ -824,6 +824,7 @@ function allWeapons(){ if(!ALL_WEAPONS) ALL_WEAPONS=PALETTE.map(p=>p.t).filter(t
 function botPickElement(){
   const owned=[...unlocked].filter(t=>t!==EMPTY&&powerOf(t)>1).sort((a,b)=>powerOf(a)-powerOf(b));
   if(difficulty==="extreme"){                                  // a couple tiers ABOVE your best (even if you don't own it)
+    if(playerLevel<5) return ACID;                             // early grace: acid only until level 5
     const bestP = owned.length?powerOf(owned[owned.length-1]):0;
     const above = allWeapons().filter(t=>powerOf(t)>bestP);
     return above.length ? above[Math.min(1,above.length-1)] : (owned.length?owned[owned.length-1]:ACID);
