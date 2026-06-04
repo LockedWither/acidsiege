@@ -445,7 +445,7 @@ let cityCells=0, cityCellsMax=1, pcityCells=0, pcityCellsMax=1;
 let brushLevel=1, brush=brushLevel+1;
 // per-cell placement is FREE so you can never go bankrupt by placing — coins are only spent on (affordable) unlocks/upgrades
 const placementCost={};   // every lookup defaults to 0
-const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000];  // brush up to 14
+const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000,9000000,20000000,45000000,100000000,220000000,480000000,1050000000,2300000000,5000000000,11000000000,24000000000,52000000000,110000000000,240000000000,520000000000,1100000000000];  // 29 tiers → brush up to 30 (city-sized)
 function rebuildCost(){ return 30000; }   // rebuild your own razed city — deliberately steep
 const COIN_PER_CELL=1;
 let difficulty = localStorage.getItem("as_diff") || "medium";   // easy | medium | hard

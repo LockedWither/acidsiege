@@ -108,7 +108,7 @@ NEWDEFS.forEach((d,k)=>{ d.id=NEW_BASE+k;
   const mag=Math.pow(10,Math.floor(Math.log10(cost))-2); d.cost=Math.round(cost/mag)*mag;
   DEFBYID[d.id]=d; PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });
 
-const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000];  // brush up to 14
+const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000,9000000,20000000,45000000,100000000,220000000,480000000,1050000000,2300000000,5000000000,11000000000,24000000000,52000000000,110000000000,240000000000,520000000000,1100000000000];  // 29 tiers → brush up to 30
 function upCost(L){ return Math.round(400*Math.pow(L,1.6)); }
 const rnd=Math.random;   // authoritative single sim — no determinism needed
 
@@ -351,7 +351,7 @@ class Game {
   upgrade(owner,what){ const p=this.players[owner];
     if(what==="level"){ const c=upCost(p.level); if(p.coins>=c){ p.coins-=c; const before=cityProt(p.level); p.level++; const add=cityProt(p.level)-before;
       if(add>0){ const ct=owner===0?PCITY:CITY; for(let i=0;i<this.grid.length;i++) if(this.grid[i]===ct) this.health[i]=(this.health[i]>0?this.health[i]:BASE_HP[ct]+before)+add; } } }
-    else if(what==="brush"){ if(p.brush<14){ const cost=brushCosts[p.brush-2]; if(cost!=null && p.coins>=cost){ p.coins-=cost; p.brush++; } } }
+    else if(what==="brush"){ if(p.brush<30){ const cost=brushCosts[p.brush-2]; if(cost!=null && p.coins>=cost){ p.coins-=cost; p.brush++; } } }
   }
 
   // ---- serialization for broadcast ----
@@ -359,7 +359,7 @@ class Game {
     for(let i=1;i<g.length;i++){ if(g[i]===v&&c<65535){ c++; } else { out.push(v,c); v=g[i]; c=1; } } out.push(v,c); return out; }
   meta(){ return { round:this.round, wave:this.wave, scores:this.scores, over:this.over, winner:this.winner,
     players:this.players.map((p,k)=>({ coins:Math.floor(p.coins), level:p.level, brush:p.brush,
-      cells:this.cells[k], max:this.max[k], upCost:upCost(p.level), brushCost:(p.brush<14?brushCosts[p.brush-2]:null),
+      cells:this.cells[k], max:this.max[k], upCost:upCost(p.level), brushCost:(p.brush<30?brushCosts[p.brush-2]:null),
       unlocked:[...p.unlocked] })) }; }
 }
 
