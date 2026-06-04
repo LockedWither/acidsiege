@@ -130,8 +130,10 @@ class Game {
     this.players=[this.newPlayer(),this.newPlayer()];
     this.cells=[1,1]; this.max=[1,1]; this.over=false; this.winner=-1;
     this.botSide=-1; this.botTimer=0;   // set by server for 2v1bot mode
+    this.maxWaves=6;                    // set by server: 6/20/50/100/Infinity
     this.buildCities();
   }
+  forfeit(side){ if(this.over) return; this.over=true; this.winner = side^1; }   // resign → opponent wins
   // ---- extreme bot (drives one side in 2v1bot mode) ----
   botInterval(){ return Math.max(5, 24 - this.wave*3); }   // very aggressive, speeds up each wave
   botPick(){ const r=rnd(), w=this.wave;
@@ -183,7 +185,7 @@ class Game {
   razed(owner){ // owner's city destroyed → opponent wins the round
     if(this.over) return;
     const foe=owner^1; this.scores[foe]++;
-    if(this.wave>=6){ // match ends at wave 6 — higher score wins (-1 = draw)
+    if(this.wave>=this.maxWaves){ // match ends at the wave cap — higher score wins (-1 = draw)
       this.over=true;
       this.winner = this.scores[0]===this.scores[1] ? -1 : (this.scores[0]>this.scores[1]?0:1);
       return;
@@ -357,7 +359,7 @@ class Game {
   // ---- serialization for broadcast ----
   rleGrid(){ const g=this.grid, out=[]; let v=g[0],c=1;
     for(let i=1;i<g.length;i++){ if(g[i]===v&&c<65535){ c++; } else { out.push(v,c); v=g[i]; c=1; } } out.push(v,c); return out; }
-  meta(){ return { round:this.round, wave:this.wave, scores:this.scores, over:this.over, winner:this.winner,
+  meta(){ return { round:this.round, wave:this.wave, maxWaves:(this.maxWaves===Infinity?0:this.maxWaves), scores:this.scores, over:this.over, winner:this.winner,
     players:this.players.map((p,k)=>({ coins:Math.floor(p.coins), level:p.level, brush:p.brush,
       cells:this.cells[k], max:this.max[k], upCost:upCost(p.level), brushCost:(p.brush<30?brushCosts[p.brush-2]:null),
       unlocked:[...p.unlocked] })) }; }

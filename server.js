@@ -23,11 +23,19 @@ let saves = {}; try { saves = JSON.parse(fs.readFileSync(SAVE_FILE, "utf8")); } 
 let saveTimer = null;
 function persistSaves(){ if(saveTimer) return; saveTimer = setTimeout(()=>{ saveTimer=null; fs.writeFile(SAVE_FILE, JSON.stringify(saves), ()=>{}); }, 800); }
 
-// ---- leaderboard: best wave per name (file-backed) ----
+// ---- leaderboards: per-name bests, separate single-player & multiplayer (file-backed) ----
 const LB_FILE = path.join(__dirname, "leaderboard.json");
-let lb = []; try { lb = JSON.parse(fs.readFileSync(LB_FILE, "utf8")); } catch {}
+let lb = { sp:{}, mp:{} }; try { const j=JSON.parse(fs.readFileSync(LB_FILE,"utf8")); if(j&&j.sp&&j.mp) lb=j; } catch {}
 let lbTimer = null;
 function persistLB(){ if(lbTimer) return; lbTimer = setTimeout(()=>{ lbTimer=null; fs.writeFile(LB_FILE, JSON.stringify(lb), ()=>{}); }, 800); }
+function lbSubmit(scope,name,d){
+  if(scope!=="sp"&&scope!=="mp") return; const nm=String(name||"guest").slice(0,16);
+  const e=lb[scope][nm]||(lb[scope][nm]={money:0,weapons:0,levels:0,wave:0,wins:0});
+  e.money=Math.max(e.money,Math.floor(+d.money||0)); e.weapons=Math.max(e.weapons,d.weapons|0);
+  e.levels=Math.max(e.levels,d.levels|0); e.wave=Math.max(e.wave,d.wave|0); e.wins+=(d.winInc|0); persistLB();
+}
+function lbTop(scope,cat){ const s=lb[scope]||{};
+  return Object.keys(s).map(n=>({name:n,value:s[n][cat]||0})).filter(e=>e.value>0).sort((a,b)=>b.value-a.value).slice(0,50); }
 
 // ---- static file server ----
 const MIME = { ".html":"text/html; charset=utf-8", ".js":"text/javascript", ".css":"text/css", ".json":"application/json",
@@ -53,13 +61,13 @@ const server = http.createServer((req,res)=>{
       res.writeHead(200,{"Content-Type":"application/json"}); res.end('{"ok":true}'); });
     return;
   }
-  if(url==="/leaderboard"){ res.writeHead(200,{"Content-Type":"application/json"}); return res.end(JSON.stringify(lb.slice(0,50))); }
+  if(url==="/leaderboard"){ const u=new URL(req.url,"http://x");
+    const scope=u.searchParams.get("scope")==="mp"?"mp":"sp";
+    let cat=u.searchParams.get("cat")||"money"; if(!["money","weapons","levels","wave","wins"].includes(cat)) cat="money";
+    res.writeHead(200,{"Content-Type":"application/json"}); return res.end(JSON.stringify(lbTop(scope,cat))); }
   if(url==="/score" && req.method==="POST"){
     let body=""; req.on("data",c=>{ body+=c; if(body.length>2000) req.destroy(); });
-    req.on("end",()=>{ try{ const {name,wave}=JSON.parse(body); const w=Math.floor(+wave||0);
-        if(name && w>0){ const nm=String(name).slice(0,16); const ex=lb.find(e=>e.name===nm);
-          if(ex){ if(w>ex.wave) ex.wave=w; } else lb.push({name:nm,wave:w});
-          lb.sort((a,b)=>b.wave-a.wave); lb=lb.slice(0,100); persistLB(); } }catch{}
+    req.on("end",()=>{ try{ const d=JSON.parse(body); lbSubmit(d.scope, d.name, d); }catch{}
       res.writeHead(200,{"Content-Type":"application/json"}); res.end('{"ok":true}'); });
     return;
   }
@@ -89,13 +97,14 @@ const MODES = {                                // humansNeeded, side assignment,
   "2v1bot":{ need:2, sides:[0,0],     bot:1  },
 };
 class Room {
-  constructor(clients, mode){
+  constructor(clients, mode, waves){
     this.id = nextRoom++; this.mode=mode; const cfg=MODES[mode];
-    stats.matches++; console.log(`[match #${stats.matches}] ${mode} — ${stats.online} online`);
+    stats.matches++; console.log(`[match #${stats.matches}] ${mode} ${waves||"6"}w — ${stats.online} online`);
     this.game = new Game(); this.game.botSide = cfg.bot;
+    this.game.maxWaves = (waves===0||waves==="inf") ? Infinity : (+waves||6);   // 6/20/50/100/∞
     this.clients = clients;
     clients.forEach((c,i)=>{ c.room=this; c.side=cfg.sides[i];
-      c.send(JSON.stringify({ t:"start", side:c.side, mode, cols:COLS, rows:ROWS, palette:PALETTE })); });
+      c.send(JSON.stringify({ t:"start", side:c.side, mode, waves:(this.game.maxWaves===Infinity?0:this.game.maxWaves), cols:COLS, rows:ROWS, palette:PALETTE })); });
     this.timer = setInterval(()=>this.tick(), TICK_MS);
   }
   tick(){
@@ -103,8 +112,9 @@ class Room {
     if(this.game.botSide>=0) this.game.botStep();
     const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta() });
     for(const c of this.clients) if(c.readyState===1) c.send(msg);
-    if(this.game.over) clearInterval(this.timer);   // match decided at wave 6 — final state already sent
+    if(this.game.over) clearInterval(this.timer);   // match decided — final state already sent
   }
+  resign(side){ this.game.forfeit(side); }          // the resigning side loses; opponent wins
   input(side,m){
     const g=this.game;
     if(m.t==="place"   && Number.isFinite(m.x) && Number.isFinite(m.y)) g.place(side, m.tool|0, m.x|0, m.y|0);
@@ -122,13 +132,13 @@ class Room {
   }
 }
 
-// ---- matchmaking (per mode) ----
-const queues = { "1v1":[], "2v2":[], "2v1bot":[] };
+// ---- matchmaking (per mode + wave length) ----
+const queues = {};   // key "mode|waves" → [clients]
 function dequeue(ws){ for(const k in queues){ const i=queues[k].indexOf(ws); if(i>=0) queues[k].splice(i,1); } }
-function tryStart(mode){
-  const q=queues[mode], need=MODES[mode].need;
-  if(q.length>=need){ new Room(q.splice(0,need), mode); }
-  else q.forEach(c=>{ if(c.readyState===1) c.send(JSON.stringify({ t:"waiting", mode, have:q.length, need })); });
+function tryStart(mode,waves){
+  const key=mode+"|"+waves, q=queues[key]||(queues[key]=[]), need=MODES[mode].need;
+  if(q.length>=need){ new Room(q.splice(0,need), mode, waves); }
+  else q.forEach(c=>{ if(c.readyState===1) c.send(JSON.stringify({ t:"waiting", mode, waves, have:q.length, need })); });
 }
 const wss = new WebSocketServer({ server });
 wss.on("connection", ws=>{
@@ -139,9 +149,11 @@ wss.on("connection", ws=>{
     if(m.t==="queue"){
       if(ws.room) return;
       const mode = MODES[m.mode] ? m.mode : "1v1";
-      dequeue(ws); queues[mode].push(ws); tryStart(mode);
+      const waves = [6,20,50,100,0].includes(m.waves) ? m.waves : 6;   // 0 = infinite
+      dequeue(ws); (queues[mode+"|"+waves]||(queues[mode+"|"+waves]=[])).push(ws); tryStart(mode,waves);
     } else if(ws.room){
       if(m.t==="chat") ws.room.broadcastChat(ws.side, m.text);
+      else if(m.t==="resign") ws.room.resign(ws.side);
       else ws.room.input(ws.side, m);
     }
   });
