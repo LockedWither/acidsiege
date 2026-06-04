@@ -815,7 +815,8 @@ function step(){
 
 // ---- bot AI ----
 let botNextMs=0, botHoldUntil=0, botCol=-1, botEl=ACID;   // wall-clock so cadence is real-time (not tied to sim ticks/lag/waves)
-const BOT_PERIOD=5000, BOT_HOLD_MS=1500;   // a 1.5s hold starts every 5 real seconds
+const BOT_HOLD_MS=1500;   // a hold lasts ~1.5s
+function botPeriod(){ return difficulty==="extreme"?1000 : difficulty==="hard"?2500 : 5000; }   // time between holds by difficulty
 const BOMB_PWR={[TNT]:25,[NUKE]:120,[HBOMB]:350};    // bombs aren't in DMG; rough power for ranking
 function powerOf(t){ if(DMG[t]!==undefined) return DMG[t]; if(BOMB_PWR[t]!==undefined) return BOMB_PWR[t]; if(DEFBYID[t]) return DEFBYID[t].dmg; return 0.3; }
 let ALL_WEAPONS=null;   // every damaging tool, ranked weakest→strongest
@@ -850,7 +851,7 @@ function botStep(){
   const now=performance.now();
   if(now<botHoldUntil){ botDrop(botCol,botEl); return; }          // mid-hold: keep streaming the weapon
   if(now<botNextMs) return;                                       // waiting for the next 5s slot
-  botCol=botPickColumn(); botNextMs=now+BOT_PERIOD;               // schedule next hold 5s out regardless
+  botCol=botPickColumn(); botNextMs=now+botPeriod();              // schedule next hold per difficulty (1s/2.5s/5s)
   if(botCol<0) return;
   botEl=botPickElement(); botHoldUntil=now+BOT_HOLD_MS;           // start a 1.5s hold
   botDrop(botCol,botEl);
