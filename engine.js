@@ -70,7 +70,7 @@ const NEWDEFS=[
   {nm:"Quark Bomb",col:"#ff4ad2",kind:"anti",dmg:90000000,cost:160000000},
   {nm:"Neutronium Slug",col:"#cfe0ff",kind:"blast",dmg:140000000,r:34,fp:0.5,cost:172000000},
   {nm:"Strangelet",col:"#b04aff",kind:"anti",dmg:200000000,cost:185000000},
-  {nm:"Dark Matter",col:"#2a1840",kind:"anti",dmg:450000000,cost:200000000},
+  {nm:"Dark Matter Bomb",col:"#2a1840",kind:"blast",dmg:450000000,r:24,fp:0.85,cost:200000000},
   {nm:"Vacuum Decay",col:"#d0c0ff",kind:"beam",dmg:900000000,cost:225000000},
   {nm:"Annihilation Core",col:"#ffffff",kind:"anti",dmg:2000000000,cost:250000000},
   {nm:"Plasma Tempest",col:"#c47cff",kind:"beam",dmg:3000000000,cost:400000000},
