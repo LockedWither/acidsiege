@@ -169,7 +169,8 @@
   </main>
 </div>
 
-<script src="/core.js"></script>
+<script src="../core.js"></script>
+<script src="../worldmap.js"></script>
 <script>
 const C = window.ACID_CORE;
 const { ids, DMG, BASE_HP, cityProt, coinLevelMult, fmtCoin, hexToRgb, PALETTE, DEFBYID } = C;
@@ -189,33 +190,16 @@ const clife = new Uint8Array(N);     // remaining spread life
 const cmv   = new Uint8Array(N);     // moved-guard for chem
 const TERR_BASE = 8;
 
-/* ---------- map tunables ---------- */
-const MAP_THRESH = 0.30, MAP_NOISE = 0.30;
-let SEED = 12345;
-function hsh(x,y){ let h=Math.imul(x+SEED,374761393)+Math.imul(y-SEED,668265263); h=Math.imul(h^(h>>>13),1274126177); return ((h^(h>>>16))>>>0)/4294967296; }
-function vnoise(x,y){ const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi;
-  const tl=hsh(xi,yi),tr=hsh(xi+1,yi),bl=hsh(xi,yi+1),br=hsh(xi+1,yi+1);
-  const u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf); return (tl*(1-u)+tr*u)*(1-v)+(bl*(1-u)+br*u)*v; }
-function fbm(x,y){ return vnoise(x,y)*0.6+vnoise(x*2.1,y*2.1)*0.3+vnoise(x*4.3,y*4.3)*0.1; }
-// continents in normalized coords (x 0..1, y 0..1), positioned roughly like Earth
-const BLOBS=[
-  [.12,.30,.11],[.18,.24,.09],[.22,.39,.09],[.10,.42,.06],[.21,.31,.09],[.25,.47,.045], // N. America
-  [.28,.60,.07],[.31,.71,.06],[.27,.54,.05],[.32,.82,.045],                              // S. America
-  [.31,.16,.05],                                                                          // Greenland
-  [.49,.29,.05],[.53,.26,.04],[.46,.33,.04],                                              // Europe
-  [.52,.49,.085],[.56,.60,.07],[.50,.43,.05],[.58,.67,.05],                               // Africa
-  [.66,.30,.13],[.78,.33,.11],[.62,.36,.07],[.86,.30,.07],[.72,.23,.09],[.67,.44,.05],    // Asia + India
-  [.81,.50,.04],[.84,.52,.03],[.87,.55,.025],                                             // SE Asia
-  [.87,.66,.07],[.84,.70,.05],                                                            // Australia
-  [.18,.95,.08],[.40,.96,.09],[.60,.96,.09],[.80,.95,.08]                                 // Antarctica strip
-];
+/* ---------- real-world land mask (sampled from an embedded equirectangular Earth) ---------- */
+const MAPIMG = new Image(); let mapReady=false, pendingStart=false;
+MAPIMG.onload = ()=>{ mapReady=true; if(pendingStart){ pendingStart=false; beginGame(); } };
+MAPIMG.src = "data:image/jpeg;base64," + (window.WORLD_MAP_B64||"");
 function genLand(){
-  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
-    const nx=x/GW, ny=y/GH;
-    let inf=0;
-    for(const b of BLOBS){ const dx=(nx-b[0]),dy=(ny-b[1])*1.15, d=Math.sqrt(dx*dx+dy*dy)/b[2]; if(d<1) inf+=(1-d); }
-    const n=fbm(nx*9,ny*9);
-    land[I(x,y)] = (inf + (n-0.5)*MAP_NOISE > MAP_THRESH) ? 1 : 0;
+  const off=document.createElement("canvas"); off.width=GW; off.height=GH;
+  const o=off.getContext("2d"); o.drawImage(MAPIMG,0,0,GW,GH);
+  const d=o.getImageData(0,0,GW,GH).data;
+  for(let i=0;i<N;i++){ const r=d[i*4],g=d[i*4+1],b=d[i*4+2], br=(r+g+b)/3;
+    land[i] = ((b>=r && br<70) || br<42) ? 0 : 1;   // dark/blue = ocean, else land
   }
 }
 
@@ -498,12 +482,16 @@ document.querySelectorAll("#aggOpts .opt").forEach(o=>o.onclick=()=>{ document.q
 document.getElementById("howBtn").onclick=()=>{ const h=document.getElementById("how"); h.style.display=h.style.display==="none"?"block":"none"; };
 
 /* ---------- game flow ---------- */
-let running=false, gameOver=false;
-document.getElementById("playBtn").onclick=()=>{
-  SEED=(Math.random()*1e9)|0; genLand(); genNations(nationCount);
+let running=false, gameOver=false, started=false;
+function beginGame(){
+  genLand(); genNations(nationCount);
   coins=2500; gameOver=false; setMode("expand"); renderTools();
   document.getElementById("menu").style.display="none";
-  running=true;
+  running=true; started=true;
+}
+document.getElementById("playBtn").onclick=()=>{
+  if(!mapReady){ pendingStart=true; document.getElementById("menuMsg").textContent="Loading world…"; return; }
+  beginGame();
 };
 function endGame(win){
   gameOver=true; running=false;
@@ -528,7 +516,7 @@ function loop(now){
     slowAcc+=dt; if(slowAcc>=1000){ slowAcc=0; regenIncome(); }
     endAcc+=dt; if(endAcc>=600){ endAcc=0; checkEnd(); }
   }
-  render(); hud();
+  if(started){ render(); hud(); }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
