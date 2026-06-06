@@ -187,28 +187,34 @@ function hsl(h,s,l){ s/=100;l/=100; const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f
 /* ---------- campaign state ---------- */
 const SAVE="as_camp", RES="as_camp_result";
 let camp=null;   // {diff, startCol, bank:{coins,level,unlocked,brushLevel}, cities:[...]}
-const CX=GW/2, CY=GH/2, MAXD=Math.sqrt(CX*CX+CY*CY);
+const CX=GW/2, CY=GH/2;
+const CITY_S=10, CITY_R=CITY_S*2.4;                                   // tighter spacing → many more cities
+// connect same-continent neighbours within reach; guarantee NO isolated city (link to nearest same-continent city)
+function computeNeighbors(cities){
+  cities.forEach(a=>a.nb=[]);
+  for(let i=0;i<cities.length;i++) for(let j=i+1;j<cities.length;j++){ const a=cities[i],b=cities[j];
+    if(a.cont===b.cont && Math.hypot(a.gx-b.gx,a.gy-b.gy)<=CITY_R){ a.nb.push(b.id); b.nb.push(a.id); } }
+  cities.forEach(a=>{ if(a.nb.length===0){ let best=null,bd=1e9;
+    cities.forEach(b=>{ if(b!==a && b.cont===a.cont){ const d=Math.hypot(a.gx-b.gx,a.gy-b.gy); if(d<bd){bd=d;best=b;} } });
+    if(best){ a.nb.push(best.id); if(!best.nb.includes(a.id)) best.nb.push(a.id); } } });
+}
 function genCities(diff){
-  const S=16, cities=[]; let id=0;
+  const S=CITY_S, cities=[]; let id=0;
   for(let gy=Math.floor(S/2); gy<GH; gy+=S) for(let gx=Math.floor(S/2); gx<GW; gx+=S){
-    if(Math.random()<0.16) continue;                                  // irregular, not a grid
-    // jitter off the lattice so cities scatter naturally
+    if(Math.random()<0.08) continue;                                  // irregular, not a grid
     let gx2=Math.round(gx+(Math.random()-0.5)*S*0.85), gy2=Math.round(gy+(Math.random()-0.5)*S*0.85);
     if(gx2<0||gx2>=GW||gy2<0||gy2>=GH||!land[I(gx2,gy2)]){ if(!land[I(gx,gy)]) continue; gx2=gx; gy2=gy; }
     const reg=regionOf(gx2,gy2); if(!reg||BLOCKED.has(reg)) continue;
-    // require a solid landmass around it (skip specks)
-    let c=0; for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){ const x=gx2+dx,y=gy2+dy; if(x>=0&&x<GW&&y>=0&&y<GH&&land[I(x,y)]) c++; }
-    if(c<14) continue;
+    let c=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ const x=gx2+dx,y=gy2+dy; if(x>=0&&x<GW&&y>=0&&y<GH&&land[I(x,y)]) c++; }
+    if(c<5) continue;                                                 // skip ocean specks
     cities.push({id, gx:gx2, gy:gy2, lvl:1, cont:reg, name:cityName(id*97+7), col:randCol(id*131+5), owner:"enemy"});
     id++;
   }
-  // neighbours (same continent, within reach)
-  const R=S*1.8;
-  cities.forEach(a=>{ a.nb=[]; cities.forEach(b=>{ if(a!==b && a.cont===b.cont){ const d=Math.hypot(a.gx-b.gx,a.gy-b.gy); if(d<=R) a.nb.push(b.id); } }); });
+  computeNeighbors(cities);
   return cities;
 }
-// level by ring distance from the capital: ring0/1 = 1, then 5, 15, 45, 135 … (exponential)
-function lvlForRing(r){ return r<=1 ? 1 : Math.min(999, Math.round(5*Math.pow(3, r-2))); }
+// level rises linearly with ring distance from the capital (ring1 = 1, ring2 = 2, …)
+function lvlForRing(r){ return Math.min(999, Math.max(1, r)); }
 function assignLevelsFrom(capId){
   const cap=byId(capId), nC=camp.cities.length, ring=new Array(nC).fill(Infinity);
   ring[capId]=0; const q=[capId]; let h=0;
@@ -228,24 +234,19 @@ function newCampaign(diff){
 }
 function save(){ try{ const c={...camp, cities:camp.cities.map(({nb,...r})=>r)}; localStorage.setItem(SAVE,JSON.stringify(c)); }catch{} }
 function load(){ try{ const c=JSON.parse(localStorage.getItem(SAVE)); if(!c||!c.cities) return false;
-    const S=15,R=S*1.8; c.cities.forEach(a=>{ a.nb=[]; c.cities.forEach(b=>{ if(a!==b&&a.cont===b.cont&&Math.hypot(a.gx-b.gx,a.gy-b.gy)<=R) a.nb.push(b.id); }); });
-    camp=c; return true; }catch{ return false; } }
+    computeNeighbors(c.cities); camp=c; return true; }catch{ return false; } }
 const byId=id=>camp.cities[id];
 const myCities=()=>camp.cities.filter(c=>c.owner==="mine");
 
-/* ---------- eligibility ---------- */
-function adjacentMine(c){ return c.nb.some(n=>byId(n).owner==="mine"); }
-function allMyContinentsTaken(){
-  const mine=myCities(); if(!mine.length) return false;
-  const conts=new Set(mine.map(c=>c.cont));
-  return camp.cities.every(c=> !conts.has(c.cont) || c.owner==="mine");
-}
+/* ---------- eligibility (cached per refresh for speed on the dense map) ---------- */
+let _haveMine=false, _mineConts=new Set(), _crossOK=false;
+function refresh(){ const mine=myCities(); _haveMine=mine.length>0;
+  _mineConts=new Set(mine.map(c=>c.cont));
+  _crossOK = _haveMine && camp.cities.every(c=> !_mineConts.has(c.cont) || c.owner==="mine"); }
 function canWar(c){
   if(c.owner!=="enemy") return false;
-  if(adjacentMine(c)) return {cost:0,cross:false};
-  // cross-continent: must own all of your continents, target on a foreign continent, pay 5k
-  const mineConts=new Set(myCities().map(x=>x.cont));
-  if(myCities().length && !mineConts.has(c.cont) && allMyContinentsTaken()) return {cost:5000,cross:true};
+  if(c.nb.some(n=>byId(n).owner==="mine")) return {cost:0,cross:false};   // bordering one of yours → free
+  if(_haveMine && !_mineConts.has(c.cont) && _crossOK) return {cost:5000,cross:true};  // cross-continent
   return false;
 }
 function captureCost(c){ return 500*c.lvl; }
@@ -271,10 +272,10 @@ function fitOverlay(){ const r=ov.getBoundingClientRect(); ov.width=r.width*devi
 let pulse=0;
 function cxy(c){ const r=ov.getBoundingClientRect(); return [ (c.gx+0.5)/GW*r.width, (c.gy+0.5)/GH*r.height ]; }
 function drawCities(){
-  if(!camp) return; const r=ov.getBoundingClientRect(); octx.clearRect(0,0,r.width,r.height);
+  if(!camp) return; refresh(); const r=ov.getBoundingClientRect(); octx.clearRect(0,0,r.width,r.height);
   octx.imageSmoothingEnabled=false;
-  const sz=Math.max(9, Math.round(r.width/GW*9)), half=sz>>1;
-  const fs=Math.max(6, Math.round(sz*0.5));
+  const sz=Math.max(7, Math.round(r.width/GW*CITY_S*0.72)), half=sz>>1;
+  const fs=Math.max(6, Math.round(sz*0.55));
   octx.textAlign="center"; octx.textBaseline="middle";
   for(const c of camp.cities){
     let [x,y]=cxy(c); x=Math.round(x); y=Math.round(y);
@@ -310,15 +311,15 @@ const pop=document.getElementById("pop");
 function hidePop(){ pop.classList.remove("show"); selected=null; }
 ov.addEventListener("pointerdown",e=>{
   const r=ov.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
-  const rad=Math.max(7,r.width/GW*6);
+  const rad=Math.max(6, r.width/GW*CITY_S*0.5)+3;
   let hit=null,best=1e9;
-  for(const c of camp.cities){ const [x,y]=cxy(c); const d=Math.hypot(x-mx,y-my); if(d<rad+4&&d<best){best=d;hit=c;} }
+  for(const c of camp.cities){ const [x,y]=cxy(c); const d=Math.hypot(x-mx,y-my); if(d<rad&&d<best){best=d;hit=c;} }
   if(!hit){ hidePop(); return; }
   if(choosing){ chooseStart(hit); return; }
   selected=hit; showPop(hit, e.clientX-document.getElementById("stage").getBoundingClientRect().left, e.clientY-document.getElementById("stage").getBoundingClientRect().top);
 });
 function showPop(c, px, py){
-  const war=canWar(c), mine=c.owner==="mine", gray=c.owner==="gray";
+  refresh(); const war=canWar(c), mine=c.owner==="mine", gray=c.owner==="gray";
   let body=`<div class="nm">${c.name}</div><div class="meta">${REGION_NAME[c.cont]||c.cont} · Level ${c.lvl} · ${mine?"Yours":gray?"Destroyed":"Enemy"}</div>`;
   if(mine){ body+=`<div class="meta" style="color:var(--toxic)">You hold this city.</div>`; }
   else if(gray){ const cost=captureCost(c); body+=`<button class="btn" id="popCap" ${camp.bank.coins<cost?"disabled":""}>CAPTURE — ${fmtCoin(cost)}c</button>`; }
@@ -432,6 +433,7 @@ if(localStorage.getItem(RES) && load()){
 </script>
 </body>
 </html>
+
 
 
 
