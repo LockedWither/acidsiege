@@ -573,7 +573,8 @@ function enemyRazed(){  return cityCells/cityCellsMax   <= RAZE_RATIO; }
 function playerRazed(){ return pcityCells/pcityCellsMax <= RAZE_RATIO; }
 function damageCity(n,gx,gy){
   const wStep=Math.floor((wave-1)/5)*5+1;                          // reward steps every 5 waves (same cadence as level/protection)
-  const gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel);
+  let gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel);
+  if(CAMPAIGN) gain*=CAMPAIGN.rmul;                                // World Conquest: empire-size coin bonus
   coins+=gain; cityCells-=n; coinFlash=1;
   if(gx!==undefined && Math.random()<0.22) pop(gx,gy,gain);
   if(!gameOver && enemyRazed()) nextWave();                 // enemy 90% gone → next wave
@@ -1562,8 +1563,8 @@ requestAnimationFrame(loop);
   const un=(q.get("un")||"").split(",").map(Number).filter(n=>!isNaN(n));
   unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t)); un.forEach(t=>unlocked.add(t));
   const eStart=Math.max(1,num("elv",1));
-  CAMPAIGN={ city:q.get("city"), enemyStart:eStart, attacker:q.get("atk")||null, defense:q.get("def")==="1" };
-  maxWaves=5; enemyLevel=eStart; wave=1; razings=0; gameOver=false;
+  CAMPAIGN={ city:q.get("city"), enemyStart:eStart, attacker:q.get("atk")||null, defense:q.get("def")==="1", rmul:Math.max(1,+q.get("rmul")||1) };
+  maxWaves=Math.max(1,num("waves",5)); enemyLevel=eStart; wave=1; razings=0; gameOver=false;
   clearArena(); buildCities(); renderTools(); renderBrushBtn();
   setSandbox(false);
   const nm=q.get("name"); if(nm) document.getElementById("botBadge").textContent=(CAMPAIGN.defense?"DEFEND vs ":"SIEGE: ")+decodeURIComponent(nm);

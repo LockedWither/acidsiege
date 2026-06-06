@@ -357,7 +357,9 @@ function doWar(c, war){
 }
 function launchBattle(target, attackerId, defense){
   const b=camp.bank;
-  const p=new URLSearchParams({ campaign:"1", city:String(target.id), elv:String(target.lvl), diff:camp.diff,
+  const rmul=Math.max(1, myCities().length/5);                        // empire-size coin bonus: 1/5 per captured city
+  const p=new URLSearchParams({ campaign:"1", city:String(target.id), elv:String(target.lvl),
+    waves:String(target.lvl*5), rmul:rmul.toFixed(3), diff:camp.diff,
     coins:String(b.coins), plv:String(b.level), brush:String(b.brushLevel), un:b.unlocked.join(","),
     name:encodeURIComponent(target.name), atk:attackerId==null?"":String(attackerId), def:defense?"1":"0" });
   location.href="/singleplayer?"+p.toString();
