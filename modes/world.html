@@ -121,10 +121,12 @@
 </div>
 
 <!-- choose-start prompt -->
-<div class="screen hidden" id="startScreen" style="background:rgba(3,12,16,.7);backdrop-filter:blur(3px)">
-  <h1 class="logo" style="font-size:clamp(26px,6vw,44px)">CHOOSE YOUR HOMELAND</h1>
-  <div class="sub">Click any city on the map to begin there</div>
-  <button class="mbtn ghost" id="startCancel">Cancel</button>
+<div class="screen hidden" id="startScreen" style="background:transparent;pointer-events:none;justify-content:flex-start;padding-top:20px">
+  <div style="background:rgba(4,20,26,.9);border:1px solid var(--panel-edge);border-radius:14px;padding:12px 22px;display:flex;flex-direction:column;align-items:center;gap:8px">
+    <h1 class="logo" style="font-size:clamp(20px,4.5vw,34px)">CHOOSE YOUR HOMELAND</h1>
+    <div class="sub">Click any city on the map to begin there</div>
+    <button class="mbtn ghost" id="startCancel" style="pointer-events:auto">Cancel</button>
+  </div>
 </div>
 
 <!-- result screen -->
