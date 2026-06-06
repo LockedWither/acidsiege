@@ -199,15 +199,26 @@ function genCities(diff){
     // require a solid landmass around it (skip specks)
     let c=0; for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){ const x=gx2+dx,y=gy2+dy; if(x>=0&&x<GW&&y>=0&&y<GH&&land[I(x,y)]) c++; }
     if(c<14) continue;
-    const dist=Math.sqrt((gx2-CX)**2+(gy2-CY)**2);
-    const lvl=1+Math.round(dist/MAXD*12);
-    cities.push({id, gx:gx2, gy:gy2, lvl, cont:reg, name:cityName(id*97+7), col:randCol(id*131+5), owner:"enemy"});
+    cities.push({id, gx:gx2, gy:gy2, lvl:1, cont:reg, name:cityName(id*97+7), col:randCol(id*131+5), owner:"enemy"});
     id++;
   }
   // neighbours (same continent, within reach)
   const R=S*1.8;
   cities.forEach(a=>{ a.nb=[]; cities.forEach(b=>{ if(a!==b && a.cont===b.cont){ const d=Math.hypot(a.gx-b.gx,a.gy-b.gy); if(d<=R) a.nb.push(b.id); } }); });
   return cities;
+}
+// level by ring distance from the capital: ring0/1 = 1, then 5, 15, 45, 135 … (exponential)
+function lvlForRing(r){ return r<=1 ? 1 : Math.min(999, Math.round(5*Math.pow(3, r-2))); }
+function assignLevelsFrom(capId){
+  const cap=byId(capId), nC=camp.cities.length, ring=new Array(nC).fill(Infinity);
+  ring[capId]=0; const q=[capId]; let h=0;
+  while(h<q.length){ const id=q[h++]; byId(id).nb.forEach(n=>{ if(ring[n]===Infinity){ ring[n]=ring[id]+1; q.push(n); } }); }
+  let maxR=0; ring.forEach(r=>{ if(r!==Infinity&&r>maxR) maxR=r; });
+  camp.cities.forEach(c=>{
+    let r=ring[c.id];
+    if(r===Infinity){ const d=Math.hypot(c.gx-cap.gx,c.gy-cap.gy); r=maxR+2+Math.floor(d/35); }  // other continents: farther = higher
+    c.lvl = lvlForRing(r);
+  });
 }
 function newCampaign(diff){
   camp={ diff, startCol:[86,240,96],
@@ -324,7 +335,8 @@ function showPop(c, px, py){
   document.getElementById("popCancel").onclick=hidePop;
 }
 function chooseStart(c){
-  camp.startCol=[86,240,96]; c.owner="mine"; choosing=false;
+  camp.startCol=[86,240,96]; c.owner="mine"; camp.capital=c.id; choosing=false;
+  assignLevelsFrom(c.id);                                   // levels now scale with distance from your capital
   document.getElementById("startScreen").classList.add("hidden");
   save(); hud(); drawCities(); toast(`Homeland founded at ${c.name}.`);
 }
