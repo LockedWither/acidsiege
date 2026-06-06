@@ -206,6 +206,11 @@
   @media (max-width:420px){
     #menu .logo{font-size:clamp(34px,13vw,60px)}
   }
+  .sbrow{display:flex;gap:6px;align-items:center;margin-top:6px}
+  .sblbl{display:block;margin-top:9px;font-size:11px;color:var(--muted);letter-spacing:.3px}
+  .sblbl b{color:var(--ink)}
+  .sbinp{flex:1;width:100%;background:rgba(0,0,0,.3);border:1px solid var(--panel-edge);border-radius:8px;color:var(--ink);
+    padding:8px 9px;font-family:inherit;font-size:13px}
 </style>
 </head>
 <body>
@@ -231,6 +236,7 @@
     <button class="mbtn ghost" id="exportBtn" style="font-size:13px;padding:9px 14px">⤓ SAVE FILE</button>
     <button class="mbtn ghost" id="importBtn" style="font-size:13px;padding:9px 14px">⤒ LOAD FILE</button>
     <button class="mbtn ghost" id="deleteBtn" style="font-size:13px;padding:9px 14px;color:var(--danger);border-color:rgba(255,83,71,.4)">🗑 DELETE SAVE</button>
+    <button class="mbtn ghost" id="sandboxBtn" style="font-size:13px;padding:9px 14px;color:var(--danger);border-color:rgba(255,83,71,.4)">🧪 SANDBOX</button>
     <input type="file" id="importFile" accept="application/json,.json" style="display:none">
   </div>
   <div style="display:flex;gap:6px;align-items:center;justify-content:center;font-size:12px;color:var(--muted)">
@@ -270,6 +276,31 @@
       <div class="tag">Player vs Bot · single-player</div>
       <div class="tag" style="color:var(--toxic)">Made by Liam Hutson</div>
       <button class="btn alt" id="openMenuBtn" style="margin-top:8px">☰ Menu</button>
+    </div>
+
+    <div class="card hidden" id="sbCard" style="border-color:var(--danger)">
+      <h2 style="color:var(--danger)">🧪 Sandbox</h2>
+      <div class="sbrow"><button class="btn alt" id="sbPause" style="flex:1">⏸ Pause</button>
+        <button class="btn alt" id="sbStep" style="flex:1">⏭ Next wave</button></div>
+      <label class="sblbl">Sim speed <b id="sbSpeedV">1.0×</b></label>
+      <input type="range" id="sbSpeed" min="0.1" max="8" step="0.1" value="1" style="width:100%">
+      <label class="sblbl">Weapon damage <b id="sbDmgV">1.0×</b></label>
+      <input type="range" id="sbDmg" min="0.1" max="100" step="0.1" value="1" style="width:100%">
+      <label class="sblbl">Difficulty</label>
+      <select id="sbDiff" class="sbinp"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option><option value="extreme">Extreme</option></select>
+      <label class="sblbl">Bot drop interval (ms, 0=auto)</label>
+      <div class="sbrow"><input type="number" id="sbPeriod" class="sbinp" min="0" step="100" value="0"><button class="btn alt" id="sbPeriodSet" style="width:auto;padding:0 12px">Set</button></div>
+      <label class="sblbl">Coins</label>
+      <div class="sbrow"><input type="number" id="sbCoins" class="sbinp" min="0"><button class="btn alt" id="sbCoinsSet" style="width:auto;padding:0 12px">Set</button></div>
+      <label class="sblbl">Your level</label>
+      <div class="sbrow"><input type="number" id="sbPLvl" class="sbinp" min="1"><button class="btn alt" id="sbPLvlSet" style="width:auto;padding:0 12px">Set</button></div>
+      <label class="sblbl">Bot / enemy level</label>
+      <div class="sbrow"><input type="number" id="sbELvl" class="sbinp" min="1"><button class="btn alt" id="sbELvlSet" style="width:auto;padding:0 12px">Set</button></div>
+      <label class="sblbl">Brush size (1–30)</label>
+      <div class="sbrow"><input type="number" id="sbBrush" class="sbinp" min="1" max="30"><button class="btn alt" id="sbBrushSet" style="width:auto;padding:0 12px">Set</button></div>
+      <button class="btn alt" id="sbUnlock" style="margin-top:8px">🔓 Unlock all weapons</button>
+      <button class="btn alt" id="sbRebuild" style="margin-top:6px">🏙 Rebuild both cities</button>
+      <div class="tip" style="margin-top:8px;font-size:11px;color:var(--muted)">Sandbox runs never affect the leaderboard or your save.</div>
     </div>
 
     <div class="card">
@@ -441,6 +472,9 @@ const ORIGIN_NONE=0, ORIGIN_PLAYER=1, ORIGIN_BOT=2;
 // ---- game state ----
 const STARTING_COINS=300;   // seed so the first acid salvo is affordable now that placement costs coins
 let coins=STARTING_COINS, playerLevel=1, enemyLevel=1, wave=1, razings=0, gameOver=false;
+// ---- sandbox / dev tools ----
+let sandbox=false, paused=false, simSpeed=1, dmgMult=1;   // simSpeed scales tick rate; dmgMult scales all weapon damage
+let CAMPAIGN=null, maxWaves=Infinity;   // set when launched from World Conquest: 5-wave battle, per-wave enemy leveling
 let cityCells=0, cityCellsMax=1, pcityCells=0, pcityCellsMax=1;
 let brushLevel=1, brush=brushLevel+1;
 // per-cell placement is FREE so you can never go bankrupt by placing — coins are only spent on (affordable) unlocks/upgrades
@@ -467,10 +501,11 @@ function spreadDamage(i,dmg,deathType){
   const x=i%COLS, y=(i/COLS)|0;
   for(const [nx,ny] of [[x,y+1],[x-1,y],[x+1,y],[x,y-1]]){
     if(!inB(nx,ny)) continue; const j=I(nx,ny);
-    if(BASE_HP[grid[j]]!==undefined){ applyDamage(j,dmg,deathType); return; }   // leftover travels to one touching unit
+    if(BASE_HP[grid[j]]!==undefined){ applyDamage(j,dmg,deathType,true); return; }   // leftover travels to one touching unit
   }                                                                              // no neighbour → the damage dies here
 }
-function applyDamage(i,dmg,deathType){
+function applyDamage(i,dmg,deathType,scaled){
+  if(!scaled) dmg*=dmgMult;                                        // sandbox weapon-damage multiplier (leftover already scaled)
   const t=grid[i], base=BASE_HP[t]; if(base===undefined) return;   // not a destructible material
   const prot=protOf(i);
   const eff=dmg-prot;                                              // protection subtracts flat from the hit
@@ -548,6 +583,11 @@ function damagePCity(n){ pcityCells-=n;
 }
 function nextWave(){
   razings++; wave++;
+  if(CAMPAIGN){
+    if(wave>maxWaves){ campaignEnd(true); return; }          // survived all 5 waves → city destroyed, you win
+    enemyLevel = CAMPAIGN.enemyStart + (wave-1);             // campaign: enemy levels up EVERY wave
+    coins += 200*wave; clearLoose(); buildEnemyCity(); sfx("coin"); return;
+  }
   enemyLevel=Math.floor((wave-1)/5)+1;                        // enemy level (colour/pattern + protection) steps every 5 waves
   coins += 200*wave;                                          // linear raze bonus (was quadratic)
   clearLoose();             // keep the player's (damaged) city — it does NOT regenerate
@@ -558,8 +598,16 @@ function nextWave(){
 function loseGame(){
   if(gameOver) return;                                      // only fire once
   gameOver=true; running=false;                             // freeze the sim
+  if(CAMPAIGN){ campaignEnd(false); return; }              // campaign defeat → report back to the map
   if(reviveCount()>0) showRevivePrompt();                   // offer a revive (1 token, regen 1 / 20 min)
   else { clearSave(); showDefeat(); }                       // no revive → run is over, drop the save
+}
+function campaignEnd(win){
+  gameOver=true; running=false; sfx(win?"coin":"lose");
+  try{ localStorage.setItem("as_camp_result", JSON.stringify({
+    win, city:CAMPAIGN.city, attacker:CAMPAIGN.attacker, defense:CAMPAIGN.defense,
+    coins:Math.floor(coins), playerLevel, unlocked:[...unlocked], brushLevel })); }catch{}
+  location.href="/world";
 }
 function rebuildPCity(){   // restore the player's (left) city to full from its original silhouette
   pcityCells=0;
@@ -816,7 +864,8 @@ function step(){
 // ---- bot AI ----
 let botNextMs=0, botHoldUntil=0, botCol=-1, botEl=ACID;   // wall-clock so cadence is real-time (not tied to sim ticks/lag/waves)
 const BOT_HOLD_MS=1500;   // a hold lasts ~1.5s
-function botPeriod(){ return difficulty==="extreme"?1000 : difficulty==="hard"?2500 : 5000; }   // time between holds by difficulty
+let sbBotPeriod=0;   // sandbox override for ms between bot holds (0 = auto by difficulty)
+function botPeriod(){ if(sandbox&&sbBotPeriod>0) return sbBotPeriod; return difficulty==="extreme"?1000 : difficulty==="hard"?2500 : 5000; }   // time between holds by difficulty
 const BOMB_PWR={[TNT]:25,[NUKE]:120,[HBOMB]:350};    // bombs aren't in DMG; rough power for ranking
 function powerOf(t){ if(DMG[t]!==undefined) return DMG[t]; if(BOMB_PWR[t]!==undefined) return BOMB_PWR[t]; if(DEFBYID[t]) return DEFBYID[t].dmg; return 0.3; }
 let ALL_WEAPONS=null;   // every damaging tool, ranked weakest→strongest
@@ -1294,7 +1343,7 @@ function hud(){
   eDef.textContent="🛡"+cityProt(enemyLevel);
   eFill.style.background=rgb(groupTint(TIERS[tIdx(enemyLevel)].c, gIdx(enemyLevel)));
   eFill.style.transform="scaleX("+Math.max(0,cityCells/cityCellsMax)+")";
-  razeN.textContent=razings; waveN.textContent=wave;
+  razeN.textContent=razings; waveN.textContent = CAMPAIGN ? Math.min(wave,maxWaves)+" / "+maxWaves : wave;
   const c=upCost(playerLevel);
   upCostEl.textContent=fmtCoin(c);
   upBtn.disabled=coins<c;
@@ -1362,6 +1411,33 @@ document.getElementById("drawerToggle").onclick=()=>{ sideEl.classList.contains(
 document.getElementById("drawerClose").onclick=closeDrawer;
 drawerBack.onclick=closeDrawer;
 
+/* ---- sandbox / dev tools ---- */
+const sbCard=document.getElementById("sbCard");
+const $=id=>document.getElementById(id);
+function syncSandbox(){
+  $("sbSpeed").value=simSpeed; $("sbSpeedV").textContent=simSpeed.toFixed(1)+"×";
+  $("sbDmg").value=dmgMult;    $("sbDmgV").textContent=dmgMult.toFixed(1)+"×";
+  $("sbDiff").value=difficulty; $("sbPeriod").value=sbBotPeriod;
+  $("sbCoins").value=Math.floor(coins); $("sbPLvl").value=playerLevel; $("sbELvl").value=enemyLevel; $("sbBrush").value=brush;
+  $("sbPause").textContent=paused?"▶ Resume":"⏸ Pause";
+}
+function setSandbox(on){ sandbox=on; paused=false; sbCard.classList.toggle("hidden",!on);
+  document.getElementById("botBadge").textContent=on?"BOT · SANDBOX":"BOT"; }
+$("sandboxBtn").onclick=()=>{ setSandbox(true); resetGame(); simSpeed=1; dmgMult=1; sbBotPeriod=0; syncSandbox(); startGame(); openDrawer(); };
+playBtn.onclick=()=>{ if(playBtn.textContent!=="RESUME") setSandbox(false); startGame(); };
+$("sbPause").onclick=()=>{ paused=!paused; syncSandbox(); };
+$("sbStep").onclick=()=>{ if(!gameOver) nextWave(); syncSandbox(); };
+$("sbSpeed").oninput=e=>{ simSpeed=+e.target.value; $("sbSpeedV").textContent=simSpeed.toFixed(1)+"×"; };
+$("sbDmg").oninput=e=>{ dmgMult=+e.target.value; $("sbDmgV").textContent=dmgMult.toFixed(1)+"×"; };
+$("sbDiff").onchange=e=>{ difficulty=e.target.value; renderDiff(); };
+$("sbPeriodSet").onclick=()=>{ sbBotPeriod=Math.max(0,+$("sbPeriod").value||0); };
+$("sbCoinsSet").onclick=()=>{ coins=Math.max(0,Math.floor(+$("sbCoins").value||0)); };
+$("sbPLvlSet").onclick=()=>{ playerLevel=Math.max(1,Math.floor(+$("sbPLvl").value||1)); };
+$("sbELvlSet").onclick=()=>{ enemyLevel=Math.max(1,Math.floor(+$("sbELvl").value||1)); };
+$("sbBrushSet").onclick=()=>{ const n=Math.max(1,Math.min(30,Math.floor(+$("sbBrush").value||1))); brushLevel=Math.max(1,n-1); brush=n; renderBrushBtn(); };
+$("sbUnlock").onclick=()=>{ PALETTE.forEach(p=>{ if(p.t!==EMPTY) unlocked.add(p.t); }); renderTools(); };
+$("sbRebuild").onclick=()=>{ buildCities(); };
+
 /* ---- revive tokens (1 regenerates every 20 min, banked up to 3) ---- */
 const REVIVE_MS=20*60*1000, REVIVE_CAP=3;
 function reviveState(){ let s=null; try{ s=JSON.parse(localStorage.getItem("as_revive")); }catch{}
@@ -1374,7 +1450,7 @@ function spendRevive(){ const s=reviveState(); if(s.count<=0) return false; if(s
 
 /* ---- server save of the last (non-death) game ---- */
 const CLIENT_ID=(()=>{ let id=localStorage.getItem("as_id"); if(!id){ id="p"+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("as_id",id); } return id; })();
-function saveGame(){ if(gameOver) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};
+function saveGame(){ if(gameOver||sandbox) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};
   fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state})}).catch(()=>{}); }
 function clearSave(){ fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state:null})}).catch(()=>{}); }
 function applySave(s,force){ if(!s||(running&&!force)) return;               // only resume if on the menu (force = file import)
@@ -1426,7 +1502,8 @@ const frameEl=document.getElementById("frame");
 
 /* ---- leaderboard ---- */
 function playerName(){ return localStorage.getItem("as_name") || handle; }
-function submitScore(){ fetch("/score",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+function submitScore(){ if(sandbox) return;   // sandbox runs are practice — never touch the leaderboard
+  fetch("/score",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
     scope:"sp", name:playerName(), money:coins, weapons:unlocked.size, levels:playerLevel, wave })}).catch(()=>{}); }
 let lbCat="wave"; const LB_CATS=[["wave","Wave"],["money","Money"],["weapons","Weapons"],["levels","Levels"]];
 function loadLB(){ const cats=document.getElementById("lbcats"); cats.innerHTML="";
@@ -1458,9 +1535,12 @@ importFile.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new Fi
 let acc=0,last=performance.now();
 function loop(now){
   acc+=now-last; last=now;
-  if(running && !gameOver){
+  if(running && !gameOver && !(sandbox&&paused)){
+    const stepMs=16/Math.max(0.05,simSpeed);        // higher simSpeed → smaller interval → faster sim
+    const cap=Math.max(3,Math.ceil(simSpeed*3));    // allow more substeps per frame when sped up
     let n=0;
-    while(acc>=16 && n<3){ if(down) place(px,py); step(); botStep(); acc-=16; n++; }
+    while(acc>=stepMs && n<cap){ if(down) place(px,py); step(); botStep(); acc-=stepMs; n++; }
+    if(acc>stepMs*cap) acc=0;                        // don't let backlog build up under heavy speed
   } else {
     acc=0;
   }
@@ -1469,6 +1549,26 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+/* ---- World Conquest battle bootstrap: /singleplayer?campaign=1&city=..&elv=..&coins=..&plv=..&un=..&brush=..&diff=..&atk=..&def=0|1 ---- */
+(function campaignBoot(){
+  const q=new URLSearchParams(location.search);
+  if(!q.has("campaign")) return;
+  const num=(k,d)=>{ const v=+q.get(k); return isFinite(v)?v:d; };
+  difficulty = q.get("diff")||difficulty; localStorage.setItem("as_diff",difficulty); renderDiff();
+  coins = num("coins",STARTING_COINS);
+  playerLevel = Math.max(1,num("plv",1));
+  brushLevel = Math.max(1,num("brush",1)); brush = brushLevel+1;
+  const un=(q.get("un")||"").split(",").map(Number).filter(n=>!isNaN(n));
+  unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t)); un.forEach(t=>unlocked.add(t));
+  const eStart=Math.max(1,num("elv",1));
+  CAMPAIGN={ city:q.get("city"), enemyStart:eStart, attacker:q.get("atk")||null, defense:q.get("def")==="1" };
+  maxWaves=5; enemyLevel=eStart; wave=1; razings=0; gameOver=false;
+  clearArena(); buildCities(); renderTools(); renderBrushBtn();
+  setSandbox(false);
+  const nm=q.get("name"); if(nm) document.getElementById("botBadge").textContent=(CAMPAIGN.defense?"DEFEND vs ":"SIEGE: ")+decodeURIComponent(nm);
+  startGame();
+})();
 </script>
 </body>
 </html>

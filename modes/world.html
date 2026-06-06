@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ACID SIEGE — World Domination</title>
+<title>ACID SIEGE — World Conquest</title>
 <meta name="theme-color" content="#06141b">
 <meta name="color-scheme" content="dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12,46 +12,43 @@
 <style>
   :root{ --bg0:#06141b;--bg1:#0a2531;--bg2:#0e3242;--ink:#dff3ee;--muted:#7fa6a0;
     --toxic:#8ef02a;--toxic2:#5fae1f;--toxic-dim:#5fae1f;--amber:#ffb627;--danger:#ff5347;
-    --panel:rgba(10,30,40,.72);--panel-edge:rgba(126,252,74,.18);--shadow:0 10px 30px rgba(0,0,0,.4);}
+    --panel:rgba(10,30,40,.82);--panel-edge:rgba(126,252,74,.2);--shadow:0 10px 30px rgba(0,0,0,.45);}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
-  body{font-family:Outfit,system-ui,sans-serif;color:var(--ink);height:100vh;overflow:hidden;
-    background:radial-gradient(1000px 700px at 80% -10%,#133a3f 0,transparent 55%),linear-gradient(160deg,var(--bg0),var(--bg1) 60%,var(--bg2));}
-  #wrap{display:grid;grid-template-columns:290px 1fr;height:100vh;gap:10px;padding:10px}
-  #side{display:flex;flex-direction:column;gap:10px;overflow:auto;padding-right:2px}
+  html,body{margin:0;height:100%;overflow:hidden;-webkit-user-select:none;user-select:none}
+  body{font-family:Outfit,system-ui,sans-serif;color:var(--ink);height:100vh;
+    background:radial-gradient(1000px 700px at 80% -10%,#133a3f 0,transparent 55%),linear-gradient(160deg,var(--bg0),var(--bg1) 60%,var(--bg2))}
+  #wrap{display:grid;grid-template-columns:280px 1fr;height:100vh;gap:10px;padding:10px}
+  #side{display:flex;flex-direction:column;gap:10px;overflow:auto}
   .card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
   .card h2{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
-  .brand h1{font-family:Bungee,Impact;font-size:24px;margin:0;color:var(--toxic);line-height:1}
+  .brand h1{font-family:Bungee,Impact;font-size:23px;margin:0;color:var(--toxic);line-height:1}
   .brand .tag{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:3px}
-  .coins{font-family:Bungee,Impact;font-size:30px;color:var(--amber)}
-  .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:4px}
+  .coins{font-family:Bungee,Impact;font-size:28px;color:var(--amber)}
+  .row{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:5px}
   .row b{color:var(--ink)}
   .btn{width:100%;border:none;border-radius:11px;padding:11px;cursor:pointer;font-weight:800;font-size:13px;
     color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic-dim));box-shadow:var(--shadow)}
   .btn:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.4)}
   .btn.alt{background:linear-gradient(180deg,#1a3a48,#12303c);color:var(--ink);box-shadow:none;border:1px solid rgba(255,255,255,.08)}
-  .btn.on{outline:2px solid var(--toxic);outline-offset:1px}
-  .tools{display:flex;flex-direction:column;gap:5px;max-height:34vh;overflow:auto}
-  .tool{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:9px;cursor:pointer;
-    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07)}
-  .tool.sel{border-color:var(--toxic);box-shadow:0 0 0 1px var(--toxic)}
-  .tool.locked .nm{color:var(--muted)}
-  .tool .dot{width:11px;height:11px;border-radius:3px;flex:none}
-  .tool .nm{font-size:11.5px;font-weight:600;flex:1}
-  .tool .cost{font-size:10px;color:var(--amber)}
-  .slider{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-top:6px}
-  input[type=range]{flex:1;accent-color:var(--toxic)}
+  .btn.danger{background:linear-gradient(180deg,#ff6a5a,#c8392c);color:#fff}
+  .legend{font-size:11px;color:var(--muted);line-height:1.7}
+  .sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px}
   #stage{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--panel-edge);background:#0a2138}
-  #frame{width:100%;height:100%}
-  canvas{display:block;width:100%;height:100%;image-rendering:pixelated;touch-action:none;cursor:crosshair}
-  .hud{position:absolute;top:8px;left:8px;display:flex;gap:8px;font-size:11px;z-index:3}
-  .hud span{background:rgba(4,20,26,.7);padding:5px 9px;border-radius:8px;border:1px solid rgba(255,255,255,.08)}
-  .tip{font-size:11px;color:var(--muted);line-height:1.5}
-  /* menu */
-  #menu{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  #base{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
+  #ov{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:pointer}
+  /* popup */
+  #pop{position:absolute;z-index:5;min-width:190px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:12px;
+    padding:12px;box-shadow:var(--shadow);display:none}
+  #pop.show{display:block}
+  #pop .nm{font-family:Bungee,Impact;font-size:15px;color:var(--ink);margin-bottom:2px}
+  #pop .meta{font-size:12px;color:var(--muted);margin-bottom:9px}
+  #pop .btn{margin-top:6px}
+  /* menu / overlay screens */
+  .screen{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
     background:radial-gradient(900px 600px at 50% -10%,#15414a 0,transparent 60%),linear-gradient(160deg,var(--bg0),var(--bg2));text-align:center;padding:20px}
-  #menu .logo{font-family:Bungee,Impact;font-size:clamp(34px,10vw,72px);color:var(--toxic);line-height:.86;margin:0;text-shadow:0 0 30px rgba(126,252,74,.35)}
-  #menu .sub{color:var(--muted);letter-spacing:3px;text-transform:uppercase;font-size:12px}
+  .screen.hidden{display:none}
+  .logo{font-family:Bungee,Impact;font-size:clamp(32px,9vw,66px);color:var(--toxic);line-height:.86;margin:0;text-shadow:0 0 30px rgba(126,252,74,.35)}
+  .sub{color:var(--muted);letter-spacing:3px;text-transform:uppercase;font-size:12px}
   .mbtn{font-family:Bungee,Impact;font-size:18px;padding:14px 22px;border:none;border-radius:13px;cursor:pointer;
     color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic-dim));box-shadow:0 8px 26px rgba(126,252,74,.3)}
   .mbtn.ghost{color:var(--ink);background:rgba(255,255,255,.05);border:1px solid var(--panel-edge);font-size:13px}
@@ -59,470 +56,364 @@
   .opt{padding:9px 13px;border-radius:10px;font-size:13px;cursor:pointer;background:rgba(255,255,255,.05);border:1px solid var(--panel-edge);color:var(--ink)}
   .opt.sel{background:linear-gradient(180deg,var(--toxic),var(--toxic2));color:#06141b;border-color:var(--toxic)}
   .menulabel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
-  /* result */
-  #over{position:absolute;inset:0;z-index:10;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;
-    background:rgba(3,12,16,.82);backdrop-filter:blur(4px);text-align:center}
-  #over.show{display:flex}
-  #over h2{font-family:Bungee,Impact;font-size:44px;margin:0}
-  /* mobile */
-  #mtopbar{display:none;position:fixed;top:0;left:0;right:0;height:50px;z-index:8;align-items:center;gap:10px;padding:0 10px;
-    background:rgba(6,20,27,.92);border-bottom:1px solid var(--panel-edge)}
-  #mtopbar .iconbtn{width:38px;height:38px;border-radius:10px;border:1px solid var(--panel-edge);background:rgba(255,255,255,.05);color:var(--ink);font-size:17px}
-  #mtopbar .t{flex:1;font-family:Bungee,Impact;font-size:14px;color:var(--toxic)}
-  #mtopbar .c{font-family:Bungee,Impact;font-size:13px;color:var(--amber)}
-  #drawerBack{display:none;position:fixed;inset:0;z-index:6;background:rgba(0,0,0,.5)}
-  @media(max-width:860px){
-    #wrap{grid-template-columns:1fr;gap:0;padding:52px 6px 6px}
-    #mtopbar{display:flex}
-    #drawerBack.show{display:block}
-    #side{position:fixed;top:0;left:0;bottom:0;width:min(86vw,320px);z-index:7;padding:12px;overflow:auto;
-      transform:translateX(-100%);transition:transform .25s ease;background:linear-gradient(160deg,var(--bg1),var(--bg0));box-shadow:18px 0 50px rgba(0,0,0,.6)}
-    #side.open{transform:none}
-  }
+  .banner{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(4,20,26,.85);
+    border:1px solid var(--panel-edge);border-radius:10px;padding:8px 14px;font-size:13px;display:none}
+  .banner.show{display:block}
+  #toast{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(4,20,26,.9);
+    border:1px solid var(--panel-edge);border-radius:10px;padding:8px 14px;font-size:13px;display:none}
+  #toast.show{display:block}
+  @media(max-width:860px){ #wrap{grid-template-columns:1fr;grid-template-rows:auto 1fr;padding:6px} #side{flex-direction:row;flex-wrap:wrap;max-height:34vh} #side .card{flex:1 1 46%} }
 </style>
 </head>
 <body>
 
 <!-- start menu -->
-<div id="menu">
-  <h1 class="logo">WORLD<br>DOMINATION</h1>
-  <div class="sub">Acid Siege · conquer the planet</div>
-  <div id="menuMsg" style="color:var(--danger);font-family:Bungee,Impact;font-size:18px"></div>
-  <div class="menulabel">Nations</div>
-  <div class="opts" id="natOpts">
-    <div class="opt" data-n="60">60</div>
-    <div class="opt sel" data-n="100">100</div>
-    <div class="opt" data-n="150">150</div>
+<div class="screen" id="menu">
+  <h1 class="logo">WORLD<br>CONQUEST</h1>
+  <div class="sub">Acid Siege · campaign</div>
+  <div class="menulabel">Difficulty</div>
+  <div class="opts" id="diffOpts">
+    <div class="opt" data-d="easy">Easy</div>
+    <div class="opt sel" data-d="medium">Medium</div>
+    <div class="opt" data-d="hard">Hard</div>
+    <div class="opt" data-d="extreme" style="color:var(--danger)">Extreme</div>
   </div>
-  <div class="menulabel">Bot aggression</div>
-  <div class="opts" id="aggOpts">
-    <div class="opt" data-a="0.5">Calm</div>
-    <div class="opt sel" data-a="1">Normal</div>
-    <div class="opt" data-a="1.8">Brutal</div>
-  </div>
+  <div class="legend" style="max-width:440px">Conquer the planet one city at a time. Each siege is a 5-wave Acid Siege battle —
+    the enemy city levels up every wave. Central continents are walled off; the farther out a city, the higher its level.
+    Hard &amp; Extreme enemies counter-attack.</div>
   <div class="opts" style="margin-top:6px">
-    <button class="mbtn" id="playBtn">CONQUER</button>
-    <button class="mbtn ghost" id="howBtn">HOW TO PLAY</button>
-    <a class="mbtn ghost" href="/" style="text-decoration:none;display:inline-block">← MENU</a>
-  </div>
-  <div id="how" style="display:none;max-width:min(540px,92vw);text-align:left;background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px;padding:14px 18px;font-size:13px;color:var(--muted);line-height:1.6">
-    You start as one nation among many bots. <b>EXPAND</b> (the green mode button) and click your border to claim
-    neighbouring <b>neutral</b> land — more land means more income. To take an <b>enemy</b> nation you must first
-    <b>destroy</b> its territory: pick a weapon and drop it directly on the country. Wiped land turns neutral, then you
-    expand into it. <b>Level up</b> your nation to raise its 🛡 resistance so enemy (and bot) weapons can't carve you up.
-    Bots expand and attack each other and you. Conquer 65% of the world — or be the last nation standing — to win.
+    <button class="mbtn" id="newBtn">NEW CAMPAIGN</button>
+    <button class="mbtn ghost" id="resumeBtn">RESUME</button>
+    <a class="mbtn ghost" href="/" style="text-decoration:none">← MENU</a>
   </div>
 </div>
-
-<!-- mobile top bar -->
-<div id="mtopbar">
-  <button class="iconbtn" id="drawerToggle">☰</button>
-  <span class="t">WORLD</span><span class="c" id="mCoins">0</span>
-  <button class="iconbtn" id="mMenu">⏏</button>
-</div>
-<div id="drawerBack"></div>
 
 <div id="wrap">
   <aside id="side">
-    <div class="card brand">
-      <h1>ACID SIEGE</h1><div class="tag">World Domination · made by Liam Hutson</div>
-      <a class="btn alt" href="/" style="margin-top:8px;text-decoration:none;text-align:center;display:block">← Main menu</a>
+    <div class="card brand"><h1>ACID SIEGE</h1><div class="tag">World Conquest · Liam Hutson</div>
+      <a class="btn alt" href="/" style="margin-top:8px;text-decoration:none;text-align:center;display:block">← Main menu</a></div>
+    <div class="card">
+      <h2>Treasury</h2><div class="coins" id="coinN">0</div>
+      <div class="row"><span>Cities held</span><b id="ownN">0</b></div>
+      <div class="row"><span>World</span><b id="pctN">0%</b></div>
+      <div class="row"><span>Your level</span><b id="lvlN">1</b></div>
+      <div class="row"><span>Difficulty</span><b id="diffN">—</b></div>
     </div>
     <div class="card">
-      <h2>Treasury</h2>
-      <div class="coins" id="coinN">0</div>
-      <div class="row"><span>Your land</span><b id="landN">0</b></div>
-      <div class="row"><span>World held</span><b id="pctN">0%</b></div>
-      <div class="row"><span>Nations left</span><b id="aliveN">0</b></div>
-    </div>
-    <div class="card">
-      <h2>Your Nation</h2>
-      <div class="row"><span>Level <b id="lvlN">1</b></span><span>🛡 <b id="protN" style="color:var(--amber)">0</b></span></div>
-      <button class="btn" id="lvlBtn" style="margin-top:8px">LEVEL UP — <span id="lvlCost">0</span></button>
-      <div style="display:flex;gap:5px;margin-top:5px">
-        <button class="btn alt" id="lvl5" style="flex:1;padding:7px 0;font-size:11px">×5</button>
-        <button class="btn alt" id="lvl25" style="flex:1;padding:7px 0;font-size:11px">×25</button>
-        <button class="btn alt" id="lvlMax" style="flex:1;padding:7px 0;font-size:11px">MAX</button>
+      <h2>Legend</h2>
+      <div class="legend">
+        <div><span class="sw" id="swMine"></span> Your cities</div>
+        <div><span class="sw" style="background:#c75"></span> Enemy cities</div>
+        <div><span class="sw" style="background:#8a8f95"></span> Destroyed (capture for coins)</div>
+        <div style="margin-top:6px;color:var(--muted)">Click a city for info. You can only war the enemy cities bordering yours.</div>
       </div>
-    </div>
-    <div class="card">
-      <h2>Action</h2>
-      <button class="btn on" id="expandBtn">⛏ EXPAND (claim land)</button>
-      <div class="slider">Brush <input type="range" id="brush" min="1" max="30" value="9"><b id="brushN" style="color:var(--ink)">9</b></div>
-      <div class="tip" style="margin-top:6px" id="modeTip">Click your border to claim neutral land.</div>
-    </div>
-    <div class="card">
-      <h2>Arsenal</h2>
-      <button class="btn alt" id="sellBtn" style="margin-bottom:6px;font-size:12px">SELL MODE: OFF</button>
-      <div class="tools" id="tools"></div>
+      <button class="btn alt" id="restartBtn" style="margin-top:10px">Restart campaign</button>
     </div>
   </aside>
 
   <main id="stage">
-    <div id="frame"><canvas id="cv"></canvas></div>
-    <div class="hud"><span id="hudMode">EXPAND</span><span id="hudSel">Acid</span></div>
-    <div id="over">
-      <h2 id="overTitle">VICTORY</h2>
-      <p id="overSub" style="color:var(--muted);margin:0"></p>
-      <button class="mbtn" onclick="location.reload()">PLAY AGAIN</button>
-    </div>
+    <canvas id="base"></canvas>
+    <canvas id="ov"></canvas>
+    <div class="banner" id="banner"></div>
+    <div id="toast"></div>
+    <div id="pop"></div>
   </main>
+</div>
+
+<!-- choose-start prompt -->
+<div class="screen hidden" id="startScreen" style="background:rgba(3,12,16,.7);backdrop-filter:blur(3px)">
+  <h1 class="logo" style="font-size:clamp(26px,6vw,44px)">CHOOSE YOUR HOMELAND</h1>
+  <div class="sub">Click any city on the map to begin there</div>
+  <button class="mbtn ghost" id="startCancel">Cancel</button>
+</div>
+
+<!-- result screen -->
+<div class="screen hidden" id="winScreen">
+  <h1 class="logo" id="winTitle">VICTORY</h1>
+  <div class="sub" id="winSub"></div>
+  <button class="mbtn" id="winOk">CONTINUE</button>
 </div>
 
 <script src="../core.js"></script>
 <script src="../worldmap.js"></script>
 <script>
-const C = window.ACID_CORE;
-const { ids, DMG, BASE_HP, cityProt, coinLevelMult, fmtCoin, hexToRgb, PALETTE, DEFBYID } = C;
-const { EMPTY,ACID,WATER,FIRE,OIL,SAND,WOOD,GLASS,STONE,LAVA,MAGMA,NAPALM,PLASMA,VIRUS,
-        TNT,NUKE,HBOMB,ANTIMATTER,PCITY,NEW_BASE } = ids;
+const C=window.ACID_CORE, fmtCoin=C.fmtCoin;
+const ACIDID=3, WATERID=2, SANDID=1, EMPTYID=0;
 
-/* ---------- grid ---------- */
+/* ---------- terrain ---------- */
 const GW=480, GH=240, N=GW*GH;
 const I=(x,y)=>y*GW+x;
-const inB=(x,y)=>x>=0&&x<GW&&y>=0&&y<GH;
-const land  = new Uint8Array(N);     // 1 = land
-const owner = new Uint16Array(N);    // nation id (0 = neutral/ocean)
-const thp   = new Float32Array(N);   // territory hit points
-const chem  = new Uint8Array(N);     // loose chemical layer (0 = none)
-const cown  = new Uint8Array(N);     // 1 = player-originated chemical
-const clife = new Uint8Array(N);     // remaining spread life
-const cmv   = new Uint8Array(N);     // moved-guard for chem
-const baseCol = new Uint32Array(N);  // real Earth terrain colour per cell (drawn under the nations)
-const TERR_BASE = 8;
+const land=new Uint8Array(N), baseCol=new Uint32Array(N), contId=new Int16Array(N);
+const MAPIMG=new Image(); let mapReady=false, pending=null;
+MAPIMG.onload=()=>{ mapReady=true; if(pending){ const p=pending; pending=null; p(); } };
+MAPIMG.src="data:image/jpeg;base64,"+(window.WORLD_MAP_B64||"");
+function whenMap(fn){ if(mapReady) fn(); else pending=fn; }
 
-/* ---------- real-world land mask (sampled from an embedded equirectangular Earth) ---------- */
-const MAPIMG = new Image(); let mapReady=false, pendingStart=false;
-MAPIMG.onload = ()=>{ mapReady=true; if(pendingStart){ pendingStart=false; beginGame(); } };
-MAPIMG.src = "data:image/jpeg;base64," + (window.WORLD_MAP_B64||"");
-function genLand(){
+function buildTerrain(){
   const off=document.createElement("canvas"); off.width=GW; off.height=GH;
   const o=off.getContext("2d"); o.drawImage(MAPIMG,0,0,GW,GH);
   const d=o.getImageData(0,0,GW,GH).data;
   for(let i=0;i<N;i++){ let r=d[i*4],g=d[i*4+1],b=d[i*4+2]; const br=(r+g+b)/3;
-    const ocean = (b>=r && br<70) || br<42;
-    land[i] = ocean ? 0 : 1;
-    if(ocean){ r=(r*0.5+18)|0; g=(g*0.6+40)|0; b=(b*0.7+70)|0; }   // deepen the sea a touch
-    baseCol[i] = (255<<24)|(b<<16)|(g<<8)|r;
+    const ocean=(b>=r&&br<70)||br<42; land[i]=ocean?0:1;
+    if(ocean){ r=(r*0.5+16)|0; g=(g*0.6+38)|0; b=(b*0.7+66)|0; }
+    baseCol[i]=(255<<24)|(b<<16)|(g<<8)|r;
   }
 }
 
-/* ---------- nations ---------- */
-let nations=[], totalLand=0, AGG=1;
-function hslRGB(h,s,l){ s/=100;l/=100; const k=n=>(n+h/30)%12; const a=s*Math.min(l,1-l);
-  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+/* ---------- continents (geographic regions) ---------- */
+// returns region code or "" — central EU/AF are blocked end-zones
+function regionOf(gx,gy){
+  const fx=gx/GW, fy=gy/GH;
+  if(fy>=0.88) return "AN";
+  if(fx<0.33 && fy<0.47) return "NA";
+  if(fx>=0.19 && fx<0.40 && fy>=0.44) return "SA";
+  if(fx>=0.40 && fx<0.57 && fy<0.40) return "EU";
+  if(fx>=0.40 && fx<0.65 && fy>=0.38 && fy<0.82) return "AF";
+  if(fx>=0.56 && fy<0.57) return "AS";
+  if(fx>=0.75 && fy>=0.53 && fy<0.87) return "AU";
+  return "";
+}
+const BLOCKED=new Set(["EU","AF"]);
+const REGION_NAME={NA:"North America",SA:"South America",AS:"Asia",AU:"Oceania",AN:"Antarctica",EU:"Europe",AF:"Africa"};
+
+/* ---------- city naming ---------- */
+const PRE=["New","Old","Fort","Port","Lake","Mount","San","Santa","North","South","Cape","Saint","Grand","Little","High","Red","Gold","Iron","Stone","Silver","Black","White","Sun","Moon","Star","Storm","Wind","Frost","Ash","Ember","Dust","Salt"];
+const SUF=["ton","ville","burg","field","ford","port","haven","stead","crest","gate","reach","fall","spire","hold","march","vale","moor","wick","bay","ridge","dale","shire","mont","grad","polis","heim","by","gard","mere","forge","watch","keep"];
+function cityName(seed){ const a=Math.imul(seed,2654435761)>>>0, b=Math.imul(seed^0x9e37,40503)>>>0; return PRE[a%PRE.length]+SUF[b%SUF.length]; }
+function randCol(seed){ const h=(Math.imul(seed,2246822519)>>>0)%360; return hsl(h,55+(seed*37%20),52); }
+function hsl(h,s,l){ s/=100;l/=100; const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
   return [Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255)]; }
-function maxHp(o){ return TERR_BASE + cityProt(nations[o].level); }
-function genNations(count){
-  nations=[null];                                  // index 0 = neutral/ocean
-  const cells=[]; for(let i=0;i<N;i++) if(land[i]) cells.push(i);
-  totalLand=cells.length;
-  // shuffle seeds
-  for(let i=cells.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; const t=cells[i];cells[i]=cells[j];cells[j]=t; }
-  const seeds=cells.slice(0,count);
-  const q=[];
-  seeds.forEach((i,k)=>{ const id=k+1; const bot=k>0;
-    const col = bot ? hslRGB((k*137.508)%360, 52+ (k*53%18), 52) : [86,240,96];
-    nations.push({id, level:1, bot, alive:true, cells:0, col, nextAct:0});
-    owner[i]=id; thp[i]=TERR_BASE; nations[id].cells++; q.push(i); });
-  // multi-source BFS over land → nearest seed
-  let head=0;
-  while(head<q.length){ const i=q[head++]; const o=owner[i]; const x=i%GW,y=(i/GW)|0;
-    const nb=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-    for(const [nx,ny] of nb){ if(!inB(nx,ny))continue; const j=I(nx,ny);
-      if(land[j] && owner[j]===0){ owner[j]=o; thp[j]=TERR_BASE; nations[o].cells++; q.push(j); } } }
-  // make the player the largest nation so they start on a real continent
-  let best=1; for(let k=1;k<nations.length;k++) if(nations[k].cells>nations[best].cells) best=k;
-  PLAYER=best;
-  for(let k=1;k<nations.length;k++){ nations[k].bot=(k!==PLAYER);
-    nations[k].col = (k===PLAYER) ? [86,240,96] : hslRGB((k*137.508)%360, 52+(k*53%18), 52); }
-}
-let PLAYER=1;
 
-/* ---------- combat (reuses cityProt resistance model, top-down) ---------- */
-let coins=2500, shakeT=0;
-function hit(i,dmg,byPlayer){
-  const o=owner[i]; if(!o) return;
-  if(o===PLAYER && byPlayer) return;               // your own weapons don't carve your own land
-  const eff = dmg - cityProt(nations[o].level);
-  if(eff<=0) return;                               // resistance absorbed it
-  thp[i]-=eff;
-  if(thp[i]<=0){                                   // territory destroyed → becomes neutral, capturable
-    const nat=nations[o]; nat.cells--; owner[i]=0; thp[i]=0;
-    if(byPlayer && o!==PLAYER){ coins += Math.ceil(4*coinLevelMult(nations[PLAYER].level)); }
-    if(nat.cells<=0) nat.alive=false;
+/* ---------- campaign state ---------- */
+const SAVE="as_camp", RES="as_camp_result";
+let camp=null;   // {diff, startCol, bank:{coins,level,unlocked,brushLevel}, cities:[...]}
+const CX=GW/2, CY=GH/2, MAXD=Math.sqrt(CX*CX+CY*CY);
+function genCities(diff){
+  const S=15, cities=[]; let id=0;
+  for(let gy=Math.floor(S/2); gy<GH; gy+=S) for(let gx=Math.floor(S/2); gx<GW; gx+=S){
+    const i=I(gx,gy); if(!land[i]) continue;
+    const reg=regionOf(gx,gy); if(!reg||BLOCKED.has(reg)) continue;
+    // require a solid landmass around it (skip specks)
+    let c=0; for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){ const x=gx+dx,y=gy+dy; if(x>=0&&x<GW&&y>=0&&y<GH&&land[I(x,y)]) c++; }
+    if(c<14) continue;
+    const dist=Math.sqrt((gx-CX)**2+(gy-CY)**2);
+    const lvl=1+Math.round(dist/MAXD*12);
+    cities.push({id, gx, gy, lvl, cont:reg, name:cityName(id*97+7), col:randCol(id*131+5), owner:"enemy"});
+    id++;
   }
+  // neighbours (same continent, within reach)
+  const R=S*1.8;
+  cities.forEach(a=>{ a.nb=[]; cities.forEach(b=>{ if(a!==b && a.cont===b.cont){ const d=Math.hypot(a.gx-b.gx,a.gy-b.gy); if(d<=R) a.nb.push(b.id); } }); });
+  return cities;
 }
-function explode(cx,cy,R,dmg,byPlayer){
-  shakeT=Math.min(1,R/30);
-  for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
-    if(dx*dx+dy*dy>R*R) continue;
-    const x=cx+dx,y=cy+dy; if(!inB(x,y))continue; const j=I(x,y);
-    if(land[j]) hit(j,dmg,byPlayer);
-    if(chem[j]===EMPTY && land[j] && Math.random()<0.25){ chem[j]=FIRE; cown[j]=byPlayer?1:0; clife[j]=3; } // flash
-  }
+function newCampaign(diff){
+  camp={ diff, startCol:[86,240,96],
+    bank:{ coins:2000, level:1, unlocked:[ACIDID,WATERID,SANDID,EMPTYID], brushLevel:1 },
+    cities:genCities(diff) };
+  save();
 }
-// classify a palette tool into world behaviour
-function weaponInfo(t){
-  const d=DEFBYID[t];
-  if(d){ if(d.kind==="blast") return {mode:"blast", r:d.r||16, dmg:d.dmg};
-         if(d.kind==="beam")  return {mode:"blast", r:18, dmg:d.dmg};
-         if(d.kind==="anti")  return {mode:"blast", r:14, dmg:d.dmg};
-         return {mode:"spread", dmg:d.dmg, life:16}; }          // goo
-  switch(t){
-    case ACID:  return {mode:"spread", dmg:DMG[ACID],  life:9};
-    case FIRE:  return {mode:"spread", dmg:DMG[FIRE],  life:7};
-    case NAPALM:return {mode:"spread", dmg:DMG[NAPALM],life:10};
-    case LAVA:  return {mode:"spread", dmg:DMG[LAVA],  life:9};
-    case MAGMA: return {mode:"spread", dmg:DMG[MAGMA], life:9};
-    case PLASMA:return {mode:"spread", dmg:DMG[PLASMA],life:8};
-    case VIRUS: return {mode:"spread", dmg:DMG[VIRUS], life:14};
-    case ANTIMATTER: return {mode:"blast", r:13, dmg:DMG[ANTIMATTER]};
-    case TNT:   return {mode:"blast", r:8,  dmg:25};
-    case NUKE:  return {mode:"blast", r:16, dmg:120};
-    case HBOMB: return {mode:"blast", r:20, dmg:350};
-    case WATER: return {mode:"spread", dmg:0, life:5, water:true};
-    case EMPTY: return {mode:"erase"};
-    default:    return {mode:"inert"};               // sand/wood/glass/stone — no effect
-  }
-}
-function chemDmg(t){ if(DMG[t]!==undefined) return DMG[t]; if(DEFBYID[t]) return DEFBYID[t].dmg; return 0; }
+function save(){ try{ const c={...camp, cities:camp.cities.map(({nb,...r})=>r)}; localStorage.setItem(SAVE,JSON.stringify(c)); }catch{} }
+function load(){ try{ const c=JSON.parse(localStorage.getItem(SAVE)); if(!c||!c.cities) return false;
+    const S=15,R=S*1.8; c.cities.forEach(a=>{ a.nb=[]; c.cities.forEach(b=>{ if(a!==b&&a.cont===b.cont&&Math.hypot(a.gx-b.gx,a.gy-b.gy)<=R) a.nb.push(b.id); }); });
+    camp=c; return true; }catch{ return false; } }
+const byId=id=>camp.cities[id];
+const myCities=()=>camp.cities.filter(c=>c.owner==="mine");
 
-/* ---------- chemical simulation (top-down spread) ---------- */
-function simChem(){
-  cmv.fill(0);
-  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
-    const i=I(x,y), e=chem[i]; if(e===EMPTY||cmv[i]) continue;
-    cmv[i]=1;
-    const nb=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-    // shuffle neighbour order a touch
-    if((x+y)&1) nb.reverse();
-    const dmg=chemDmg(e), mine=cown[i];
-    // water extinguishes adjacent fire-likes
-    if(e===WATER){ for(const [nx,ny] of nb){ if(inB(nx,ny)){ const j=I(nx,ny); if(chem[j]===FIRE){ chem[j]=EMPTY; clife[j]=0; } } } }
-    // damage an adjacent owned cell
-    if(dmg>0){
-      let spent=false;
-      for(const [nx,ny] of nb){ if(!inB(nx,ny))continue; const j=I(nx,ny);
-        if(land[j] && owner[j]!==0 && !(owner[j]===PLAYER && mine)){ hit(j,dmg,mine); if(Math.random()<0.85){ chem[i]=EMPTY; spent=true; } break; } }
-      if(spent) continue;
-    }
-    // spread into a random adjacent free land cell, lose life
-    if(clife[i]<=0){ chem[i]=EMPTY; continue; }
-    const opts=[];
-    for(const [nx,ny] of nb){ if(inB(nx,ny)){ const j=I(nx,ny); if(chem[j]===EMPTY && land[j]) opts.push(j); } }
-    if(opts.length){ const j=opts[(Math.random()*opts.length)|0];
-      chem[j]=e; cown[j]=mine; clife[j]=clife[i]-1; cmv[j]=1; chem[i]=EMPTY; }
-    else clife[i]--;
-  }
+/* ---------- eligibility ---------- */
+function adjacentMine(c){ return c.nb.some(n=>byId(n).owner==="mine"); }
+function allMyContinentsTaken(){
+  const mine=myCities(); if(!mine.length) return false;
+  const conts=new Set(mine.map(c=>c.cont));
+  return camp.cities.every(c=> !conts.has(c.cont) || c.owner==="mine");
 }
-
-/* ---------- bot AI (cellular growth + aggression) ---------- */
-function botPass(){
-  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){
-    const i=I(x,y), o=owner[i];
-    if(o===0||o===PLAYER) continue; const nat=nations[o]; if(!nat.alive) continue;
-    const r=Math.random();
-    if(r>0.20) continue;                                       // only a fraction of border cells act
-    const nb=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-    const [nx,ny]=nb[(Math.random()*4)|0]; if(!inB(nx,ny))continue; const j=I(nx,ny);
-    if(!land[j]) continue;
-    if(owner[j]===0){ owner[j]=o; thp[j]=maxHp(o); nat.cells++; }    // claim neutral
-    else if(owner[j]!==o){                                            // attack neighbour
-      const power = (4 + nat.level*3 + nat.cells*0.05) * AGG;
-      if(Math.random()<0.5*AGG) hit(j, power, false);
-    }
-  }
-  // slow bot leveling so the world hardens over time
-  for(let k=2;k<nations.length;k++){ const nat=nations[k]; if(nat.alive && Math.random()<0.04*AGG && nat.cells>4) nat.level++; }
+function canWar(c){
+  if(c.owner!=="enemy") return false;
+  if(adjacentMine(c)) return {cost:0,cross:false};
+  // cross-continent: must own all of your continents, target on a foreign continent, pay 5k
+  const mineConts=new Set(myCities().map(x=>x.cont));
+  if(myCities().length && !mineConts.has(c.cont) && allMyContinentsTaken()) return {cost:5000,cross:true};
+  return false;
 }
-
-/* ---------- territory regen ---------- */
-function regenIncome(){
-  let pc=0;
-  for(let i=0;i<N;i++){ const o=owner[i]; if(!o) continue;
-    if(o===PLAYER) pc++;
-    const mx=maxHp(o); if(thp[i]<mx) thp[i]=Math.min(mx, thp[i]+mx*0.04+1);
-  }
-  nations[PLAYER].cells=pc;
-  coins += Math.ceil(Math.max(3, pc*0.5) * coinLevelMult(nations[PLAYER].level));
-}
-
-/* ---------- player actions ---------- */
-let tool=ACID, mode="expand", brush=9, sellMode=false;
-const unlocked=new Set([ACID,WATER,SAND,EMPTY]);
-function stamp(gx,gy){
-  if(gameOver) return;
-  if(mode==="expand"){ claim(gx,gy); return; }
-  const info=weaponInfo(tool);
-  if(info.mode==="blast"){ if(land[I(gx,gy)]!==undefined) explode(gx,gy,info.r,info.dmg,true); return; }
-  for(let dy=-brush;dy<=brush;dy++)for(let dx=-brush;dx<=brush;dx++){
-    if(dx*dx+dy*dy>brush*brush) continue; const x=gx+dx,y=gy+dy; if(!inB(x,y))continue; const i=I(x,y);
-    if(info.mode==="erase"){ chem[i]=EMPTY; continue; }
-    if(info.mode==="inert") continue;
-    if(land[i] && chem[i]===EMPTY){ chem[i]=tool; cown[i]=1; clife[i]=info.life; }
-  }
-}
-function claim(gx,gy){
-  for(let dy=-brush;dy<=brush;dy++)for(let dx=-brush;dx<=brush;dx++){
-    if(dx*dx+dy*dy>brush*brush) continue; const x=gx+dx,y=gy+dy; if(!inB(x,y))continue; const i=I(x,y);
-    if(land[i] && owner[i]===0){                       // neutral land, must touch your territory
-      const aj=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-      let touch=false; for(const [nx,ny] of aj){ if(inB(nx,ny)&&owner[I(nx,ny)]===PLAYER){touch=true;break;} }
-      if(touch){ owner[i]=PLAYER; thp[i]=maxHp(PLAYER); nations[PLAYER].cells++; }
-    }
-  }
-}
-
-/* ---------- leveling ---------- */
-function levelCost(L){ return Math.round(400*Math.pow(1.16,L-1)/100)*100; }
-function levelUp(times){
-  for(let k=0;k<times;k++){ const c=levelCost(nations[PLAYER].level); if(coins<c) break; coins-=c; nations[PLAYER].level++; }
-  // top up your territory to the new resistance
-  const mx=maxHp(PLAYER); for(let i=0;i<N;i++) if(owner[i]===PLAYER) thp[i]=mx;
-}
+function captureCost(c){ return 500*c.lvl; }
 
 /* ---------- rendering ---------- */
-const cv=document.getElementById("cv"), ctx=cv.getContext("2d");
-cv.width=GW; cv.height=GH;
-const img=ctx.createImageData(GW,GH); const buf=new Uint32Array(img.data.buffer);
-const OCEAN=(255<<24)|(95<<16)|(60<<8)|30;          // ABGR
-const NEUT =(255<<24)|(66<<16)|(72<<8)|70;
-const chemCol={};
-PALETTE.forEach(p=>{ const c=hexToRgb(p.col); chemCol[p.t]=(255<<24)|(c[2]<<16)|(c[1]<<8)|c[0]; });
-function render(){
+const baseCv=document.getElementById("base"), bctx=baseCv.getContext("2d");
+baseCv.width=GW; baseCv.height=GH;
+const bimg=bctx.createImageData(GW,GH), bbuf=new Uint32Array(bimg.data.buffer);
+function paintTerrain(){
   for(let i=0;i<N;i++){
-    const base=baseCol[i];
-    if(chem[i]!==EMPTY){ buf[i]=chemCol[chem[i]]||base; continue; }
-    const o=owner[i];
-    if(o===0){ buf[i]=base; continue; }                          // ocean / unclaimed terrain shows through
-    const nat=nations[o], c=nat.col;
-    const bb=base&255, gg=(base>>8)&255, rr=(base>>16)&255;       // base is ABGR → low byte = R
-    const a=0.42+0.30*Math.min(1,thp[i]/maxHp(o));               // healthier land = stronger national colour
-    let r=(c[0]*a+bb*(1-a))|0, g=(c[1]*a+gg*(1-a))|0, b=(c[2]*a+rr*(1-a))|0;
-    const x=i%GW, y=(i/GW)|0;
-    const edge=(x>0&&owner[i-1]!==o)||(x<GW-1&&owner[i+1]!==o)||(y>0&&owner[i-GW]!==o)||(y<GH-1&&owner[i+GW]!==o);
-    if(edge){ if(o===PLAYER){ r=225;g=255;b=185; } else { r=(r*0.45)|0; g=(g*0.45)|0; b=(b*0.45)|0; } }   // country outlines
-    buf[i]=(255<<24)|(b<<16)|(g<<8)|r;
+    let v=baseCol[i];
+    if(land[i]){ const reg=regionOf(i%GW,(i/GW)|0);
+      if(!reg||BLOCKED.has(reg)){ const r=v&255,g=(v>>8)&255,b=(v>>16)&255; v=(255<<24)|(((b*0.4)|0)<<16)|(((g*0.4)|0)<<8)|((r*0.4+20)|0); } }
+    bbuf[i]=v;
   }
-  ctx.putImageData(img,0,0);
-  if(shakeT>0){ const s=shakeT*6; document.getElementById("frame").style.transform=`translate(${(Math.random()*2-1)*s}px,${(Math.random()*2-1)*s}px)`; shakeT*=0.85; if(shakeT<0.02){shakeT=0;document.getElementById("frame").style.transform="";} }
+  bctx.putImageData(bimg,0,0);
 }
+const ov=document.getElementById("ov"), octx=ov.getContext("2d");
+function fitOverlay(){ const r=ov.getBoundingClientRect(); ov.width=r.width*devicePixelRatio; ov.height=r.height*devicePixelRatio; octx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); drawCities(); }
+let pulse=0;
+function cxy(c){ const r=ov.getBoundingClientRect(); return [ (c.gx+0.5)/GW*r.width, (c.gy+0.5)/GH*r.height ]; }
+function drawCities(){
+  if(!camp) return; const r=ov.getBoundingClientRect(); octx.clearRect(0,0,r.width,r.height);
+  const rad=Math.max(4, r.width/GW*5);
+  // links between owned neighbours
+  octx.lineWidth=1.5; octx.strokeStyle="rgba(140,255,120,.35)";
+  myCities().forEach(c=>{ const [ax,ay]=cxy(c); c.nb.forEach(n=>{ const b=byId(n); if(b.owner==="mine"&&b.id>c.id){ const [bx,by]=cxy(b); octx.beginPath();octx.moveTo(ax,ay);octx.lineTo(bx,by);octx.stroke(); } }); });
+  for(const c of camp.cities){
+    const [x,y]=cxy(c);
+    let col = c.owner==="mine" ? camp.startCol : c.owner==="gray" ? [138,143,149] : c.col;
+    octx.beginPath(); octx.arc(x,y,rad,0,7);
+    octx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`; octx.fill();
+    octx.lineWidth=1.5; octx.strokeStyle="rgba(0,0,0,.55)"; octx.stroke();
+    // attackable highlight
+    if(canWar(c)){ octx.lineWidth=2.2; octx.strokeStyle=`rgba(255,210,60,${0.55+0.45*Math.sin(pulse)})`; octx.beginPath(); octx.arc(x,y,rad+3,0,7); octx.stroke(); }
+    if(c===selected){ octx.lineWidth=2.4; octx.strokeStyle="#fff"; octx.beginPath(); octx.arc(x,y,rad+5,0,7); octx.stroke(); }
+    // level number
+    octx.fillStyle="rgba(0,0,0,.8)"; octx.font=`bold ${Math.max(8,rad*1.1)}px Outfit,sans-serif`;
+    octx.textAlign="center"; octx.textBaseline="middle"; octx.fillText(c.lvl, x, y+0.5);
+  }
+}
+function loop(){ pulse+=0.08; if(camp&&!menuOpen()) drawCities(); requestAnimationFrame(loop); }
+function menuOpen(){ return !document.getElementById("menu").classList.contains("hidden"); }
 
-/* ---------- hud ---------- */
+/* ---------- HUD ---------- */
 function hud(){
-  document.getElementById("coinN").textContent=fmtCoin(coins);
-  document.getElementById("mCoins").textContent=fmtCoin(coins);
-  const pc=nations[PLAYER].cells;
-  document.getElementById("landN").textContent=pc.toLocaleString();
-  document.getElementById("pctN").textContent=Math.round(pc/totalLand*100)+"%";
-  let alive=0; for(let k=1;k<nations.length;k++) if(nations[k].alive) alive++;
-  document.getElementById("aliveN").textContent=alive;
-  document.getElementById("lvlN").textContent=nations[PLAYER].level;
-  document.getElementById("protN").textContent=cityProt(nations[PLAYER].level).toLocaleString();
-  const lc=levelCost(nations[PLAYER].level);
-  document.getElementById("lvlCost").textContent=fmtCoin(lc);
-  document.getElementById("lvlBtn").disabled=coins<lc;
+  if(!camp) return;
+  document.getElementById("coinN").textContent=fmtCoin(camp.bank.coins);
+  const mine=myCities().length, tot=camp.cities.length;
+  document.getElementById("ownN").textContent=mine;
+  document.getElementById("pctN").textContent=Math.round(mine/tot*100)+"%";
+  document.getElementById("lvlN").textContent=camp.bank.level;
+  document.getElementById("diffN").textContent=camp.diff;
+  const sc=camp.startCol; document.getElementById("swMine").style.background=`rgb(${sc[0]},${sc[1]},${sc[2]})`;
 }
 
-/* ---------- tools UI ---------- */
-const toolsEl=document.getElementById("tools");
-function renderTools(){
-  toolsEl.innerHTML="";
-  PALETTE.forEach(p=>{
-    if(p.t===PCITY||p.t===SAND||p.t===WOOD||p.t===GLASS||p.t===STONE) return;   // not used on the world map
-    const lock=p.cost>0&&!unlocked.has(p.t);
-    const sellable=sellMode&&p.cost>0&&unlocked.has(p.t);
-    const el=document.createElement("div");
-    el.className="tool"+(p.t===tool&&mode==="weapon"?" sel":"")+(lock?" locked":"");
-    const tag=lock?`<span class="cost">${fmtCoin(p.cost)}c</span>`:sellable?`<span class="cost" style="color:var(--danger)">+${fmtCoin(p.cost)}c</span>`:"";
-    el.innerHTML=`<span class="dot" style="background:${p.col}"></span><span class="nm">${p.nm}</span>${tag}`;
-    el.onclick=()=>{
-      if(sellable){ coins+=p.cost; unlocked.delete(p.t); if(tool===p.t)tool=ACID; renderTools(); return; }
-      if(lock){ if(coins>=p.cost){ coins-=p.cost; unlocked.add(p.t); } else return; }
-      tool=p.t; setMode("weapon"); renderTools();
-    };
-    toolsEl.appendChild(el);
-  });
-  const sel=PALETTE.find(p=>p.t===tool);
-  document.getElementById("hudSel").textContent=sel?sel.nm:"—";
+/* ---------- interaction ---------- */
+let selected=null, choosing=false;
+const pop=document.getElementById("pop");
+function hidePop(){ pop.classList.remove("show"); selected=null; }
+ov.addEventListener("pointerdown",e=>{
+  const r=ov.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const rad=Math.max(7,r.width/GW*6);
+  let hit=null,best=1e9;
+  for(const c of camp.cities){ const [x,y]=cxy(c); const d=Math.hypot(x-mx,y-my); if(d<rad+4&&d<best){best=d;hit=c;} }
+  if(!hit){ hidePop(); return; }
+  if(choosing){ chooseStart(hit); return; }
+  selected=hit; showPop(hit, e.clientX-document.getElementById("stage").getBoundingClientRect().left, e.clientY-document.getElementById("stage").getBoundingClientRect().top);
+});
+function showPop(c, px, py){
+  const war=canWar(c), mine=c.owner==="mine", gray=c.owner==="gray";
+  let body=`<div class="nm">${c.name}</div><div class="meta">${REGION_NAME[c.cont]||c.cont} · Level ${c.lvl} · ${mine?"Yours":gray?"Destroyed":"Enemy"}</div>`;
+  if(mine){ body+=`<div class="meta" style="color:var(--toxic)">You hold this city.</div>`; }
+  else if(gray){ const cost=captureCost(c); body+=`<button class="btn" id="popCap" ${camp.bank.coins<cost?"disabled":""}>CAPTURE — ${fmtCoin(cost)}c</button>`; }
+  else if(war){ body+=`<button class="btn danger" id="popWar">DECLARE WAR${war.cost?` — ${fmtCoin(war.cost)}c`:""}</button>`;
+    if(war.cost&&camp.bank.coins<war.cost) body=body.replace('id="popWar"','id="popWar" disabled'); }
+  else { body+=`<div class="meta" style="color:var(--danger)">Not reachable yet — capture a bordering city first.</div>`; }
+  body+=`<button class="btn alt" id="popCancel" style="margin-top:6px">Cancel</button>`;
+  pop.innerHTML=body;
+  const sw=document.getElementById("stage").clientWidth, sh=document.getElementById("stage").clientHeight;
+  pop.style.left=Math.min(px+8, sw-210)+"px"; pop.style.top=Math.min(py+8, sh-150)+"px";
+  pop.classList.add("show");
+  const cap=document.getElementById("popCap"); if(cap) cap.onclick=()=>doCapture(c);
+  const war2=document.getElementById("popWar"); if(war2&&!war2.disabled) war2.onclick=()=>doWar(c, canWar(c));
+  document.getElementById("popCancel").onclick=hidePop;
 }
-function setMode(m){
-  mode=m;
-  document.getElementById("expandBtn").classList.toggle("on",m==="expand");
-  document.getElementById("hudMode").textContent=m==="expand"?"EXPAND":"BOMBARD";
-  document.getElementById("modeTip").textContent=m==="expand"
-    ? "Click your border to claim neutral land." : "Drop the weapon on an enemy nation to destroy its land.";
-  renderTools();
+function chooseStart(c){
+  camp.startCol=[86,240,96]; c.owner="mine"; choosing=false;
+  document.getElementById("startScreen").classList.add("hidden");
+  save(); hud(); drawCities(); toast(`Homeland founded at ${c.name}.`);
 }
-
-/* ---------- input ---------- */
-let down=false;
-function evt(e){ const r=cv.getBoundingClientRect(); const gx=Math.floor((e.clientX-r.left)/r.width*GW), gy=Math.floor((e.clientY-r.top)/r.height*GH); if(inB(gx,gy)) stamp(gx,gy); }
-cv.addEventListener("pointerdown",e=>{ down=true; evt(e); cv.setPointerCapture(e.pointerId); });
-cv.addEventListener("pointermove",e=>{ if(down) evt(e); });
-cv.addEventListener("pointerup",()=>down=false);
-cv.addEventListener("wheel",e=>{ e.preventDefault(); brush=Math.max(1,Math.min(30,brush+(e.deltaY<0?1:-1))); document.getElementById("brush").value=brush; document.getElementById("brushN").textContent=brush; },{passive:false});
-
-document.getElementById("expandBtn").onclick=()=>setMode("expand");
-document.getElementById("brush").oninput=e=>{ brush=+e.target.value; document.getElementById("brushN").textContent=brush; };
-document.getElementById("lvlBtn").onclick=()=>levelUp(1);
-document.getElementById("lvl5").onclick=()=>levelUp(5);
-document.getElementById("lvl25").onclick=()=>levelUp(25);
-document.getElementById("lvlMax").onclick=()=>levelUp(100000);
-document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap to refund 100%)":"OFF"); renderTools(); };
-// mobile drawer
-const sideEl=document.getElementById("side"), dBack=document.getElementById("drawerBack");
-const closeD=()=>{ sideEl.classList.remove("open"); dBack.classList.remove("show"); };
-document.getElementById("drawerToggle").onclick=()=>{ sideEl.classList.toggle("open"); dBack.classList.toggle("show"); };
-document.getElementById("mMenu").onclick=()=>location.href="/";
-dBack.onclick=closeD;
-
-/* ---------- menu ---------- */
-let nationCount=100;
-document.querySelectorAll("#natOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#natOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); nationCount=+o.dataset.n; });
-document.querySelectorAll("#aggOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#aggOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); AGG=+o.dataset.a; });
-document.getElementById("howBtn").onclick=()=>{ const h=document.getElementById("how"); h.style.display=h.style.display==="none"?"block":"none"; };
-
-/* ---------- game flow ---------- */
-let running=false, gameOver=false, started=false;
-function beginGame(){
-  genLand(); genNations(nationCount);
-  coins=2500; gameOver=false; setMode("expand"); renderTools();
-  document.getElementById("menu").style.display="none";
-  running=true; started=true;
+function doCapture(c){
+  const cost=captureCost(c); if(camp.bank.coins<cost) return;
+  camp.bank.coins-=cost; c.owner="mine"; c.col=camp.startCol.slice();
+  save(); hidePop(); hud(); drawCities(); toast(`Captured ${c.name} for ${fmtCoin(cost)}c.`);
+  checkWin();
 }
-document.getElementById("playBtn").onclick=()=>{
-  if(!mapReady){ pendingStart=true; document.getElementById("menuMsg").textContent="Loading world…"; return; }
-  beginGame();
-};
-function endGame(win){
-  gameOver=true; running=false;
-  document.getElementById("overTitle").textContent=win?"🌍 WORLD CONQUERED":"💀 ELIMINATED";
-  document.getElementById("overTitle").style.color=win?"var(--toxic)":"var(--danger)";
-  document.getElementById("overSub").textContent=win?"You dominate the planet.":"Your nation was wiped from the map.";
-  document.getElementById("over").classList.add("show");
+function doWar(c, war){
+  if(war.cost){ if(camp.bank.coins<war.cost) return; camp.bank.coins-=war.cost; }
+  // attacker = an owned neighbour (same continent) or, cross-continent, nearest owned city
+  let atk=null;
+  if(!war.cross){ const n=c.nb.map(byId).find(b=>b.owner==="mine"); atk=n?n.id:null; }
+  else { let best=1e9; myCities().forEach(m=>{ const d=Math.hypot(m.gx-c.gx,m.gy-c.gy); if(d<best){best=d;atk=m.id;} }); }
+  save(); launchBattle(c, atk, false);
 }
-function checkEnd(){
-  if(nations[PLAYER].cells<=0){ endGame(false); return; }
-  let others=0; for(let k=2;k<nations.length;k++) if(nations[k].alive) others++;
-  if(others===0 || nations[PLAYER].cells>=totalLand*0.65) endGame(true);
+function launchBattle(target, attackerId, defense){
+  const b=camp.bank;
+  const p=new URLSearchParams({ campaign:"1", city:String(target.id), elv:String(target.lvl), diff:camp.diff,
+    coins:String(b.coins), plv:String(b.level), brush:String(b.brushLevel), un:b.unlocked.join(","),
+    name:encodeURIComponent(target.name), atk:attackerId==null?"":String(attackerId), def:defense?"1":"0" });
+  location.href="/singleplayer?"+p.toString();
 }
 
-/* ---------- main loop ---------- */
-let last=performance.now(), botAcc=0, slowAcc=0, endAcc=0;
-function loop(now){
-  const dt=now-last; last=now;
-  if(running&&!gameOver){
-    simChem();
-    botAcc+=dt; if(botAcc>=140){ botAcc=0; botPass(); }
-    slowAcc+=dt; if(slowAcc>=1000){ slowAcc=0; regenIncome(); }
-    endAcc+=dt; if(endAcc>=600){ endAcc=0; checkEnd(); }
+/* ---------- battle result ---------- */
+function applyResult(){
+  let r; try{ r=JSON.parse(localStorage.getItem(RES)); }catch{}
+  localStorage.removeItem(RES);
+  if(!r) return;
+  camp.bank={ coins:r.coins|0, level:Math.max(1,r.playerLevel|0), unlocked:r.unlocked||camp.bank.unlocked, brushLevel:Math.max(1,r.brushLevel|0) };
+  const tc=byId(r.city), atk=r.attacker!==""&&r.attacker!=null?byId(+r.attacker):null;
+  if(r.defense){
+    if(r.win){ winScreen("DEFENDED","You repelled the assault."); }
+    else { if(atk) atk.owner="gray"; winScreen("CITY LOST", (atk?atk.name:"A city")+" was overrun."); }
+  } else {
+    if(r.win){ if(tc) tc.owner="gray"; winScreen("CITY RAZED", (tc?tc.name:"The city")+" lies in ruins — capture it to annex it."); }
+    else { if(atk) atk.owner="gray"; winScreen("DEFEAT", "Your assault failed — "+(atk?atk.name:"your staging city")+" fell."); }
   }
-  if(started){ render(); hud(); }
-  requestAnimationFrame(loop);
+  save(); checkWin();
+  maybeCounterattack();
 }
+function checkWin(){
+  if(camp.cities.every(c=>c.owner!=="enemy") && camp.cities.some(c=>c.owner==="mine")){
+    winScreen("🌍 WORLD CONQUERED","Every city flies your colours.");
+  }
+}
+let queuedCounter=null;
+function maybeCounterattack(){
+  if(queuedCounter) return;
+  if(camp.diff!=="hard"&&camp.diff!=="extreme") return;
+  const p=camp.diff==="extreme"?0.8:0.5; if(Math.random()>p) return;
+  // an enemy bordering one of your cities strikes
+  const targets=[];
+  myCities().forEach(m=>m.nb.forEach(n=>{ const e=byId(n); if(e.owner==="enemy") targets.push([e,m]); }));
+  if(!targets.length) return;
+  queuedCounter=targets[(Math.random()*targets.length)|0];
+}
+
+/* ---------- screens ---------- */
+function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2600); }
+function winScreen(title,sub){ document.getElementById("winTitle").textContent=title; document.getElementById("winSub").textContent=sub; document.getElementById("winScreen").classList.remove("hidden"); }
+document.getElementById("winOk").onclick=()=>{
+  document.getElementById("winScreen").classList.add("hidden");
+  if(queuedCounter){ const [e,m]=queuedCounter; queuedCounter=null;
+    banner(`⚔ ${e.name} (Lv ${e.lvl}) attacks ${m.name}! Defend your city.`, ()=>launchBattle(e, m.id, true));
+  }
+}
+function banner(msg, onDefend){
+  const b=document.getElementById("banner"); b.innerHTML=`${msg} <button class="btn danger" style="display:inline-block;width:auto;margin-left:8px;padding:6px 12px" id="bDef">DEFEND</button>`;
+  b.classList.add("show"); document.getElementById("bDef").onclick=()=>{ b.classList.remove("show"); onDefend(); };
+}
+
+/* ---------- menu wiring ---------- */
+let diff="medium";
+document.querySelectorAll("#diffOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#diffOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); diff=o.dataset.d; });
+function showMap(){ document.getElementById("menu").classList.add("hidden"); whenMap(()=>{ buildTerrain(); paintTerrain(); fitOverlay(); hud(); }); }
+document.getElementById("newBtn").onclick=()=>{ whenMap(()=>{ buildTerrain(); newCampaign(diff); paintTerrain(); document.getElementById("menu").classList.add("hidden"); fitOverlay(); hud(); choosing=true; document.getElementById("startScreen").classList.remove("hidden"); }); };
+document.getElementById("resumeBtn").onclick=()=>{ if(load()){ showMap(); applyResult(); } else toast("No saved campaign."); };
+document.getElementById("startCancel").onclick=()=>{ document.getElementById("startScreen").classList.add("hidden"); choosing=false; };
+document.getElementById("restartBtn").onclick=()=>{ if(confirm("Restart the whole campaign?")){ localStorage.removeItem(SAVE); localStorage.removeItem(RES); location.reload(); } };
+
+/* ---------- boot ---------- */
+window.addEventListener("resize", ()=>{ if(camp) fitOverlay(); });
 requestAnimationFrame(loop);
+// auto-resume if returning from a battle, else show menu
+if(localStorage.getItem(RES) && load()){
+  showMap(); applyResult();
+} else {
+  // preselect saved difficulty button if a campaign exists
+  if(localStorage.getItem(SAVE)) document.getElementById("resumeBtn").style.outline="2px solid var(--toxic)";
+}
 </script>
 </body>
 </html>
+
+
