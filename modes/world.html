@@ -8,7 +8,7 @@
 <meta name="color-scheme" content="dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
   :root{ --bg0:#06141b;--bg1:#0a2531;--bg2:#0e3242;--ink:#dff3ee;--muted:#7fa6a0;
     --toxic:#8ef02a;--toxic2:#5fae1f;--toxic-dim:#5fae1f;--amber:#ffb627;--danger:#ff5347;
@@ -149,14 +149,12 @@ MAPIMG.onload=()=>{ mapReady=true; if(pending){ const p=pending; pending=null; p
 MAPIMG.src="data:image/jpeg;base64,"+(window.WORLD_MAP_B64||"");
 function whenMap(fn){ if(mapReady) fn(); else pending=fn; }
 
-function buildTerrain(){
+function buildTerrain(){   // sample the Earth image into a land/ocean mask only
   const off=document.createElement("canvas"); off.width=GW; off.height=GH;
   const o=off.getContext("2d"); o.drawImage(MAPIMG,0,0,GW,GH);
   const d=o.getImageData(0,0,GW,GH).data;
-  for(let i=0;i<N;i++){ let r=d[i*4],g=d[i*4+1],b=d[i*4+2]; const br=(r+g+b)/3;
-    const ocean=(b>=r&&br<70)||br<42; land[i]=ocean?0:1;
-    if(ocean){ r=(r*0.5+16)|0; g=(g*0.6+38)|0; b=(b*0.7+66)|0; }
-    baseCol[i]=(255<<24)|(b<<16)|(g<<8)|r;
+  for(let i=0;i<N;i++){ const r=d[i*4],g=d[i*4+1],b=d[i*4+2], br=(r+g+b)/3;
+    land[i] = ((b>=r&&br<70)||br<42) ? 0 : 1;
   }
 }
 
@@ -189,16 +187,19 @@ const SAVE="as_camp", RES="as_camp_result";
 let camp=null;   // {diff, startCol, bank:{coins,level,unlocked,brushLevel}, cities:[...]}
 const CX=GW/2, CY=GH/2, MAXD=Math.sqrt(CX*CX+CY*CY);
 function genCities(diff){
-  const S=15, cities=[]; let id=0;
+  const S=16, cities=[]; let id=0;
   for(let gy=Math.floor(S/2); gy<GH; gy+=S) for(let gx=Math.floor(S/2); gx<GW; gx+=S){
-    const i=I(gx,gy); if(!land[i]) continue;
-    const reg=regionOf(gx,gy); if(!reg||BLOCKED.has(reg)) continue;
+    if(Math.random()<0.16) continue;                                  // irregular, not a grid
+    // jitter off the lattice so cities scatter naturally
+    let gx2=Math.round(gx+(Math.random()-0.5)*S*0.85), gy2=Math.round(gy+(Math.random()-0.5)*S*0.85);
+    if(gx2<0||gx2>=GW||gy2<0||gy2>=GH||!land[I(gx2,gy2)]){ if(!land[I(gx,gy)]) continue; gx2=gx; gy2=gy; }
+    const reg=regionOf(gx2,gy2); if(!reg||BLOCKED.has(reg)) continue;
     // require a solid landmass around it (skip specks)
-    let c=0; for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){ const x=gx+dx,y=gy+dy; if(x>=0&&x<GW&&y>=0&&y<GH&&land[I(x,y)]) c++; }
+    let c=0; for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){ const x=gx2+dx,y=gy2+dy; if(x>=0&&x<GW&&y>=0&&y<GH&&land[I(x,y)]) c++; }
     if(c<14) continue;
-    const dist=Math.sqrt((gx-CX)**2+(gy-CY)**2);
+    const dist=Math.sqrt((gx2-CX)**2+(gy2-CY)**2);
     const lvl=1+Math.round(dist/MAXD*12);
-    cities.push({id, gx, gy, lvl, cont:reg, name:cityName(id*97+7), col:randCol(id*131+5), owner:"enemy"});
+    cities.push({id, gx:gx2, gy:gy2, lvl, cont:reg, name:cityName(id*97+7), col:randCol(id*131+5), owner:"enemy"});
     id++;
   }
   // neighbours (same continent, within reach)
@@ -240,12 +241,15 @@ function captureCost(c){ return 500*c.lvl; }
 const baseCv=document.getElementById("base"), bctx=baseCv.getContext("2d");
 baseCv.width=GW; baseCv.height=GH;
 const bimg=bctx.createImageData(GW,GH), bbuf=new Uint32Array(bimg.data.buffer);
+const ABGR=(r,g,b)=>(255<<24)|(b<<16)|(g<<8)|r;
+const C_OCEAN=ABGR(9,26,44), C_LAND=ABGR(46,62,52), C_COAST=ABGR(150,205,165),   // flat political look + bright coastline
+      C_BLAND=ABGR(58,40,42), C_BCOAST=ABGR(150,96,96);                            // blocked continents
 function paintTerrain(){
   for(let i=0;i<N;i++){
-    let v=baseCol[i];
-    if(land[i]){ const reg=regionOf(i%GW,(i/GW)|0);
-      if(!reg||BLOCKED.has(reg)){ const r=v&255,g=(v>>8)&255,b=(v>>16)&255; v=(255<<24)|(((b*0.4)|0)<<16)|(((g*0.4)|0)<<8)|((r*0.4+20)|0); } }
-    bbuf[i]=v;
+    if(!land[i]){ bbuf[i]=C_OCEAN; continue; }
+    const x=i%GW, y=(i/GW)|0, reg=regionOf(x,y), blk=!reg||BLOCKED.has(reg);
+    const coast=(x>0&&!land[i-1])||(x<GW-1&&!land[i+1])||(y>0&&!land[i-GW])||(y<GH-1&&!land[i+GW]);
+    bbuf[i] = coast ? (blk?C_BCOAST:C_COAST) : (blk?C_BLAND:C_LAND);
   }
   bctx.putImageData(bimg,0,0);
 }
@@ -255,22 +259,21 @@ let pulse=0;
 function cxy(c){ const r=ov.getBoundingClientRect(); return [ (c.gx+0.5)/GW*r.width, (c.gy+0.5)/GH*r.height ]; }
 function drawCities(){
   if(!camp) return; const r=ov.getBoundingClientRect(); octx.clearRect(0,0,r.width,r.height);
-  const rad=Math.max(4, r.width/GW*5);
-  // links between owned neighbours
-  octx.lineWidth=1.5; octx.strokeStyle="rgba(140,255,120,.35)";
-  myCities().forEach(c=>{ const [ax,ay]=cxy(c); c.nb.forEach(n=>{ const b=byId(n); if(b.owner==="mine"&&b.id>c.id){ const [bx,by]=cxy(b); octx.beginPath();octx.moveTo(ax,ay);octx.lineTo(bx,by);octx.stroke(); } }); });
+  octx.imageSmoothingEnabled=false;
+  const sz=Math.max(9, Math.round(r.width/GW*9)), half=sz>>1;
+  const fs=Math.max(6, Math.round(sz*0.5));
+  octx.textAlign="center"; octx.textBaseline="middle";
   for(const c of camp.cities){
-    const [x,y]=cxy(c);
-    let col = c.owner==="mine" ? camp.startCol : c.owner==="gray" ? [138,143,149] : c.col;
-    octx.beginPath(); octx.arc(x,y,rad,0,7);
-    octx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`; octx.fill();
-    octx.lineWidth=1.5; octx.strokeStyle="rgba(0,0,0,.55)"; octx.stroke();
-    // attackable highlight
-    if(canWar(c)){ octx.lineWidth=2.2; octx.strokeStyle=`rgba(255,210,60,${0.55+0.45*Math.sin(pulse)})`; octx.beginPath(); octx.arc(x,y,rad+3,0,7); octx.stroke(); }
-    if(c===selected){ octx.lineWidth=2.4; octx.strokeStyle="#fff"; octx.beginPath(); octx.arc(x,y,rad+5,0,7); octx.stroke(); }
-    // level number
-    octx.fillStyle="rgba(0,0,0,.8)"; octx.font=`bold ${Math.max(8,rad*1.1)}px Outfit,sans-serif`;
-    octx.textAlign="center"; octx.textBaseline="middle"; octx.fillText(c.lvl, x, y+0.5);
+    let [x,y]=cxy(c); x=Math.round(x); y=Math.round(y);
+    const col = c.owner==="mine" ? camp.startCol : c.owner==="gray" ? [140,145,150] : c.col;
+    octx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`;
+    octx.fillRect(x-half, y-half, sz, sz);                                   // pixel square dot
+    octx.lineWidth=2; octx.strokeStyle="rgba(0,0,0,.75)"; octx.strokeRect(x-half+1, y-half+1, sz-2, sz-2);
+    if(canWar(c)){ octx.lineWidth=2; octx.strokeStyle=`rgba(255,210,60,${0.5+0.5*Math.sin(pulse)})`; octx.strokeRect(x-half-3, y-half-3, sz+6, sz+6); }
+    if(c===selected){ octx.lineWidth=2; octx.strokeStyle="#fff"; octx.strokeRect(x-half-5, y-half-5, sz+10, sz+10); }
+    octx.font=`${fs}px "Press Start 2P", monospace`;                         // blocky minecraft-style number
+    octx.fillStyle="rgba(0,0,0,.85)"; octx.fillText(c.lvl, x+1, y+1);
+    octx.fillStyle="#fff"; octx.fillText(c.lvl, x, y);
   }
 }
 function loop(){ pulse+=0.08; if(camp&&!menuOpen()) drawCities(); requestAnimationFrame(loop); }
@@ -415,5 +418,6 @@ if(localStorage.getItem(RES) && load()){
 </script>
 </body>
 </html>
+
 
 
