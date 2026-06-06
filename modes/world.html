@@ -148,7 +148,7 @@
     <div class="card">
       <h2>Action</h2>
       <button class="btn on" id="expandBtn">⛏ EXPAND (claim land)</button>
-      <div class="slider">Brush <input type="range" id="brush" min="1" max="14" value="5"><b id="brushN" style="color:var(--ink)">5</b></div>
+      <div class="slider">Brush <input type="range" id="brush" min="1" max="30" value="9"><b id="brushN" style="color:var(--ink)">9</b></div>
       <div class="tip" style="margin-top:6px" id="modeTip">Click your border to claim neutral land.</div>
     </div>
     <div class="card">
@@ -178,7 +178,7 @@ const { EMPTY,ACID,WATER,FIRE,OIL,SAND,WOOD,GLASS,STONE,LAVA,MAGMA,NAPALM,PLASMA
         TNT,NUKE,HBOMB,ANTIMATTER,PCITY,NEW_BASE } = ids;
 
 /* ---------- grid ---------- */
-const GW=210, GH=110, N=GW*GH;
+const GW=480, GH=240, N=GW*GH;
 const I=(x,y)=>y*GW+x;
 const inB=(x,y)=>x>=0&&x<GW&&y>=0&&y<GH;
 const land  = new Uint8Array(N);     // 1 = land
@@ -188,6 +188,7 @@ const chem  = new Uint8Array(N);     // loose chemical layer (0 = none)
 const cown  = new Uint8Array(N);     // 1 = player-originated chemical
 const clife = new Uint8Array(N);     // remaining spread life
 const cmv   = new Uint8Array(N);     // moved-guard for chem
+const baseCol = new Uint32Array(N);  // real Earth terrain colour per cell (drawn under the nations)
 const TERR_BASE = 8;
 
 /* ---------- real-world land mask (sampled from an embedded equirectangular Earth) ---------- */
@@ -198,8 +199,11 @@ function genLand(){
   const off=document.createElement("canvas"); off.width=GW; off.height=GH;
   const o=off.getContext("2d"); o.drawImage(MAPIMG,0,0,GW,GH);
   const d=o.getImageData(0,0,GW,GH).data;
-  for(let i=0;i<N;i++){ const r=d[i*4],g=d[i*4+1],b=d[i*4+2], br=(r+g+b)/3;
-    land[i] = ((b>=r && br<70) || br<42) ? 0 : 1;   // dark/blue = ocean, else land
+  for(let i=0;i<N;i++){ let r=d[i*4],g=d[i*4+1],b=d[i*4+2]; const br=(r+g+b)/3;
+    const ocean = (b>=r && br<70) || br<42;
+    land[i] = ocean ? 0 : 1;
+    if(ocean){ r=(r*0.5+18)|0; g=(g*0.6+40)|0; b=(b*0.7+70)|0; }   // deepen the sea a touch
+    baseCol[i] = (255<<24)|(b<<16)|(g<<8)|r;
   }
 }
 
@@ -345,7 +349,7 @@ function regenIncome(){
 }
 
 /* ---------- player actions ---------- */
-let tool=ACID, mode="expand", brush=5, sellMode=false;
+let tool=ACID, mode="expand", brush=9, sellMode=false;
 const unlocked=new Set([ACID,WATER,SAND,EMPTY]);
 function stamp(gx,gy){
   if(gameOver) return;
@@ -388,18 +392,17 @@ const chemCol={};
 PALETTE.forEach(p=>{ const c=hexToRgb(p.col); chemCol[p.t]=(255<<24)|(c[2]<<16)|(c[1]<<8)|c[0]; });
 function render(){
   for(let i=0;i<N;i++){
-    if(chem[i]!==EMPTY){ buf[i]=chemCol[chem[i]]||OCEAN; continue; }
-    if(!land[i]){ buf[i]=OCEAN; continue; }
+    const base=baseCol[i];
+    if(chem[i]!==EMPTY){ buf[i]=chemCol[chem[i]]||base; continue; }
     const o=owner[i];
-    if(o===0){ buf[i]=NEUT; continue; }
-    const nat=nations[o], c=nat.col, f=0.4+0.6*Math.min(1,thp[i]/maxHp(o));
-    let r=c[0]*f|0, g=c[1]*f|0, b=c[2]*f|0;
-    if(o===PLAYER){                                  // border highlight
-      const x=i%GW,y=(i/GW)|0;
-      if((x>0&&owner[i-1]!==PLAYER)||(x<GW-1&&owner[i+1]!==PLAYER)||(y>0&&owner[i-GW]!==PLAYER)||(y<GH-1&&owner[i+GW]!==PLAYER)){
-        r=220;g=255;b=180;
-      }
-    }
+    if(o===0){ buf[i]=base; continue; }                          // ocean / unclaimed terrain shows through
+    const nat=nations[o], c=nat.col;
+    const bb=base&255, gg=(base>>8)&255, rr=(base>>16)&255;       // base is ABGR → low byte = R
+    const a=0.42+0.30*Math.min(1,thp[i]/maxHp(o));               // healthier land = stronger national colour
+    let r=(c[0]*a+bb*(1-a))|0, g=(c[1]*a+gg*(1-a))|0, b=(c[2]*a+rr*(1-a))|0;
+    const x=i%GW, y=(i/GW)|0;
+    const edge=(x>0&&owner[i-1]!==o)||(x<GW-1&&owner[i+1]!==o)||(y>0&&owner[i-GW]!==o)||(y<GH-1&&owner[i+GW]!==o);
+    if(edge){ if(o===PLAYER){ r=225;g=255;b=185; } else { r=(r*0.45)|0; g=(g*0.45)|0; b=(b*0.45)|0; } }   // country outlines
     buf[i]=(255<<24)|(b<<16)|(g<<8)|r;
   }
   ctx.putImageData(img,0,0);
@@ -459,7 +462,7 @@ function evt(e){ const r=cv.getBoundingClientRect(); const gx=Math.floor((e.clie
 cv.addEventListener("pointerdown",e=>{ down=true; evt(e); cv.setPointerCapture(e.pointerId); });
 cv.addEventListener("pointermove",e=>{ if(down) evt(e); });
 cv.addEventListener("pointerup",()=>down=false);
-cv.addEventListener("wheel",e=>{ e.preventDefault(); brush=Math.max(1,Math.min(14,brush+(e.deltaY<0?1:-1))); document.getElementById("brush").value=brush; document.getElementById("brushN").textContent=brush; },{passive:false});
+cv.addEventListener("wheel",e=>{ e.preventDefault(); brush=Math.max(1,Math.min(30,brush+(e.deltaY<0?1:-1))); document.getElementById("brush").value=brush; document.getElementById("brushN").textContent=brush; },{passive:false});
 
 document.getElementById("expandBtn").onclick=()=>setMode("expand");
 document.getElementById("brush").oninput=e=>{ brush=+e.target.value; document.getElementById("brushN").textContent=brush; };
