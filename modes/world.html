@@ -283,6 +283,7 @@ function captureCost(c){ return 500*c.lvl; }
 /* ---------- rendering ---------- */
 const baseCv=document.getElementById("base"), bctx=baseCv.getContext("2d");
 baseCv.width=GW; baseCv.height=GH;
+const terr=document.createElement("canvas"); terr.width=GW; terr.height=GH; const tctx=terr.getContext("2d");   // solid, non-overlapping country fill
 const bimg=bctx.createImageData(GW,GH), bbuf=new Uint32Array(bimg.data.buffer);
 const ABGR=(r,g,b)=>(255<<24)|(b<<16)|(g<<8)|r;
 const C_OCEAN=ABGR(9,26,44), C_LAND=ABGR(46,62,52), C_COAST=ABGR(150,205,165), C_BLAND=ABGR(58,40,42), C_BCOAST=ABGR(150,96,96);
@@ -300,30 +301,41 @@ const ov=document.getElementById("ov"), octx=ov.getContext("2d");
 function fitOverlay(){ const r=ov.getBoundingClientRect(); ov.width=r.width*devicePixelRatio; ov.height=r.height*devicePixelRatio; octx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); drawCities(); }
 let pulse=0;
 function cxy(c){ const r=ov.getBoundingClientRect(); return [ (c.gx+0.5)/GW*r.width, (c.gy+0.5)/GH*r.height ]; }
-function hull(p){ if(p.length<3) return p.slice();
-  p=p.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]); const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
-  const lo=[]; for(const pt of p){ while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],pt)<=0)lo.pop(); lo.push(pt); }
-  const up=[]; for(let i=p.length-1;i>=0;i--){ const pt=p[i]; while(up.length>=2&&cr(up[up.length-2],up[up.length-1],pt)<=0)up.pop(); up.push(pt); }
-  lo.pop(); up.pop(); return lo.concat(up); }
-function drawTerritory(cities,col,sz){   // filled, thick-outlined blob connecting the cities
-  if(!cities.length) return; const pts=cities.map(c=>{const[x,y]=cxy(c);return [x,y];});
-  const h=hull(pts);
-  octx.lineJoin="round"; octx.lineCap="round"; octx.lineWidth=Math.max(8,sz+8);
-  octx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},.22)`; octx.strokeStyle=`rgba(${col[0]},${col[1]},${col[2]},.85)`;
-  octx.beginPath();
-  if(h.length===1){ octx.arc(h[0][0],h[0][1],sz*0.8,0,7); }
-  else { octx.moveTo(h[0][0],h[0][1]); for(let i=1;i<h.length;i++) octx.lineTo(h[i][0],h[i][1]); octx.closePath(); }
-  octx.stroke(); octx.fill();
+// rebuild the solid country map: every land cell takes the colour of its nearest same-continent city
+// (a Voronoi partition → regions never overlap; borders are exact). Cheap to blit each frame; rebuilt on changes.
+const TERR_MAXR=15;
+function buildTerritory(){
+  const img2=tctx.createImageData(GW,GH), b2=new Uint32Array(img2.data.buffer);
+  if(camp.mode!=="country"||!camp.countries){ tctx.putImageData(img2,0,0); return; }
+  const cs=camp.cities, B=16, buckets=new Map();
+  cs.forEach((c,idx)=>{ const k=(c.gx>>4)+","+(c.gy>>4); let a=buckets.get(k); if(!a){a=[];buckets.set(k,a);} a.push(idx); });
+  const grp=cs.map(c=> c.owner==="mine"?"M":c.owner==="gray"?"G":"C"+c.country);
+  const col=cs.map(c=> c.owner==="mine"?camp.startCol : c.owner==="gray"?[140,145,150] : (countryOf(c)?countryOf(c).col:c.col));
+  const near=new Int32Array(N).fill(-1), R2=TERR_MAXR*TERR_MAXR;
+  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++){ const i=I(x,y); if(!land[i]) continue;
+    const reg=regionOf(x,y); if(!reg||(BLOCKED.has(reg)&&!camp.middleOpen)) continue;
+    let bi=-1,bd=R2; const bx=x>>4,by=y>>4;
+    for(let oy=-1;oy<=1;oy++)for(let ox=-1;ox<=1;ox++){ const arr=buckets.get((bx+ox)+","+(by+oy)); if(!arr) continue;
+      for(const idx of arr){ const c=cs[idx]; if(c.cont!==reg) continue; const dx=c.gx-x,dy=c.gy-y,d=dx*dx+dy*dy; if(d<bd){bd=d;bi=idx;} } }
+    near[i]=bi;
+  }
+  for(let i=0;i<N;i++){ const idx=near[i]; if(idx<0){ b2[i]=0; continue; }
+    const x=i%GW,y=(i/GW)|0, g=grp[idx];
+    let border=(x>0&&near[i-1]>=0&&grp[near[i-1]]!==g)||(x<GW-1&&near[i+1]>=0&&grp[near[i+1]]!==g)
+            ||(y>0&&near[i-GW]>=0&&grp[near[i-GW]]!==g)||(y<GH-1&&near[i+GW]>=0&&grp[near[i+GW]]!==g);
+    if(!border) border=(x>0&&near[i-1]<0)||(x<GW-1&&near[i+1]<0)||(y>0&&near[i-GW]<0)||(y<GH-1&&near[i+GW]<0);
+    let c=col[idx], rr=c[0],gg=c[1],bb=c[2];
+    if(border){ rr=(rr*0.32)|0; gg=(gg*0.32)|0; bb=(bb*0.32)|0; }   // sharp 1px dark border
+    b2[i]=(255<<24)|(bb<<16)|(gg<<8)|rr;
+  }
+  tctx.putImageData(img2,0,0);
 }
 function drawCities(){
   if(!camp) return; refresh(); const r=ov.getBoundingClientRect(); octx.clearRect(0,0,r.width,r.height);
   octx.imageSmoothingEnabled=false;
   const sz=Math.max(7, Math.round(r.width/GW*CITY_S*0.72)), half=sz>>1, fs=Math.max(6, Math.round(sz*0.55));
   const country = camp.mode==="country" && camp.countries;
-  if(country){
-    for(const co of camp.countries){ drawTerritory(countryEnemyCities(co), co.col, sz); }
-    drawTerritory(myCities(), camp.startCol, sz);
-  }
+  if(country){ octx.imageSmoothingEnabled=false; octx.drawImage(terr,0,0,r.width,r.height); }
   octx.textAlign="center"; octx.textBaseline="middle";
   for(const c of camp.cities){
     let [x,y]=cxy(c); x=Math.round(x); y=Math.round(y);
@@ -423,11 +435,11 @@ function chooseStart(c){
   assignLevelsFrom(c.id);
   if(camp.mode==="country") formCountries();
   document.getElementById("startScreen").classList.add("hidden");
-  paintTerrain(); save(); hud(); drawCities(); toast(`Homeland founded at ${c.name}.`);
+  paintTerrain(); buildTerritory(); save(); hud(); drawCities(); toast(`Homeland founded at ${c.name}.`);
 }
 function doCapture(c){ const cost=captureCost(c); if(camp.bank.coins<cost) return;
   camp.bank.coins-=cost; c.owner="mine"; c.col=camp.startCol.slice();
-  save(); hidePop(); hud(); drawCities(); toast(`Captured ${c.name} for ${fmtCoin(cost)}c.`); checkWin(); }
+  buildTerritory(); save(); hidePop(); hud(); drawCities(); toast(`Captured ${c.name} for ${fmtCoin(cost)}c.`); checkWin(); }
 function launchBattle(target, attackerId){
   const b=camp.bank; const rmul=Math.max(1, myCities().length/5);
   const p=new URLSearchParams({ campaign:"1", city:String(target.id), elv:String(target.lvl), waves:String(target.lvl*5),
@@ -447,7 +459,7 @@ function applyResult(){
   else { if(atk) atk.owner="gray"; title="DEFEAT"; sub="Your assault failed — "+(atk?atk.name:"your staging city")+" fell."; }
   const raids=runRaids();
   if(raids.length) sub += "\n⚔ Enemy raids: "+raids.join(", ");
-  save(); winScreen(title,sub); checkWin();
+  buildTerritory(); save(); winScreen(title,sub); checkWin();
 }
 // countries you're at war with (and, in city mode, bordering enemies on hard/extreme) strike your in-range cities
 function runRaids(){
@@ -477,7 +489,7 @@ document.getElementById("winOk").onclick=()=>{ document.getElementById("winScree
 let diff="medium", mode="city";
 document.querySelectorAll("#diffOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#diffOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); diff=o.dataset.d; });
 document.querySelectorAll("#modeOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#modeOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); mode=o.dataset.m; });
-function showMap(){ document.getElementById("menu").classList.add("hidden"); whenMap(()=>{ buildTerrain(); paintTerrain(); fitOverlay(); hud(); }); }
+function showMap(){ document.getElementById("menu").classList.add("hidden"); whenMap(()=>{ buildTerrain(); paintTerrain(); buildTerritory(); fitOverlay(); hud(); }); }
 document.getElementById("newBtn").onclick=()=>{ whenMap(()=>{ buildTerrain(); newCampaign(diff,mode); paintTerrain();
   document.getElementById("menu").classList.add("hidden"); fitOverlay(); hud(); choosing=true; document.getElementById("startScreen").classList.remove("hidden"); }); };
 document.getElementById("resumeBtn").onclick=()=>{ if(load()){ showMap(); applyResult(); } else toast("No saved campaign."); };
