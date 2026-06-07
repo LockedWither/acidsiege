@@ -465,7 +465,7 @@ function launchBattle(target, attackerId){
 function applyResult(){
   let r; try{ r=JSON.parse(localStorage.getItem(RES)); }catch{}
   localStorage.removeItem(RES); if(!r) return;
-  camp.bank={ coins:r.coins|0, level:Math.max(1,r.playerLevel|0), unlocked:r.unlocked||camp.bank.unlocked, brushLevel:Math.max(1,r.brushLevel|0) };
+  camp.bank={ coins:Math.max(0,Math.floor(+r.coins||0)), level:Math.max(1,Math.floor(+r.playerLevel||1)), unlocked:r.unlocked||camp.bank.unlocked, brushLevel:Math.max(1,Math.floor(+r.brushLevel||1)) };
   const tc=byId(r.city), atk=(r.attacker!==""&&r.attacker!=null)?byId(+r.attacker):null;
   let title,sub;
   if(r.win){ if(tc) tc.owner="gray"; title="CITY RAZED"; sub=(tc?tc.name:"The city")+" lies in ruins — capture it to annex it."; }
