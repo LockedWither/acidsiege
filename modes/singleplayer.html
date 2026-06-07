@@ -1596,6 +1596,7 @@ requestAnimationFrame(loop);
   const eStart=Math.max(1,num("elv",1));
   CAMPAIGN={ city:q.get("city"), enemyStart:eStart, attacker:q.get("atk")||null, defense:q.get("def")==="1", rmul:Math.max(1,+q.get("rmul")||1) };
   maxWaves=Math.max(1,num("waves",5)); enemyLevel=eStart; wave=1; razings=0; gameOver=false;
+  tool=[...unlocked].filter(t=>t!==EMPTY&&powerOf(t)>1).sort((a,b)=>powerOf(b)-powerOf(a))[0]||ACID;   // auto-equip your best weapon
   clearArena(); buildCities(); renderTools(); renderBrushBtn();
   setSandbox(false);
   const nm=q.get("name"); if(nm) document.getElementById("botBadge").textContent=(CAMPAIGN.defense?"DEFEND vs ":"SIEGE: ")+decodeURIComponent(nm);

@@ -18,7 +18,7 @@
   body{font-family:Outfit,system-ui,sans-serif;color:var(--ink);height:100vh;
     background:radial-gradient(1000px 700px at 80% -10%,#133a3f 0,transparent 55%),linear-gradient(160deg,var(--bg0),var(--bg1) 60%,var(--bg2))}
   #wrap{display:grid;grid-template-columns:280px 1fr;height:100vh;gap:10px;padding:10px}
-  #side{display:flex;flex-direction:column;gap:10px;overflow:auto}
+  #side{display:flex;flex-direction:column;gap:10px;overflow-y:auto;overflow-x:hidden}
   .card{background:var(--panel);border:1px solid var(--panel-edge);border-radius:14px;padding:12px;box-shadow:var(--shadow)}
   .card h2{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
   .brand h1{font-family:Bungee,Impact;font-size:23px;margin:0;color:var(--toxic);line-height:1}
@@ -36,19 +36,19 @@
   #stage{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--panel-edge);background:#0a2138}
   #base{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
   #ov{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:pointer}
-  /* popup */
-  #pop{position:absolute;z-index:5;min-width:190px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:12px;
+  #hoverlbl{position:absolute;z-index:4;pointer-events:none;background:rgba(4,20,26,.92);border:1px solid var(--panel-edge);
+    border-radius:8px;padding:3px 8px;font-size:12px;display:none;white-space:nowrap;transform:translate(-50%,-130%)}
+  #pop{position:absolute;z-index:5;min-width:200px;background:var(--panel);border:1px solid var(--panel-edge);border-radius:12px;
     padding:12px;box-shadow:var(--shadow);display:none}
   #pop.show{display:block}
   #pop .nm{font-family:Bungee,Impact;font-size:15px;color:var(--ink);margin-bottom:2px}
   #pop .meta{font-size:12px;color:var(--muted);margin-bottom:9px}
   #pop .btn{margin-top:6px}
-  /* menu / overlay screens */
   .screen{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
     background:radial-gradient(900px 600px at 50% -10%,#15414a 0,transparent 60%),linear-gradient(160deg,var(--bg0),var(--bg2));text-align:center;padding:20px}
   .screen.hidden{display:none}
   .logo{font-family:Bungee,Impact;font-size:clamp(32px,9vw,66px);color:var(--toxic);line-height:.86;margin:0;text-shadow:0 0 30px rgba(126,252,74,.35)}
-  .sub{color:var(--muted);letter-spacing:3px;text-transform:uppercase;font-size:12px}
+  .sub{color:var(--muted);letter-spacing:3px;text-transform:uppercase;font-size:12px;white-space:pre-line}
   .mbtn{font-family:Bungee,Impact;font-size:18px;padding:14px 22px;border:none;border-radius:13px;cursor:pointer;
     color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic-dim));box-shadow:0 8px 26px rgba(126,252,74,.3)}
   .mbtn.ghost{color:var(--ink);background:rgba(255,255,255,.05);border:1px solid var(--panel-edge);font-size:13px}
@@ -56,9 +56,6 @@
   .opt{padding:9px 13px;border-radius:10px;font-size:13px;cursor:pointer;background:rgba(255,255,255,.05);border:1px solid var(--panel-edge);color:var(--ink)}
   .opt.sel{background:linear-gradient(180deg,var(--toxic),var(--toxic2));color:#06141b;border-color:var(--toxic)}
   .menulabel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
-  .banner{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(4,20,26,.85);
-    border:1px solid var(--panel-edge);border-radius:10px;padding:8px 14px;font-size:13px;display:none}
-  .banner.show{display:block}
   #toast{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:6;background:rgba(4,20,26,.9);
     border:1px solid var(--panel-edge);border-radius:10px;padding:8px 14px;font-size:13px;display:none}
   #toast.show{display:block}
@@ -78,9 +75,14 @@
     <div class="opt" data-d="hard">Hard</div>
     <div class="opt" data-d="extreme" style="color:var(--danger)">Extreme</div>
   </div>
-  <div class="legend" style="max-width:440px">Conquer the planet one city at a time. Each siege is a 5-wave Acid Siege battle —
-    the enemy city levels up every wave. Central continents are walled off; the farther out a city, the higher its level.
-    Hard &amp; Extreme enemies counter-attack.</div>
+  <div class="menulabel">Mode</div>
+  <div class="opts" id="modeOpts">
+    <div class="opt sel" data-m="city">City Only</div>
+    <div class="opt" data-m="country">Include Countries</div>
+  </div>
+  <div class="legend" style="max-width:460px">Conquer the planet. Each siege is an Acid Siege battle (waves = city level × 5), the enemy levels up
+    every wave, and the farther a city sits from your capital the higher its level. In <b>Include Countries</b> cities form
+    nations — declare war on a nation to siege the cities inside, and it will strike back at your border cities.</div>
   <div class="opts" style="margin-top:6px">
     <button class="mbtn" id="newBtn">NEW CAMPAIGN</button>
     <button class="mbtn ghost" id="resumeBtn">RESUME</button>
@@ -102,10 +104,10 @@
     <div class="card">
       <h2>Legend</h2>
       <div class="legend">
-        <div><span class="sw" id="swMine"></span> Your cities</div>
-        <div><span class="sw" style="background:#c75"></span> Enemy cities</div>
+        <div><span class="sw" id="swMine"></span> Your empire</div>
+        <div><span class="sw" style="background:#c75"></span> Enemy</div>
         <div><span class="sw" style="background:#8a8f95"></span> Destroyed (capture for coins)</div>
-        <div style="margin-top:6px;color:var(--muted)">Click a city for info. You can only war the enemy cities bordering yours.</div>
+        <div style="margin-top:6px;color:var(--muted)" id="legHint">Click a city for info.</div>
       </div>
       <button class="btn alt" id="restartBtn" style="margin-top:10px">Restart campaign</button>
     </div>
@@ -114,13 +116,13 @@
   <main id="stage">
     <canvas id="base"></canvas>
     <canvas id="ov"></canvas>
-    <div class="banner" id="banner"></div>
+    <div id="hoverlbl"></div>
     <div id="toast"></div>
     <div id="pop"></div>
   </main>
 </div>
 
-<!-- choose-start prompt -->
+<!-- choose-start prompt (non-blocking so the map stays clickable) -->
 <div class="screen hidden" id="startScreen" style="background:transparent;pointer-events:none;justify-content:flex-start;padding-top:20px">
   <div style="background:rgba(4,20,26,.9);border:1px solid var(--panel-edge);border-radius:14px;padding:12px 22px;display:flex;flex-direction:column;align-items:center;gap:8px">
     <h1 class="logo" style="font-size:clamp(20px,4.5vw,34px)">CHOOSE YOUR HOMELAND</h1>
@@ -141,27 +143,26 @@
 <script>
 const C=window.ACID_CORE, fmtCoin=C.fmtCoin;
 const ACIDID=3, WATERID=2, SANDID=1, EMPTYID=0;
+// weapon-power ladder for auto-resolving enemy raids
+const LADDER=[...new Set([...Object.values(C.DMG), ...Object.values(C.BOMB_PWR), ...Object.values(C.DEFBYID).map(d=>d.dmg)])].sort((a,b)=>a-b);
+function botBestDmg(L){ return LADDER[Math.min(LADDER.length-1, Math.max(0, Math.floor((L-1)*1.3)))]; }
 
 /* ---------- terrain ---------- */
 const GW=480, GH=240, N=GW*GH;
 const I=(x,y)=>y*GW+x;
-const land=new Uint8Array(N), baseCol=new Uint32Array(N), contId=new Int16Array(N);
+const land=new Uint8Array(N);
 const MAPIMG=new Image(); let mapReady=false, pending=null;
 MAPIMG.onload=()=>{ mapReady=true; if(pending){ const p=pending; pending=null; p(); } };
 MAPIMG.src="data:image/jpeg;base64,"+(window.WORLD_MAP_B64||"");
 function whenMap(fn){ if(mapReady) fn(); else pending=fn; }
-
-function buildTerrain(){   // sample the Earth image into a land/ocean mask only
+function buildTerrain(){
   const off=document.createElement("canvas"); off.width=GW; off.height=GH;
   const o=off.getContext("2d"); o.drawImage(MAPIMG,0,0,GW,GH);
   const d=o.getImageData(0,0,GW,GH).data;
-  for(let i=0;i<N;i++){ const r=d[i*4],g=d[i*4+1],b=d[i*4+2], br=(r+g+b)/3;
-    land[i] = ((b>=r&&br<70)||br<42) ? 0 : 1;
-  }
+  for(let i=0;i<N;i++){ const r=d[i*4],g=d[i*4+1],b=d[i*4+2], br=(r+g+b)/3; land[i]=((b>=r&&br<70)||br<42)?0:1; }
 }
 
-/* ---------- continents (geographic regions) ---------- */
-// returns region code or "" — central EU/AF are blocked end-zones
+/* ---------- continents ---------- */
 function regionOf(gx,gy){
   const fx=gx/GW, fy=gy/GH;
   if(fy>=0.88) return "AN";
@@ -173,23 +174,24 @@ function regionOf(gx,gy){
   if(fx>=0.75 && fy>=0.53 && fy<0.87) return "AU";
   return "";
 }
-const BLOCKED=new Set(["EU","AF"]);
+const BLOCKED=new Set(["EU","AF"]);   // walled off until you choose a homeland
 const REGION_NAME={NA:"North America",SA:"South America",AS:"Asia",AU:"Oceania",AN:"Antarctica",EU:"Europe",AF:"Africa"};
 
-/* ---------- city naming ---------- */
+/* ---------- naming ---------- */
 const PRE=["New","Old","Fort","Port","Lake","Mount","San","Santa","North","South","Cape","Saint","Grand","Little","High","Red","Gold","Iron","Stone","Silver","Black","White","Sun","Moon","Star","Storm","Wind","Frost","Ash","Ember","Dust","Salt"];
 const SUF=["ton","ville","burg","field","ford","port","haven","stead","crest","gate","reach","fall","spire","hold","march","vale","moor","wick","bay","ridge","dale","shire","mont","grad","polis","heim","by","gard","mere","forge","watch","keep"];
 function cityName(seed){ const a=Math.imul(seed,2654435761)>>>0, b=Math.imul(seed^0x9e37,40503)>>>0; return PRE[a%PRE.length]+SUF[b%SUF.length]; }
+const CPRE=["Val","Keth","Dra","Mor","Thal","Zan","Bel","Cor","Ish","Vor","Aer","Gran","Nor","Sol","Tyr","Quen","Fen","Hol","Ryn","Esk","Mal","Oss","Pyr","Ax"];
+const CSUF=["doria","land","mark","gardia","stan","heim","wynn","oria","grad","via","esia","onia","arr","veld","moria","thia","ica","une","ovia","ane"];
+function countryName(seed){ const a=Math.imul(seed,2654435761)>>>0,b=Math.imul(seed^0x51ed,374761393)>>>0; return CPRE[a%CPRE.length]+CSUF[b%CSUF.length]; }
 function randCol(seed){ const h=(Math.imul(seed,2246822519)>>>0)%360; return hsl(h,55+(seed*37%20),52); }
 function hsl(h,s,l){ s/=100;l/=100; const k=n=>(n+h/30)%12,a=s*Math.min(l,1-l),f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
   return [Math.round(f(0)*255),Math.round(f(8)*255),Math.round(f(4)*255)]; }
 
 /* ---------- campaign state ---------- */
 const SAVE="as_camp", RES="as_camp_result";
-let camp=null;   // {diff, startCol, bank:{coins,level,unlocked,brushLevel}, cities:[...]}
-const CX=GW/2, CY=GH/2;
-const CITY_S=10, CITY_R=CITY_S*2.4;                                   // tighter spacing → many more cities
-// connect same-continent neighbours within reach; guarantee NO isolated city (link to nearest same-continent city)
+let camp=null;
+const CITY_S=10, CITY_R=CITY_S*2.4;
 function computeNeighbors(cities){
   cities.forEach(a=>a.nb=[]);
   for(let i=0;i<cities.length;i++) for(let j=i+1;j<cities.length;j++){ const a=cities[i],b=cities[j];
@@ -198,55 +200,82 @@ function computeNeighbors(cities){
     cities.forEach(b=>{ if(b!==a && b.cont===a.cont){ const d=Math.hypot(a.gx-b.gx,a.gy-b.gy); if(d<bd){bd=d;best=b;} } });
     if(best){ a.nb.push(best.id); if(!best.nb.includes(a.id)) best.nb.push(a.id); } } });
 }
-function genCities(diff){
-  const S=CITY_S, cities=[]; let id=0;
+// place cities into the given regions; each continent gets its own random density → replayable patterns
+function placeCities(cities, allowBlocked){
+  const S=CITY_S; const dens={};
   for(let gy=Math.floor(S/2); gy<GH; gy+=S) for(let gx=Math.floor(S/2); gx<GW; gx+=S){
-    if(Math.random()<0.08) continue;                                  // irregular, not a grid
     let gx2=Math.round(gx+(Math.random()-0.5)*S*0.85), gy2=Math.round(gy+(Math.random()-0.5)*S*0.85);
     if(gx2<0||gx2>=GW||gy2<0||gy2>=GH||!land[I(gx2,gy2)]){ if(!land[I(gx,gy)]) continue; gx2=gx; gy2=gy; }
-    const reg=regionOf(gx2,gy2); if(!reg||BLOCKED.has(reg)) continue;
+    const reg=regionOf(gx2,gy2); if(!reg) continue;
+    if(BLOCKED.has(reg) !== allowBlocked) continue;   // first pass: non-blocked only · middle pass: blocked only
+    if(dens[reg]===undefined) dens[reg]=0.06+Math.random()*0.30;   // per-continent skip rate this world
+    if(Math.random()<dens[reg]) continue;
     let c=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ const x=gx2+dx,y=gy2+dy; if(x>=0&&x<GW&&y>=0&&y<GH&&land[I(x,y)]) c++; }
-    if(c<5) continue;                                                 // skip ocean specks
-    cities.push({id, gx:gx2, gy:gy2, lvl:1, cont:reg, name:cityName(id*97+7), col:randCol(id*131+5), owner:"enemy"});
-    id++;
+    if(c<5) continue;
+    const id=cities.length;
+    cities.push({id, gx:gx2, gy:gy2, lvl:1, cont:reg, name:cityName(id*97+(Math.random()*1e6|0)), col:randCol(id*131+5), owner:"enemy"});
   }
-  computeNeighbors(cities);
-  return cities;
 }
-// level rises linearly with ring distance from the capital (ring1 = 1, ring2 = 2, …)
 function lvlForRing(r){ return Math.min(999, Math.max(1, r)); }
 function assignLevelsFrom(capId){
   const cap=byId(capId), nC=camp.cities.length, ring=new Array(nC).fill(Infinity);
   ring[capId]=0; const q=[capId]; let h=0;
   while(h<q.length){ const id=q[h++]; byId(id).nb.forEach(n=>{ if(ring[n]===Infinity){ ring[n]=ring[id]+1; q.push(n); } }); }
   let maxR=0; ring.forEach(r=>{ if(r!==Infinity&&r>maxR) maxR=r; });
-  camp.cities.forEach(c=>{
-    let r=ring[c.id];
-    if(r===Infinity){ const d=Math.hypot(c.gx-cap.gx,c.gy-cap.gy); r=maxR+2+Math.floor(d/35); }  // other continents: farther = higher
-    c.lvl = lvlForRing(r);
-  });
+  camp.cities.forEach(c=>{ let r=ring[c.id];
+    if(r===Infinity){ const d=Math.hypot(c.gx-cap.gx,c.gy-cap.gy); r=maxR+2+Math.floor(d/35); }
+    c.lvl=lvlForRing(r); });
 }
-function newCampaign(diff){
-  camp={ diff, startCol:[86,240,96],
-    bank:{ coins:2000, level:1, unlocked:[ACIDID,WATERID,SANDID,EMPTYID], brushLevel:1 },
-    cities:genCities(diff) };
-  save();
+// group enemy cities into countries; closer to the capital = smaller (2-4), far = large (10-25)
+function formCountries(){
+  camp.countries=[]; camp.cities.forEach(c=>{ c.country=-1; });
+  const cap=byId(camp.capital); let maxD=1;
+  camp.cities.forEach(c=>{ const d=Math.hypot(c.gx-cap.gx,c.gy-cap.gy); if(d>maxD)maxD=d; });
+  const enemies=camp.cities.filter(c=>c.owner==="enemy")
+    .sort((a,b)=>Math.hypot(a.gx-cap.gx,a.gy-cap.gy)-Math.hypot(b.gx-cap.gx,b.gy-cap.gy));
+  const assigned=new Set(); let cid=0;
+  for(const seed of enemies){ if(assigned.has(seed.id)) continue;
+    const t=Math.hypot(seed.gx-cap.gx,seed.gy-cap.gy)/maxD;
+    const size=Math.max(2,Math.min(25, Math.round((2+t*8)+Math.random()*(2+t*15))));
+    const members=[seed]; assigned.add(seed.id); const frontier=[seed];
+    while(members.length<size && frontier.length){ const cur=frontier.shift();
+      for(const n of cur.nb){ if(members.length>=size) break; const nc=byId(n);
+        if(!assigned.has(n)&&nc.owner==="enemy"&&nc.cont===seed.cont){ members.push(nc); assigned.add(n); frontier.push(nc); } } }
+    const co={ id:cid, name:countryName(cid*131+seed.id*7+3), col:randCol(cid*733+seed.id*17+11), cont:seed.cont,
+      cityIds:members.map(m=>m.id), level:Math.max(...members.map(m=>m.lvl)), atWar:false };
+    members.forEach(m=>m.country=cid); camp.countries.push(co); cid++;
+  }
+}
+function newCampaign(diff,mode){
+  const cities=[]; placeCities(cities,false);   // playable (non-blocked) continents only at first
+  camp={ diff, mode, middleOpen:false, startCol:[86,240,96], capital:-1, countries:null,
+    bank:{ coins:2000, level:1, unlocked:[ACIDID,WATERID,SANDID,EMPTYID], brushLevel:1 }, cities };
+  computeNeighbors(camp.cities); save();
 }
 function save(){ try{ const c={...camp, cities:camp.cities.map(({nb,...r})=>r)}; localStorage.setItem(SAVE,JSON.stringify(c)); }catch{} }
-function load(){ try{ const c=JSON.parse(localStorage.getItem(SAVE)); if(!c||!c.cities) return false;
-    computeNeighbors(c.cities); camp=c; return true; }catch{ return false; } }
+function load(){ try{ const c=JSON.parse(localStorage.getItem(SAVE)); if(!c||!c.cities) return false; computeNeighbors(c.cities); camp=c; return true; }catch{ return false; } }
 const byId=id=>camp.cities[id];
 const myCities=()=>camp.cities.filter(c=>c.owner==="mine");
+const countryOf=c=>(camp.countries&&c.country>=0)?camp.countries[c.country]:null;
+const countryEnemyCities=co=>co.cityIds.map(byId).filter(c=>c.owner==="enemy");
+const countryAllMine=co=>co.cityIds.every(id=>byId(id).owner!=="enemy");
 
-/* ---------- eligibility (cached per refresh for speed on the dense map) ---------- */
+/* ---------- eligibility ---------- */
 let _haveMine=false, _mineConts=new Set(), _crossOK=false;
-function refresh(){ const mine=myCities(); _haveMine=mine.length>0;
-  _mineConts=new Set(mine.map(c=>c.cont));
-  _crossOK = _haveMine && camp.cities.every(c=> !_mineConts.has(c.cont) || c.owner==="mine"); }
-function canWar(c){
+function refresh(){ const mine=myCities(); _haveMine=mine.length>0; _mineConts=new Set(mine.map(c=>c.cont));
+  _crossOK=_haveMine && camp.cities.every(c=> !_mineConts.has(c.cont) || c.owner==="mine"); }
+function borders(c){ return c.nb.some(n=>byId(n).owner==="mine"); }
+function canWarCity(c){   // City-Only mode
   if(c.owner!=="enemy") return false;
-  if(c.nb.some(n=>byId(n).owner==="mine")) return {cost:0,cross:false};   // bordering one of yours → free
-  if(_haveMine && !_mineConts.has(c.cont) && _crossOK) return {cost:5000,cross:true};  // cross-continent
+  if(borders(c)) return {cost:0,cross:false};
+  if(_haveMine && !_mineConts.has(c.cont) && _crossOK) return {cost:5000,cross:true};
+  return false;
+}
+function canWarCountry(co){   // Include-Countries mode
+  if(countryAllMine(co)) return false;
+  const en=countryEnemyCities(co);
+  if(en.some(c=>borders(c))) return {cost:0,cross:false};
+  if(_haveMine && !_mineConts.has(co.cont) && _crossOK) return {cost:5000,cross:true};
   return false;
 }
 function captureCost(c){ return 500*c.lvl; }
@@ -256,14 +285,14 @@ const baseCv=document.getElementById("base"), bctx=baseCv.getContext("2d");
 baseCv.width=GW; baseCv.height=GH;
 const bimg=bctx.createImageData(GW,GH), bbuf=new Uint32Array(bimg.data.buffer);
 const ABGR=(r,g,b)=>(255<<24)|(b<<16)|(g<<8)|r;
-const C_OCEAN=ABGR(9,26,44), C_LAND=ABGR(46,62,52), C_COAST=ABGR(150,205,165),   // flat political look + bright coastline
-      C_BLAND=ABGR(58,40,42), C_BCOAST=ABGR(150,96,96);                            // blocked continents
+const C_OCEAN=ABGR(9,26,44), C_LAND=ABGR(46,62,52), C_COAST=ABGR(150,205,165), C_BLAND=ABGR(58,40,42), C_BCOAST=ABGR(150,96,96);
 function paintTerrain(){
+  const open=camp&&camp.middleOpen;
   for(let i=0;i<N;i++){
     if(!land[i]){ bbuf[i]=C_OCEAN; continue; }
-    const x=i%GW, y=(i/GW)|0, reg=regionOf(x,y), blk=!reg||BLOCKED.has(reg);
+    const x=i%GW, y=(i/GW)|0, reg=regionOf(x,y), blk=!reg||(BLOCKED.has(reg)&&!open);
     const coast=(x>0&&!land[i-1])||(x<GW-1&&!land[i+1])||(y>0&&!land[i-GW])||(y<GH-1&&!land[i+GW]);
-    bbuf[i] = coast ? (blk?C_BCOAST:C_COAST) : (blk?C_BLAND:C_LAND);
+    bbuf[i]=coast?(blk?C_BCOAST:C_COAST):(blk?C_BLAND:C_LAND);
   }
   bctx.putImageData(bimg,0,0);
 }
@@ -271,153 +300,186 @@ const ov=document.getElementById("ov"), octx=ov.getContext("2d");
 function fitOverlay(){ const r=ov.getBoundingClientRect(); ov.width=r.width*devicePixelRatio; ov.height=r.height*devicePixelRatio; octx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); drawCities(); }
 let pulse=0;
 function cxy(c){ const r=ov.getBoundingClientRect(); return [ (c.gx+0.5)/GW*r.width, (c.gy+0.5)/GH*r.height ]; }
+function hull(p){ if(p.length<3) return p.slice();
+  p=p.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]); const cr=(o,a,b)=>(a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);
+  const lo=[]; for(const pt of p){ while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],pt)<=0)lo.pop(); lo.push(pt); }
+  const up=[]; for(let i=p.length-1;i>=0;i--){ const pt=p[i]; while(up.length>=2&&cr(up[up.length-2],up[up.length-1],pt)<=0)up.pop(); up.push(pt); }
+  lo.pop(); up.pop(); return lo.concat(up); }
+function drawTerritory(cities,col,sz){   // filled, thick-outlined blob connecting the cities
+  if(!cities.length) return; const pts=cities.map(c=>{const[x,y]=cxy(c);return [x,y];});
+  const h=hull(pts);
+  octx.lineJoin="round"; octx.lineCap="round"; octx.lineWidth=Math.max(8,sz+8);
+  octx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},.22)`; octx.strokeStyle=`rgba(${col[0]},${col[1]},${col[2]},.85)`;
+  octx.beginPath();
+  if(h.length===1){ octx.arc(h[0][0],h[0][1],sz*0.8,0,7); }
+  else { octx.moveTo(h[0][0],h[0][1]); for(let i=1;i<h.length;i++) octx.lineTo(h[i][0],h[i][1]); octx.closePath(); }
+  octx.stroke(); octx.fill();
+}
 function drawCities(){
   if(!camp) return; refresh(); const r=ov.getBoundingClientRect(); octx.clearRect(0,0,r.width,r.height);
   octx.imageSmoothingEnabled=false;
-  const sz=Math.max(7, Math.round(r.width/GW*CITY_S*0.72)), half=sz>>1;
-  const fs=Math.max(6, Math.round(sz*0.55));
+  const sz=Math.max(7, Math.round(r.width/GW*CITY_S*0.72)), half=sz>>1, fs=Math.max(6, Math.round(sz*0.55));
+  const country = camp.mode==="country" && camp.countries;
+  if(country){
+    for(const co of camp.countries){ drawTerritory(countryEnemyCities(co), co.col, sz); }
+    drawTerritory(myCities(), camp.startCol, sz);
+  }
   octx.textAlign="center"; octx.textBaseline="middle";
   for(const c of camp.cities){
     let [x,y]=cxy(c); x=Math.round(x); y=Math.round(y);
-    const col = c.owner==="mine" ? camp.startCol : c.owner==="gray" ? [140,145,150] : c.col;
-    octx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`;
-    octx.fillRect(x-half, y-half, sz, sz);                                   // pixel square dot
-    octx.lineWidth=2; octx.strokeStyle="rgba(0,0,0,.75)"; octx.strokeRect(x-half+1, y-half+1, sz-2, sz-2);
-    if(canWar(c)){ octx.lineWidth=2; octx.strokeStyle=`rgba(255,210,60,${0.5+0.5*Math.sin(pulse)})`; octx.strokeRect(x-half-3, y-half-3, sz+6, sz+6); }
-    if(c===selected){ octx.lineWidth=2; octx.strokeStyle="#fff"; octx.strokeRect(x-half-5, y-half-5, sz+10, sz+10); }
-    octx.font=`${fs}px "Press Start 2P", monospace`;                         // blocky minecraft-style number
-    octx.fillStyle="rgba(0,0,0,.85)"; octx.fillText(c.lvl, x+1, y+1);
-    octx.fillStyle="#fff"; octx.fillText(c.lvl, x, y);
+    let col;
+    if(c.owner==="mine") col=camp.startCol; else if(c.owner==="gray") col=[140,145,150];
+    else col = country ? (countryOf(c)?countryOf(c).col:c.col) : c.col;
+    octx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`; octx.fillRect(x-half,y-half,sz,sz);
+    octx.lineWidth=2; octx.strokeStyle="rgba(0,0,0,.75)"; octx.strokeRect(x-half+1,y-half+1,sz-2,sz-2);
+    const warable = country ? (c.owner==="enemy" && (countryOf(c)?(countryOf(c).atWar||canWarCountry(countryOf(c))):false)) : !!canWarCity(c);
+    if(warable){ octx.lineWidth=2; octx.strokeStyle=`rgba(255,210,60,${0.5+0.5*Math.sin(pulse)})`; octx.strokeRect(x-half-3,y-half-3,sz+6,sz+6); }
+    if(c===selected){ octx.lineWidth=2; octx.strokeStyle="#fff"; octx.strokeRect(x-half-5,y-half-5,sz+10,sz+10); }
+    octx.font=`${fs}px "Press Start 2P", monospace`;
+    octx.fillStyle="rgba(0,0,0,.85)"; octx.fillText(c.lvl,x+1,y+1);
+    octx.fillStyle="#fff"; octx.fillText(c.lvl,x,y);
   }
 }
 function loop(){ pulse+=0.08; if(camp&&!menuOpen()) drawCities(); requestAnimationFrame(loop); }
 function menuOpen(){ return !document.getElementById("menu").classList.contains("hidden"); }
 
 /* ---------- HUD ---------- */
-function hud(){
-  if(!camp) return;
+function hud(){ if(!camp) return;
   document.getElementById("coinN").textContent=fmtCoin(camp.bank.coins);
   const mine=myCities().length, tot=camp.cities.length;
   document.getElementById("ownN").textContent=mine;
   document.getElementById("pctN").textContent=Math.round(mine/tot*100)+"%";
   document.getElementById("lvlN").textContent=camp.bank.level;
-  document.getElementById("diffN").textContent=camp.diff;
+  document.getElementById("diffN").textContent=camp.diff+(camp.mode==="country"?" · nations":"");
   const sc=camp.startCol; document.getElementById("swMine").style.background=`rgb(${sc[0]},${sc[1]},${sc[2]})`;
+  document.getElementById("legHint").textContent = camp.mode==="country"
+    ? "Declare war on a nation to siege the cities inside." : "You can only war enemy cities bordering yours.";
 }
 
 /* ---------- interaction ---------- */
 let selected=null, choosing=false;
-const pop=document.getElementById("pop");
+const pop=document.getElementById("pop"), hoverlbl=document.getElementById("hoverlbl");
 function hidePop(){ pop.classList.remove("show"); selected=null; }
-ov.addEventListener("pointerdown",e=>{
-  const r=ov.getBoundingClientRect(); const mx=e.clientX-r.left, my=e.clientY-r.top;
-  const rad=Math.max(6, r.width/GW*CITY_S*0.5)+3;
-  let hit=null,best=1e9;
-  for(const c of camp.cities){ const [x,y]=cxy(c); const d=Math.hypot(x-mx,y-my); if(d<rad&&d<best){best=d;hit=c;} }
-  if(!hit){ hidePop(); return; }
-  if(choosing){ chooseStart(hit); return; }
-  selected=hit; showPop(hit, e.clientX-document.getElementById("stage").getBoundingClientRect().left, e.clientY-document.getElementById("stage").getBoundingClientRect().top);
+function cityAt(mx,my){ const r=ov.getBoundingClientRect(); const rad=Math.max(6,r.width/GW*CITY_S*0.5)+3; let hit=null,best=1e9;
+  for(const c of camp.cities){ const [x,y]=cxy(c); const d=Math.hypot(x-mx,y-my); if(d<rad&&d<best){best=d;hit=c;} } return hit; }
+ov.addEventListener("pointermove",e=>{ if(!camp||choosing){ hoverlbl.style.display="none"; return; }
+  const r=ov.getBoundingClientRect(); const c=cityAt(e.clientX-r.left,e.clientY-r.top);
+  if(!c){ hoverlbl.style.display="none"; return; }
+  let label = c.owner==="mine"?"Your Empire" : c.owner==="gray"?"Ruins of "+c.name : (camp.mode==="country"&&countryOf(c)?countryOf(c).name:c.name);
+  const sr=document.getElementById("stage").getBoundingClientRect();
+  hoverlbl.textContent=label; hoverlbl.style.display="block";
+  hoverlbl.style.left=(e.clientX-sr.left)+"px"; hoverlbl.style.top=(e.clientY-sr.top)+"px";
 });
-function showPop(c, px, py){
-  refresh(); const war=canWar(c), mine=c.owner==="mine", gray=c.owner==="gray";
-  let body=`<div class="nm">${c.name}</div><div class="meta">${REGION_NAME[c.cont]||c.cont} · Level ${c.lvl} · ${mine?"Yours":gray?"Destroyed":"Enemy"}</div>`;
-  if(mine){ body+=`<div class="meta" style="color:var(--toxic)">You hold this city.</div>`; }
-  else if(gray){ const cost=captureCost(c); body+=`<button class="btn" id="popCap" ${camp.bank.coins<cost?"disabled":""}>CAPTURE — ${fmtCoin(cost)}c</button>`; }
-  else if(war){ body+=`<button class="btn danger" id="popWar">DECLARE WAR${war.cost?` — ${fmtCoin(war.cost)}c`:""}</button>`;
-    if(war.cost&&camp.bank.coins<war.cost) body=body.replace('id="popWar"','id="popWar" disabled'); }
-  else { body+=`<div class="meta" style="color:var(--danger)">Not reachable yet — capture a bordering city first.</div>`; }
-  body+=`<button class="btn alt" id="popCancel" style="margin-top:6px">Cancel</button>`;
-  pop.innerHTML=body;
+ov.addEventListener("pointerleave",()=>hoverlbl.style.display="none");
+ov.addEventListener("pointerdown",e=>{
+  const r=ov.getBoundingClientRect(); const c=cityAt(e.clientX-r.left,e.clientY-r.top);
+  if(!c){ hidePop(); return; }
+  if(choosing){ chooseStart(c); return; }
+  selected=c; const sr=document.getElementById("stage").getBoundingClientRect();
+  showPop(c, e.clientX-sr.left, e.clientY-sr.top);
+});
+function popBox(html,px,py){ pop.innerHTML=html+`<button class="btn alt" id="popCancel" style="margin-top:6px">Cancel</button>`;
   const sw=document.getElementById("stage").clientWidth, sh=document.getElementById("stage").clientHeight;
-  pop.style.left=Math.min(px+8, sw-210)+"px"; pop.style.top=Math.min(py+8, sh-150)+"px";
-  pop.classList.add("show");
-  const cap=document.getElementById("popCap"); if(cap) cap.onclick=()=>doCapture(c);
-  const war2=document.getElementById("popWar"); if(war2&&!war2.disabled) war2.onclick=()=>doWar(c, canWar(c));
-  document.getElementById("popCancel").onclick=hidePop;
+  pop.style.left=Math.min(px+8,sw-215)+"px"; pop.style.top=Math.min(py+8,sh-160)+"px"; pop.classList.add("show");
+  document.getElementById("popCancel").onclick=hidePop; }
+function showPop(c, px, py){
+  refresh();
+  if(c.owner==="mine"){ popBox(`<div class="nm">${c.name}</div><div class="meta">Yours · Level ${c.lvl}</div><div class="meta" style="color:var(--toxic)">You hold this city.</div>`,px,py); return; }
+  if(c.owner==="gray"){ const cost=captureCost(c); popBox(`<div class="nm">${c.name}</div><div class="meta">Destroyed · Level ${c.lvl}</div><button class="btn" id="popCap" ${camp.bank.coins<cost?"disabled":""}>CAPTURE — ${fmtCoin(cost)}c</button>`,px,py);
+    const b=document.getElementById("popCap"); if(b) b.onclick=()=>doCapture(c); return; }
+  // enemy city
+  if(camp.mode==="country"){
+    const co=countryOf(c);
+    if(co && co.atWar){
+      const mineN=c.nb.map(byId).find(b=>b.owner==="mine");
+      popBox(`<div class="nm">${c.name}</div><div class="meta">${co.name} · Level ${c.lvl} · ${c.lvl*5} waves</div><button class="btn danger" id="popWar">SIEGE CITY</button>`,px,py);
+      document.getElementById("popWar").onclick=()=>{ let atk=mineN?mineN.id:nearestMine(c); save(); launchBattle(c,atk); };
+      return;
+    }
+    const w=co?canWarCountry(co):false;
+    let body=`<div class="nm">${co?co.name:"Unknown"}</div><div class="meta">${REGION_NAME[c.cont]||c.cont} · ${co?countryEnemyCities(co).length:"?"} cities · Lv ${co?co.level:c.lvl}</div>`;
+    if(w){ body+=`<button class="btn danger" id="popWar">DECLARE WAR${w.cost?` — ${fmtCoin(w.cost)}c`:""}</button>`; if(w.cost&&camp.bank.coins<w.cost) body=body.replace('id="popWar"','id="popWar" disabled'); }
+    else body+=`<div class="meta" style="color:var(--danger)">Not reachable — capture a bordering nation first.</div>`;
+    popBox(body,px,py);
+    const wb=document.getElementById("popWar"); if(wb&&!wb.disabled) wb.onclick=()=>declareWarCountry(co,w);
+  } else {
+    const w=canWarCity(c);
+    let body=`<div class="nm">${c.name}</div><div class="meta">${REGION_NAME[c.cont]||c.cont} · Level ${c.lvl} · ${c.lvl*5} waves</div>`;
+    if(w){ body+=`<button class="btn danger" id="popWar">DECLARE WAR${w.cost?` — ${fmtCoin(w.cost)}c`:""}</button>`; if(w.cost&&camp.bank.coins<w.cost) body=body.replace('id="popWar"','id="popWar" disabled'); }
+    else body+=`<div class="meta" style="color:var(--danger)">Not reachable — capture a bordering city first.</div>`;
+    popBox(body,px,py);
+    const wb=document.getElementById("popWar"); if(wb&&!wb.disabled) wb.onclick=()=>{ if(w.cost){ if(camp.bank.coins<w.cost)return; camp.bank.coins-=w.cost; }
+      let atk; if(!w.cross){ const n=c.nb.map(byId).find(b=>b.owner==="mine"); atk=n?n.id:null; } else atk=nearestMine(c); save(); launchBattle(c,atk); };
+  }
 }
+function nearestMine(c){ let best=1e9,id=null; myCities().forEach(m=>{ const d=Math.hypot(m.gx-c.gx,m.gy-c.gy); if(d<best){best=d;id=m.id;} }); return id; }
+function declareWarCountry(co,w){ if(w.cost){ if(camp.bank.coins<w.cost) return; camp.bank.coins-=w.cost; }
+  co.atWar=true; save(); hidePop(); hud(); drawCities(); toast(`War declared on ${co.name}. Its cities are now open to siege.`); }
 function chooseStart(c){
   camp.startCol=[86,240,96]; c.owner="mine"; camp.capital=c.id; choosing=false;
-  assignLevelsFrom(c.id);                                   // levels now scale with distance from your capital
+  // unblock the middle and populate it now that the player has a foothold
+  camp.middleOpen=true; const extra=camp.cities.slice(); placeCities(extra,true);
+  camp.cities=extra; computeNeighbors(camp.cities);
+  assignLevelsFrom(c.id);
+  if(camp.mode==="country") formCountries();
   document.getElementById("startScreen").classList.add("hidden");
-  save(); hud(); drawCities(); toast(`Homeland founded at ${c.name}.`);
+  paintTerrain(); save(); hud(); drawCities(); toast(`Homeland founded at ${c.name}.`);
 }
-function doCapture(c){
-  const cost=captureCost(c); if(camp.bank.coins<cost) return;
+function doCapture(c){ const cost=captureCost(c); if(camp.bank.coins<cost) return;
   camp.bank.coins-=cost; c.owner="mine"; c.col=camp.startCol.slice();
-  save(); hidePop(); hud(); drawCities(); toast(`Captured ${c.name} for ${fmtCoin(cost)}c.`);
-  checkWin();
-}
-function doWar(c, war){
-  if(war.cost){ if(camp.bank.coins<war.cost) return; camp.bank.coins-=war.cost; }
-  // attacker = an owned neighbour (same continent) or, cross-continent, nearest owned city
-  let atk=null;
-  if(!war.cross){ const n=c.nb.map(byId).find(b=>b.owner==="mine"); atk=n?n.id:null; }
-  else { let best=1e9; myCities().forEach(m=>{ const d=Math.hypot(m.gx-c.gx,m.gy-c.gy); if(d<best){best=d;atk=m.id;} }); }
-  save(); launchBattle(c, atk, false);
-}
-function launchBattle(target, attackerId, defense){
-  const b=camp.bank;
-  const rmul=Math.max(1, myCities().length/5);                        // empire-size coin bonus: 1/5 per captured city
-  const p=new URLSearchParams({ campaign:"1", city:String(target.id), elv:String(target.lvl),
-    waves:String(target.lvl*5), rmul:rmul.toFixed(3), diff:camp.diff,
-    coins:String(b.coins), plv:String(b.level), brush:String(b.brushLevel), un:b.unlocked.join(","),
-    name:encodeURIComponent(target.name), atk:attackerId==null?"":String(attackerId), def:defense?"1":"0" });
+  save(); hidePop(); hud(); drawCities(); toast(`Captured ${c.name} for ${fmtCoin(cost)}c.`); checkWin(); }
+function launchBattle(target, attackerId){
+  const b=camp.bank; const rmul=Math.max(1, myCities().length/5);
+  const p=new URLSearchParams({ campaign:"1", city:String(target.id), elv:String(target.lvl), waves:String(target.lvl*5),
+    rmul:rmul.toFixed(3), diff:camp.diff, coins:String(b.coins), plv:String(b.level), brush:String(b.brushLevel),
+    un:b.unlocked.join(","), name:encodeURIComponent(target.name), atk:attackerId==null?"":String(attackerId), def:"0" });
   location.href="/singleplayer?"+p.toString();
 }
 
-/* ---------- battle result ---------- */
+/* ---------- battle result + auto-resolved enemy raids ---------- */
 function applyResult(){
   let r; try{ r=JSON.parse(localStorage.getItem(RES)); }catch{}
-  localStorage.removeItem(RES);
-  if(!r) return;
+  localStorage.removeItem(RES); if(!r) return;
   camp.bank={ coins:r.coins|0, level:Math.max(1,r.playerLevel|0), unlocked:r.unlocked||camp.bank.unlocked, brushLevel:Math.max(1,r.brushLevel|0) };
-  const tc=byId(r.city), atk=r.attacker!==""&&r.attacker!=null?byId(+r.attacker):null;
-  if(r.defense){
-    if(r.win){ winScreen("DEFENDED","You repelled the assault."); }
-    else { if(atk) atk.owner="gray"; winScreen("CITY LOST", (atk?atk.name:"A city")+" was overrun."); }
-  } else {
-    if(r.win){ if(tc) tc.owner="gray"; winScreen("CITY RAZED", (tc?tc.name:"The city")+" lies in ruins — capture it to annex it."); }
-    else { if(atk) atk.owner="gray"; winScreen("DEFEAT", "Your assault failed — "+(atk?atk.name:"your staging city")+" fell."); }
+  const tc=byId(r.city), atk=(r.attacker!==""&&r.attacker!=null)?byId(+r.attacker):null;
+  let title,sub;
+  if(r.win){ if(tc) tc.owner="gray"; title="CITY RAZED"; sub=(tc?tc.name:"The city")+" lies in ruins — capture it to annex it."; }
+  else { if(atk) atk.owner="gray"; title="DEFEAT"; sub="Your assault failed — "+(atk?atk.name:"your staging city")+" fell."; }
+  const raids=runRaids();
+  if(raids.length) sub += "\n⚔ Enemy raids: "+raids.join(", ");
+  save(); winScreen(title,sub); checkWin();
+}
+// countries you're at war with (and, in city mode, bordering enemies on hard/extreme) strike your in-range cities
+function runRaids(){
+  const lost=[]; const prot=C.cityProt(camp.bank.level);
+  if(camp.mode==="country"){
+    for(const co of camp.countries){ if(!co.atWar||countryAllMine(co)) continue;
+      const targets=new Set();
+      countryEnemyCities(co).forEach(c=>c.nb.forEach(n=>{ if(byId(n).owner==="mine") targets.add(n); }));
+      if(!targets.size) continue;
+      if(botBestDmg(co.level) > prot){ const arr=[...targets]; const m=byId(arr[(Math.random()*arr.length)|0]); m.owner="gray"; lost.push(m.name); }
+    }
+  } else if(camp.diff==="hard"||camp.diff==="extreme"){
+    const p=camp.diff==="extreme"?0.8:0.5;
+    if(Math.random()<p){ const targets=[]; myCities().forEach(m=>m.nb.forEach(n=>{ const e=byId(n); if(e.owner==="enemy") targets.push([e,m]); }));
+      if(targets.length){ const [e,m]=targets[(Math.random()*targets.length)|0]; if(botBestDmg(e.lvl)>prot){ m.owner="gray"; lost.push(m.name); } } }
   }
-  save(); checkWin();
-  maybeCounterattack();
+  return lost;
 }
-function checkWin(){
-  if(camp.cities.every(c=>c.owner!=="enemy") && camp.cities.some(c=>c.owner==="mine")){
-    winScreen("🌍 WORLD CONQUERED","Every city flies your colours.");
-  }
-}
-let queuedCounter=null;
-function maybeCounterattack(){
-  if(queuedCounter) return;
-  if(camp.diff!=="hard"&&camp.diff!=="extreme") return;
-  const p=camp.diff==="extreme"?0.8:0.5; if(Math.random()>p) return;
-  // an enemy bordering one of your cities strikes
-  const targets=[];
-  myCities().forEach(m=>m.nb.forEach(n=>{ const e=byId(n); if(e.owner==="enemy") targets.push([e,m]); }));
-  if(!targets.length) return;
-  queuedCounter=targets[(Math.random()*targets.length)|0];
-}
+function checkWin(){ if(camp.cities.every(c=>c.owner!=="enemy") && camp.cities.some(c=>c.owner==="mine")) winScreen("🌍 WORLD CONQUERED","Every city flies your colours."); }
 
 /* ---------- screens ---------- */
-function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2600); }
+function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2800); }
 function winScreen(title,sub){ document.getElementById("winTitle").textContent=title; document.getElementById("winSub").textContent=sub; document.getElementById("winScreen").classList.remove("hidden"); }
-document.getElementById("winOk").onclick=()=>{
-  document.getElementById("winScreen").classList.add("hidden");
-  if(queuedCounter){ const [e,m]=queuedCounter; queuedCounter=null;
-    banner(`⚔ ${e.name} (Lv ${e.lvl}) attacks ${m.name}! Defend your city.`, ()=>launchBattle(e, m.id, true));
-  }
-}
-function banner(msg, onDefend){
-  const b=document.getElementById("banner"); b.innerHTML=`${msg} <button class="btn danger" style="display:inline-block;width:auto;margin-left:8px;padding:6px 12px" id="bDef">DEFEND</button>`;
-  b.classList.add("show"); document.getElementById("bDef").onclick=()=>{ b.classList.remove("show"); onDefend(); };
-}
+document.getElementById("winOk").onclick=()=>{ document.getElementById("winScreen").classList.add("hidden"); hud(); drawCities(); };
 
-/* ---------- menu wiring ---------- */
-let diff="medium";
+/* ---------- menu ---------- */
+let diff="medium", mode="city";
 document.querySelectorAll("#diffOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#diffOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); diff=o.dataset.d; });
+document.querySelectorAll("#modeOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#modeOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); mode=o.dataset.m; });
 function showMap(){ document.getElementById("menu").classList.add("hidden"); whenMap(()=>{ buildTerrain(); paintTerrain(); fitOverlay(); hud(); }); }
-document.getElementById("newBtn").onclick=()=>{ whenMap(()=>{ buildTerrain(); newCampaign(diff); paintTerrain(); document.getElementById("menu").classList.add("hidden"); fitOverlay(); hud(); choosing=true; document.getElementById("startScreen").classList.remove("hidden"); }); };
+document.getElementById("newBtn").onclick=()=>{ whenMap(()=>{ buildTerrain(); newCampaign(diff,mode); paintTerrain();
+  document.getElementById("menu").classList.add("hidden"); fitOverlay(); hud(); choosing=true; document.getElementById("startScreen").classList.remove("hidden"); }); };
 document.getElementById("resumeBtn").onclick=()=>{ if(load()){ showMap(); applyResult(); } else toast("No saved campaign."); };
 document.getElementById("startCancel").onclick=()=>{ document.getElementById("startScreen").classList.add("hidden"); choosing=false; };
 document.getElementById("restartBtn").onclick=()=>{ if(confirm("Restart the whole campaign?")){ localStorage.removeItem(SAVE); localStorage.removeItem(RES); location.reload(); } };
@@ -425,17 +487,8 @@ document.getElementById("restartBtn").onclick=()=>{ if(confirm("Restart the whol
 /* ---------- boot ---------- */
 window.addEventListener("resize", ()=>{ if(camp) fitOverlay(); });
 requestAnimationFrame(loop);
-// auto-resume if returning from a battle, else show menu
-if(localStorage.getItem(RES) && load()){
-  showMap(); applyResult();
-} else {
-  // preselect saved difficulty button if a campaign exists
-  if(localStorage.getItem(SAVE)) document.getElementById("resumeBtn").style.outline="2px solid var(--toxic)";
-}
+if(localStorage.getItem(RES) && load()){ showMap(); applyResult(); }
+else if(localStorage.getItem(SAVE)) document.getElementById("resumeBtn").style.outline="2px solid var(--toxic)";
 </script>
 </body>
 </html>
-
-
-
-
