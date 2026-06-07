@@ -279,6 +279,15 @@ function canWarCountry(co){   // Include-Countries mode
   return false;
 }
 function captureCost(c){ return 500*c.lvl; }
+// naval assault: attack an enemy city from the sea — works even with no bordering city, and a failed
+// landing only costs the fleet (no city lost), so you can never get permanently stuck.
+const SHIP_RANGE=170;
+function shipCost(lvl){ return Math.round(2500+450*lvl); }
+function hasShipAccess(c){ return myCities().some(m=>Math.hypot(m.gx-c.gx,m.gy-c.gy)<=SHIP_RANGE); }
+function shipBtnHtml(c){ if(c.owner!=="enemy"||!hasShipAccess(c)) return ""; const sc=shipCost(c.lvl);
+  return `<button class="btn alt" id="popShip" ${camp.bank.coins<sc?"disabled":""} style="margin-top:6px">⚓ SEND SHIP — ${fmtCoin(sc)}c</button>`; }
+function wireShip(c){ const b=document.getElementById("popShip"); if(b&&!b.disabled) b.onclick=()=>{ const sc=shipCost(c.lvl);
+  if(camp.bank.coins<sc) return; camp.bank.coins-=sc; save(); launchBattle(c,null); }; }
 
 /* ---------- rendering ---------- */
 const baseCv=document.getElementById("base"), bctx=baseCv.getContext("2d");
@@ -404,24 +413,28 @@ function showPop(c, px, py){
     const co=countryOf(c);
     if(co && co.atWar){
       const mineN=c.nb.map(byId).find(b=>b.owner==="mine");
-      popBox(`<div class="nm">${c.name}</div><div class="meta">${co.name} · Level ${c.lvl} · ${c.lvl*5} waves</div><button class="btn danger" id="popWar">SIEGE CITY</button>`,px,py);
+      popBox(`<div class="nm">${c.name}</div><div class="meta">${co.name} · Level ${c.lvl} · ${c.lvl*5} waves</div><button class="btn danger" id="popWar">SIEGE CITY</button>${shipBtnHtml(c)}`,px,py);
       document.getElementById("popWar").onclick=()=>{ let atk=mineN?mineN.id:nearestMine(c); save(); launchBattle(c,atk); };
-      return;
+      wireShip(c); return;
     }
     const w=co?canWarCountry(co):false;
     let body=`<div class="nm">${co?co.name:"Unknown"}</div><div class="meta">${REGION_NAME[c.cont]||c.cont} · ${co?countryEnemyCities(co).length:"?"} cities · Lv ${co?co.level:c.lvl}</div>`;
     if(w){ body+=`<button class="btn danger" id="popWar">DECLARE WAR${w.cost?` — ${fmtCoin(w.cost)}c`:""}</button>`; if(w.cost&&camp.bank.coins<w.cost) body=body.replace('id="popWar"','id="popWar" disabled'); }
-    else body+=`<div class="meta" style="color:var(--danger)">Not reachable — capture a bordering nation first.</div>`;
+    else body+=`<div class="meta" style="color:var(--danger)">Not reachable by land — send a ship.</div>`;
+    body+=shipBtnHtml(c);
     popBox(body,px,py);
     const wb=document.getElementById("popWar"); if(wb&&!wb.disabled) wb.onclick=()=>declareWarCountry(co,w);
+    wireShip(c);
   } else {
     const w=canWarCity(c);
     let body=`<div class="nm">${c.name}</div><div class="meta">${REGION_NAME[c.cont]||c.cont} · Level ${c.lvl} · ${c.lvl*5} waves</div>`;
     if(w){ body+=`<button class="btn danger" id="popWar">DECLARE WAR${w.cost?` — ${fmtCoin(w.cost)}c`:""}</button>`; if(w.cost&&camp.bank.coins<w.cost) body=body.replace('id="popWar"','id="popWar" disabled'); }
-    else body+=`<div class="meta" style="color:var(--danger)">Not reachable — capture a bordering city first.</div>`;
+    else body+=`<div class="meta" style="color:var(--danger)">Not reachable by land — send a ship.</div>`;
+    body+=shipBtnHtml(c);
     popBox(body,px,py);
     const wb=document.getElementById("popWar"); if(wb&&!wb.disabled) wb.onclick=()=>{ if(w.cost){ if(camp.bank.coins<w.cost)return; camp.bank.coins-=w.cost; }
       let atk; if(!w.cross){ const n=c.nb.map(byId).find(b=>b.owner==="mine"); atk=n?n.id:null; } else atk=nearestMine(c); save(); launchBattle(c,atk); };
+    wireShip(c);
   }
 }
 function nearestMine(c){ let best=1e9,id=null; myCities().forEach(m=>{ const d=Math.hypot(m.gx-c.gx,m.gy-c.gy); if(d<best){best=d;id=m.id;} }); return id; }
@@ -456,7 +469,8 @@ function applyResult(){
   const tc=byId(r.city), atk=(r.attacker!==""&&r.attacker!=null)?byId(+r.attacker):null;
   let title,sub;
   if(r.win){ if(tc) tc.owner="gray"; title="CITY RAZED"; sub=(tc?tc.name:"The city")+" lies in ruins — capture it to annex it."; }
-  else { if(atk) atk.owner="gray"; title="DEFEAT"; sub="Your assault failed — "+(atk?atk.name:"your staging city")+" fell."; }
+  else if(atk){ atk.owner="gray"; title="DEFEAT"; sub="Your assault failed — "+atk.name+" fell."; }
+  else { title="FLEET LOST"; sub="Your landing was repelled — no territory lost. Regroup and try again."; }
   const raids=runRaids();
   if(raids.length) sub += "\n⚔ Enemy raids: "+raids.join(", ");
   buildTerritory(); save(); winScreen(title,sub); checkWin();
@@ -498,9 +512,13 @@ document.getElementById("restartBtn").onclick=()=>{ if(confirm("Restart the whol
 
 /* ---------- boot ---------- */
 window.addEventListener("resize", ()=>{ if(camp) fitOverlay(); });
+window.addEventListener("pagehide", ()=>{ if(camp) save(); });          // belt-and-suspenders save
+window.addEventListener("visibilitychange", ()=>{ if(document.hidden && camp) save(); });
+setInterval(()=>{ if(camp) save(); }, 15000);                            // periodic autosave
 requestAnimationFrame(loop);
-if(localStorage.getItem(RES) && load()){ showMap(); applyResult(); }
-else if(localStorage.getItem(SAVE)) document.getElementById("resumeBtn").style.outline="2px solid var(--toxic)";
+if(localStorage.getItem(RES) && load()){ showMap(); applyResult(); }     // returning from a battle
+else if(load()){ showMap(); }                                           // a saved campaign exists → resume straight in
+
 </script>
 </body>
 </html>
