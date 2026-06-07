@@ -110,6 +110,7 @@ NEWDEFS.forEach((d,k)=>{ d.id=NEW_BASE+k;
 
 const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000,9000000,20000000,45000000,100000000,220000000,480000000,1050000000,2300000000,5000000000,11000000000,24000000000,52000000000,110000000000,240000000000,520000000000,1100000000000];  // 29 tiers → brush up to 30
 function upCost(L){ return Math.round(400*Math.pow(L,1.6)); }
+const TIER_MULT=[1,1.3,1.7,2.2];   // weapon upgrade damage tiers I/II/III
 const rnd=Math.random;   // authoritative single sim — no determinism needed
 
 const isGas    = t => t===SMOKE||t===STEAM;
@@ -156,7 +157,7 @@ class Game {
       const nx=best+dx, ny=surf+dy; if(!this.inB(nx,ny))continue; const j=this.I(nx,ny);
       if(this.grid[j]===EMPTY||isGas(this.grid[j])) this.grid[j]=el; }
   }
-  newPlayer(){ return { coins:300, level:1, brush:2, unlocked:new Set([ACID,WATER,SAND,EMPTY]) }; }
+  newPlayer(){ return { coins:300, level:1, brush:2, unlocked:new Set([ACID,WATER,SAND,EMPTY]), upg:{} }; }
   I(x,y){ return y*COLS+x; }
   inB(x,y){ return x>=0&&x<COLS&&y>=0&&y<ROWS; }
 
@@ -212,13 +213,15 @@ class Game {
     for(const [nx,ny] of [[x,y+1],[x-1,y],[x+1,y],[x,y-1]]){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny);
       if(BASE_HP[this.grid[j]]!==undefined){ this.applyDamage(j,dmg,dt); return; } } }
 
-  explodeR(cx,cy,R,fp,dmg){ const g=this.grid;
+  // weapon-upgrade multiplier, attributed by which side's city is being hit (cities are side-specific)
+  tmul(tj,t){ if(t==null) return 1; const u=tj===CITY?this.players[0].upg:tj===PCITY?this.players[1].upg:null; return u?TIER_MULT[u[t]||0]:1; }
+  explodeR(cx,cy,R,fp,dmg,wid){ const g=this.grid;
     for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){ if(dx*dx+dy*dy>R*R)continue;
       const x=cx+dx,y=cy+dy; if(!this.inB(x,y)||y===FLOOR_Y)continue; const j=this.I(x,y),tj=g[j];
       if(tj===WALL||tj===TNT||tj===NUKE||tj===HBOMB)continue;
-      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,dmg); continue; }
+      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,dmg*this.tmul(tj,wid)); continue; }
       if(rnd()<fp){ g[j]=FIRE; } else { g[j]=EMPTY; } this.moved[j]=1; } }
-  detonate(x,y,t){ if(t===HBOMB)this.explodeR(x,y,46,0.45,350); else if(t===NUKE)this.explodeR(x,y,42,0.40,120); else this.explodeR(x,y,20,0.30,25); }   // city-sized radius, low damage
+  detonate(x,y,t){ if(t===HBOMB)this.explodeR(x,y,46,0.45,350,t); else if(t===NUKE)this.explodeR(x,y,42,0.40,120,t); else this.explodeR(x,y,20,0.30,25,t); }   // city-sized radius, low damage
 
   swap(i,j){ const g=this.grid,h=this.health; const t=g[i],hh=h[i]; g[i]=g[j];h[i]=h[j]; g[j]=t;h[j]=hh; this.moved[i]=1;this.moved[j]=1; }
 
@@ -274,21 +277,21 @@ class Game {
   sAcid(x,y,i){ const g=this.grid; const T=[]; if(y+1<ROWS)T.push([x,y+1]); if(x>0)T.push([x-1,y]); if(x<COLS-1)T.push([x+1,y]); if(y>0)T.push([x,y-1]);
     for(const [nx,ny] of T){ const j=this.I(nx,ny),tj=g[j];
       if(tj===TNT||tj===NUKE||tj===HBOMB){ this.detonate(nx,ny,tj); g[i]=EMPTY;this.moved[i]=1; return; }
-      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,DMG[ACID]); g[i]=EMPTY;this.moved[i]=1; return; } }
+      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,DMG[ACID]*this.tmul(tj,ACID)); g[i]=EMPTY;this.moved[i]=1; return; } }
     this.mLiquid(x,y,i); }
   sLava(x,y,i){ const g=this.grid; for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
       if((tj===WOOD||tj===OIL)&&rnd()<0.3){ g[j]=FIRE; this.moved[j]=1; }
-      else if(tj===CITY||tj===PCITY||tj===GLASS){ this.applyDamage(j,DMG[LAVA]); }
+      else if(tj===CITY||tj===PCITY||tj===GLASS){ this.applyDamage(j,DMG[LAVA]*this.tmul(tj,LAVA)); }
       else if(tj===WATER){ g[i]=STONE;this.health[i]=0;this.moved[i]=1; g[j]=STEAM;this.moved[j]=1; return; }
       else if(tj===TNT){ this.detonate(nx,ny,TNT); } } this.mLiquid(x,y,i); }
   sPlasma(x,y,i){ const g=this.grid; for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
-      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,DMG[PLASMA]); } else if(tj===TNT){ this.detonate(nx,ny,TNT); } }
+      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,DMG[PLASMA]*this.tmul(tj,PLASMA)); } else if(tj===TNT){ this.detonate(nx,ny,TNT); } }
     if(rnd()<0.18){ g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; return; }
     if(y>0){const u=this.I(x,y-1); if(g[u]===EMPTY||isGas(g[u])){this.swap(i,u);return;}}
     const dir=rnd()<0.5?-1:1; for(const k of [dir,-dir]){const nx=x+k; if(!this.inB(nx,y))continue; const s=this.I(nx,y); if(g[s]===EMPTY){this.swap(i,s);return;}} }
   sFire(x,y,i){ const g=this.grid; for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
       if((tj===WOOD||tj===OIL)&&rnd()<0.3){ g[j]=FIRE; this.moved[j]=1; }
-      else if(tj===CITY||tj===PCITY){ if(rnd()<0.4) this.applyDamage(j,DMG[FIRE]); }
+      else if(tj===CITY||tj===PCITY){ if(rnd()<0.4) this.applyDamage(j,DMG[FIRE]*this.tmul(tj,FIRE)); }
       else if(tj===SAND&&rnd()<0.06){ g[j]=GLASS; this.moved[j]=1; }
       else if(tj===TNT){ this.detonate(nx,ny,TNT); } }
     if(rnd()<0.12){ g[i]=rnd()<0.5?SMOKE:EMPTY; if(g[i]===EMPTY)this.health[i]=0; this.moved[i]=1; return; }
@@ -297,31 +300,31 @@ class Game {
     if(y>0&&rnd()<0.05){const u=this.I(x,y-1); if(g[u]===EMPTY){g[u]=FIRE;this.moved[u]=1;}}
     for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
       if((tj===WOOD||tj===OIL||tj===NAPALM)&&rnd()<0.5){ g[j]=FIRE; this.moved[j]=1; }
-      else if(tj===CITY||tj===PCITY){ this.applyDamage(j,DMG[MAGMA]); }
+      else if(tj===CITY||tj===PCITY){ this.applyDamage(j,DMG[MAGMA]*this.tmul(tj,MAGMA)); }
       else if(tj===WATER){ g[i]=STONE;this.health[i]=0;this.moved[i]=1; g[j]=STEAM;this.moved[j]=1; return; }
       else if((tj===SAND||tj===GLASS||tj===STONE)&&rnd()<0.06){ g[j]=MAGMA;this.health[j]=0;this.moved[j]=1; } }
     if(rnd()<0.008){ g[i]=STONE;this.health[i]=0;this.moved[i]=1; return; }
     if(rnd()<0.6) this.mLiquid(x,y,i); }
   sNapalm(x,y,i){ const g=this.grid; for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
       if((tj===WOOD||tj===OIL)&&rnd()<0.45){ g[j]=FIRE; this.moved[j]=1; }
-      else if(tj===CITY||tj===PCITY){ if(rnd()<0.5) this.applyDamage(j,DMG[NAPALM]); }
+      else if(tj===CITY||tj===PCITY){ if(rnd()<0.5) this.applyDamage(j,DMG[NAPALM]*this.tmul(tj,NAPALM)); }
       else if(tj===TNT||tj===NUKE||tj===HBOMB){ this.detonate(nx,ny,tj); } }
     if(y>0&&rnd()<0.07){const u=this.I(x,y-1); if(g[u]===EMPTY){g[u]=FIRE;this.moved[u]=1;}}
     if(rnd()<0.012){ g[i]=rnd()<0.5?SMOKE:EMPTY; if(g[i]===EMPTY)this.health[i]=0; this.moved[i]=1; return; }
     this.mLiquid(x,y,i); }
   sAnti(x,y,i){ const g=this.grid; for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
       if(tj===EMPTY||tj===WALL||tj===ANTIMATTER||isGas(tj))continue;
-      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,DMG[ANTIMATTER]); } else { g[j]=EMPTY;this.health[j]=0;this.moved[j]=1; }
+      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,DMG[ANTIMATTER]*this.tmul(tj,ANTIMATTER)); } else { g[j]=EMPTY;this.health[j]=0;this.moved[j]=1; }
       if(rnd()<0.55){ const flash=rnd()<0.3; g[i]=flash?PLASMA:EMPTY; if(!flash)this.health[i]=0; this.moved[i]=1; return; } }
     this.mLiquid(x,y,i); }
   sVirus(x,y,i){ const g=this.grid; for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
-      if(tj===CITY||tj===PCITY){ if(rnd()<0.5) this.applyDamage(j,DMG[VIRUS],VIRUS); }
-      else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS)&&rnd()<0.04){ this.applyDamage(j,DMG[VIRUS],VIRUS); } }
+      if(tj===CITY||tj===PCITY){ if(rnd()<0.5) this.applyDamage(j,DMG[VIRUS]*this.tmul(tj,VIRUS),VIRUS); }
+      else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS)&&rnd()<0.04){ this.applyDamage(j,DMG[VIRUS]*this.tmul(tj,VIRUS),VIRUS); } }
     if(rnd()<0.04){ g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; return; } this.mSolid(x,y,i); }
   sNew(x,y,i){ const g=this.grid; const d=DEFBYID[g[i]];
-    if(d.kind==="blast"){ if(y+1<ROWS){ const dd=this.I(x,y+1); if(solidPass(g[dd])){ this.swap(i,dd); return; } } this.explodeR(x,y,d.r,d.fp,d.dmg); g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; return; }   // explode on impact, then consumed
+    if(d.kind==="blast"){ if(y+1<ROWS){ const dd=this.I(x,y+1); if(solidPass(g[dd])){ this.swap(i,dd); return; } } this.explodeR(x,y,d.r,d.fp,d.dmg,d.id); g[i]=EMPTY;this.health[i]=0;this.moved[i]=1; return; }   // explode on impact, then consumed
     for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny))continue; const j=this.I(nx,ny),tj=g[j];
-      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,d.dmg); }
+      if(BASE_HP[tj]!==undefined){ this.applyDamage(j,d.dmg*this.tmul(tj,d.id)); }
       else if(tj===TNT||tj===NUKE||tj===HBOMB){ this.detonate(nx,ny,tj); }
       else if(d.kind==="anti"&&tj!==EMPTY&&tj!==WALL&&tj!==g[i]&&!isGas(tj)){ g[j]=EMPTY;this.health[j]=0;this.moved[j]=1; } }
     if(d.kind==="beam"){ if(rnd()<0.14){g[i]=EMPTY;this.health[i]=0;this.moved[i]=1;return;}
@@ -350,10 +353,13 @@ class Game {
     if(!it||p.unlocked.has(tool)) return; if(p.coins>=it.cost){ p.coins-=it.cost; p.unlocked.add(tool); } }
   sell(owner,tool){ const p=this.players[owner]; const it=PALETTE.find(e=>e.t===tool);
     if(!it||it.cost<=0||!p.unlocked.has(tool)) return; p.coins+=it.cost; p.unlocked.delete(tool); }   // 100% refund (anti-softlock only)
-  upgrade(owner,what){ const p=this.players[owner];
+  upgrade(owner,what,tool){ const p=this.players[owner];
     if(what==="level"){ const c=upCost(p.level); if(p.coins>=c){ p.coins-=c; const before=cityProt(p.level); p.level++; const add=cityProt(p.level)-before;
       if(add>0){ const ct=owner===0?PCITY:CITY; for(let i=0;i<this.grid.length;i++) if(this.grid[i]===ct) this.health[i]=(this.health[i]>0?this.health[i]:BASE_HP[ct]+before)+add; } } }
     else if(what==="brush"){ if(p.brush<30){ const cost=brushCosts[p.brush-2]; if(cost!=null && p.coins>=cost){ p.coins-=cost; p.brush++; } } }
+    else if(what==="weapon"){ const it=PALETTE.find(e=>e.t===tool); if(!it) return; const cur=p.upg[tool]||0; if(cur>=3) return;
+      const unit=Math.max(1500,(it.cost||0)*0.5), cost=Math.round(unit*[0,1,3,7][cur+1]);
+      if(p.coins>=cost){ p.coins-=cost; p.upg[tool]=cur+1; } }
   }
 
   // ---- serialization for broadcast ----
@@ -362,7 +368,7 @@ class Game {
   meta(){ return { round:this.round, wave:this.wave, maxWaves:(this.maxWaves===Infinity?0:this.maxWaves), scores:this.scores, over:this.over, winner:this.winner,
     players:this.players.map((p,k)=>({ coins:Math.floor(p.coins), level:p.level, brush:p.brush,
       cells:this.cells[k], max:this.max[k], upCost:upCost(p.level), brushCost:(p.brush<30?brushCosts[p.brush-2]:null),
-      unlocked:[...p.unlocked] })) }; }
+      unlocked:[...p.unlocked], upg:p.upg })) }; }
 }
 
 module.exports = { Game, PALETTE, COLS, ROWS, P_END, E_START };

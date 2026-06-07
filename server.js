@@ -125,7 +125,7 @@ class Room {
     if(m.t==="place"   && Number.isFinite(m.x) && Number.isFinite(m.y)) g.place(side, m.tool|0, m.x|0, m.y|0);
     else if(m.t==="unlock")  g.unlock(side, m.tool|0);
     else if(m.t==="sell")    g.sell(side, m.tool|0);
-    else if(m.t==="upgrade") g.upgrade(side, m.what);
+    else if(m.t==="upgrade") g.upgrade(side, m.what, m.tool|0);
   }
   broadcastChat(side,text){
     const out = JSON.stringify({ t:"chat", from:"Team "+(side+1), text:String(text).slice(0,140) });

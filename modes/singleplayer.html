@@ -45,7 +45,7 @@
   body::before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.05;
     background-image:repeating-linear-gradient(45deg,#000 0 14px,transparent 14px 28px)}
   #wrap{height:100%;display:grid;grid-template-columns:300px 1fr;gap:14px;padding:14px}
-  #side{display:flex;flex-direction:column;gap:12px;min-height:0;overflow:auto;padding-right:2px}
+  #side{display:flex;flex-direction:column;gap:12px;min-height:0;overflow-y:auto;overflow-x:hidden;padding-right:2px}
   .brand{line-height:.9}
   .brand h1{font-family:"Bungee";font-size:30px;margin:0;letter-spacing:1px;
     color:var(--toxic);text-shadow:0 0 18px rgba(126,252,74,.35),3px 3px 0 #07181f}
@@ -70,16 +70,19 @@
   .row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-top:6px}
   .row b{font-weight:800}
 
-  .tools{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-  .tool{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:11px;cursor:pointer;
+  .tools{display:flex;flex-direction:column;gap:6px;overflow-x:hidden}
+  .tool{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:11px;cursor:pointer;min-width:0;
     background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);transition:.12s;user-select:none;position:relative}
   .tool:hover{border-color:var(--toxic-dim);transform:translateY(-1px)}
   .tool.sel{border-color:var(--toxic);box-shadow:0 0 0 1px var(--toxic),0 0 18px rgba(126,252,74,.25);background:rgba(126,252,74,.06)}
   .tool .dot{width:13px;height:13px;border-radius:4px;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.4)}
-  .tool .nm{font-size:12.5px;font-weight:600;line-height:1}
+  .tool .nm{font-size:12.5px;font-weight:600;line-height:1.1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tool .dot{flex:none}
   .tool .cost{font-size:10px;color:var(--amber);letter-spacing:.5px}
   .tool.locked{opacity:.62}
   .tool.locked .nm{color:var(--muted)}
+  .ubtn{font-size:9px;padding:3px 5px;border-radius:6px;border:1px solid var(--panel-edge);background:rgba(255,255,255,.06);color:var(--ink);cursor:pointer;flex:none;white-space:nowrap}
+  .ubtn:disabled{opacity:.4;cursor:not-allowed}
 
   .btn{width:100%;border:none;border-radius:12px;padding:11px;cursor:pointer;
     font-family:"Outfit";font-weight:800;font-size:13px;letter-spacing:.5px;
@@ -475,6 +478,15 @@ let coins=STARTING_COINS, playerLevel=1, enemyLevel=1, wave=1, razings=0, gameOv
 // ---- sandbox / dev tools ----
 let sandbox=false, paused=false, simSpeed=1, dmgMult=1;   // simSpeed scales tick rate; dmgMult scales all weapon damage
 let CAMPAIGN=null, maxWaves=Infinity;   // set when launched from World Conquest: 5-wave battle, per-wave enemy leveling
+// ---- weapon upgrades (fixed damage tiers I/II/III) + custom colours, persisted across all modes ----
+const TIER_MULT=[1,1.3,1.7,2.2], TIER_NAME=["","I","II","III"], MAX_TIER=3;
+let upg={}; try{ upg=JSON.parse(localStorage.getItem("as_upg"))||{}; }catch{}
+function umul(t){ return TIER_MULT[upg[t]||0]; }                       // weapon damage multiplier from its tier
+function pm(i,t){ return origin[i]===ORIGIN_PLAYER ? TIER_MULT[upg[t]||0] : 1; }   // only the player's weapons get buffed
+function upgCost(p){ const unit=Math.max(1500,(p.cost||0)*0.5), to=(upg[p.t]||0)+1; return Math.round(unit*[0,1,3,7][to]); }
+function saveUpg(){ try{ localStorage.setItem("as_upg",JSON.stringify(upg)); }catch{} }
+function saveSkins(){ try{ localStorage.setItem("as_skins",JSON.stringify(skin)); }catch{} }
+function rgbToHex(c){ return "#"+[c[0],c[1],c[2]].map(v=>Math.max(0,Math.min(255,v|0)).toString(16).padStart(2,"0")).join(""); }
 let cityCells=0, cityCellsMax=1, pcityCells=0, pcityCellsMax=1;
 let brushLevel=1, brush=brushLevel+1;
 // per-cell placement is FREE so you can never go bankrupt by placing — coins are only spent on (affordable) unlocks/upgrades
@@ -643,11 +655,12 @@ function explodeR(cx,cy,R,fireProb,dmg){
   }
 }
 // bombs: HUGE city-sized blast radius, LOW per-cell damage (area weapons that pepper a whole city)
-function explode(cx,cy){ explodeR(cx,cy,20,0.30,25); }     // TNT
-function detonate(x,y,t){                                  // bomb yield by type
-  if(t===HBOMB) explodeR(x,y,46,0.45,350);                 // covers a whole city, lightly
-  else if(t===NUKE) explodeR(x,y,42,0.40,120);             // one nuke blankets a city
-  else explode(x,y);
+function explode(cx,cy){ const m=origin[I(cx,cy)]===ORIGIN_PLAYER?umul(TNT):1; explodeR(cx,cy,20,0.30,25*m); }     // TNT
+function detonate(x,y,t){                                  // bomb yield by type (player's bombs hit harder when upgraded)
+  const m=origin[I(x,y)]===ORIGIN_PLAYER?umul(t):1;
+  if(t===HBOMB) explodeR(x,y,46,0.45,350*m);               // covers a whole city, lightly
+  else if(t===NUKE) explodeR(x,y,42,0.40,120*m);           // one nuke blankets a city
+  else explodeR(x,y,20,0.30,25*m);
 }
 
 // ---- step functions ----
@@ -694,7 +707,7 @@ function stepAcid(x,y,i){
   for(const [nx,ny] of targets){
     const j=I(nx,ny), tj=grid[j];
     if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(nx,ny,tj); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }
-    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ACID]); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }  // acid spent on contact
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ACID]*pm(i,ACID)); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }  // acid spent on contact
   }
   stepLiquid(x,y,i);
 }
@@ -704,7 +717,7 @@ function stepLava(x,y,i){
     if(!inB(nx,ny)) continue;
     const j=I(nx,ny), tj=grid[j];
     if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
-    else if(tj===CITY||tj===PCITY||tj===GLASS){ applyDamage(j,DMG[LAVA]); }
+    else if(tj===CITY||tj===PCITY||tj===GLASS){ applyDamage(j,DMG[LAVA]*pm(i,LAVA)); }
     else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
     else if(tj===TNT){ explode(nx,ny); }
   }
@@ -715,7 +728,7 @@ function stepPlasma(x,y,i){
   for(const [nx,ny] of ns){
     if(!inB(nx,ny)) continue;
     const j=I(nx,ny), tj=grid[j];
-    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[PLASMA]); }
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[PLASMA]*pm(i,PLASMA)); }
     else if(tj===TNT){ explode(nx,ny); }
   }
   if(Math.random()<0.18){ grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }    // plasma dissipates fast
@@ -729,7 +742,7 @@ function stepFire(x,y,i){
     if(!inB(nx,ny)) continue;
     const j=I(nx,ny), tj=grid[j];
     if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
-    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.4) applyDamage(j,DMG[FIRE]); }   // fire is slow, intermittent
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.4) applyDamage(j,DMG[FIRE]*pm(i,FIRE)); }   // fire is slow, intermittent
     else if(tj===SAND && Math.random()<0.06){ grid[j]=GLASS; origin[j]=origin[i]; moved[j]=1; }    // sand + fire = glass
     else if(tj===TNT){ explode(nx,ny); }
   }
@@ -757,7 +770,7 @@ function stepMagma(x,y,i){
     if(!inB(nx,ny)) continue;
     const j=I(nx,ny), tj=grid[j];
     if((tj===WOOD||tj===OIL||tj===NAPALM) && Math.random()<0.5){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
-    else if(tj===CITY||tj===PCITY){ applyDamage(j,DMG[MAGMA]); }
+    else if(tj===CITY||tj===PCITY){ applyDamage(j,DMG[MAGMA]*pm(i,MAGMA)); }
     else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }   // quenches to rock
     else if((tj===SAND||tj===GLASS||tj===STONE) && Math.random()<0.06){ grid[j]=MAGMA; origin[j]=origin[i]; moved[j]=1; }  // melts & grows
   }
@@ -771,7 +784,7 @@ function stepNapalm(x,y,i){
     if(!inB(nx,ny)) continue;
     const j=I(nx,ny), tj=grid[j];
     if((tj===WOOD||tj===OIL) && Math.random()<0.45){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
-    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,DMG[NAPALM]); }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,DMG[NAPALM]*pm(i,NAPALM)); }
     else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(nx,ny,tj); }
   }
   if(y>0 && Math.random()<0.07){ const u=I(x,y-1); if(grid[u]===EMPTY){ grid[u]=FIRE; origin[u]=origin[i]; moved[u]=1; } }
@@ -785,7 +798,7 @@ function stepAnti(x,y,i){
     if(!inB(nx,ny)) continue;
     const j=I(nx,ny), tj=grid[j];
     if(tj===EMPTY||tj===WALL||tj===ANTIMATTER||isGas(tj)) continue;
-    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ANTIMATTER]); }   // obliterates armour, overkill spills onward
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ANTIMATTER]*pm(i,ANTIMATTER)); }   // obliterates armour, overkill spills onward
     else { grid[j]=EMPTY; origin[j]=ORIGIN_NONE; health[j]=0; moved[j]=1; }   // wipes liquids/fire/bombs nearby
     if(Math.random()<0.55){                                       // mutual annihilation flash
       if(Math.random()<0.3){ grid[i]=PLASMA; } else { grid[i]=EMPTY; origin[i]=ORIGIN_NONE; }
@@ -800,8 +813,8 @@ function stepVirus(x,y,i){
   for(const [nx,ny] of ns){
     if(!inB(nx,ny)) continue;
     const j=I(nx,ny), tj=grid[j];
-    if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,DMG[VIRUS],VIRUS); }   // corrupts to VIRUS on kill
-    else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS) && Math.random()<0.04){ applyDamage(j,DMG[VIRUS],VIRUS); }
+    if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,DMG[VIRUS]*pm(i,VIRUS),VIRUS); }   // corrupts to VIRUS on kill
+    else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS) && Math.random()<0.04){ applyDamage(j,DMG[VIRUS]*pm(i,VIRUS),VIRUS); }
   }
   if(Math.random()<0.04){ grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }   // decays
   stepSolid(x,y,i);                                               // falls until it lands on something to infect
@@ -815,10 +828,10 @@ function stepGas(x,y,i){
 
 function stepNew(x,y,i){   // generic driver for the data-defined super-weapon tiers (ids NEW_BASE+)
   const d=DEFBYID[grid[i]];
-  if(d.kind==="blast"){ if(y+1<ROWS){ const dd=I(x,y+1); if(solidPass(grid[dd])){ swap(i,dd); return; } } explodeR(x,y,d.r,d.fp,d.dmg); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }   // explode on impact, then consumed
+  if(d.kind==="blast"){ if(y+1<ROWS){ const dd=I(x,y+1); if(solidPass(grid[dd])){ swap(i,dd); return; } } explodeR(x,y,d.r,d.fp,d.dmg*pm(i,d.id)); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }   // explode on impact, then consumed
   for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){
     if(!inB(nx,ny)) continue; const j=I(nx,ny), tj=grid[j];
-    if(BASE_HP[tj]!==undefined){ applyDamage(j,d.dmg); }
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,d.dmg*pm(i,d.id)); }
     else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(nx,ny,tj); }
     else if(d.kind==="anti" && tj!==EMPTY && tj!==WALL && tj!==grid[i] && !isGas(tj)){ grid[j]=EMPTY; origin[j]=ORIGIN_NONE; health[j]=0; moved[j]=1; }
   }
@@ -919,7 +932,8 @@ const img=sctx.createImageData(COLS,ROWS);
 const buf=img.data;
 
 const BG=[8,22,28];
-const skin={};                                              // swappable material themes
+const skin={};                                              // swappable material themes + per-weapon custom colours
+try{ const s=JSON.parse(localStorage.getItem("as_skins")); if(s) Object.assign(skin, s); }catch{}
 function baseColor(t,i){
   const j=noise[i]-16;
   if(t===CITY){
@@ -1145,17 +1159,37 @@ const unlocked=new Set([ACID,WATER,SAND,EMPTY]);
 const toolsEl=document.getElementById("tools");
 let sellMode=false;
 const SELL_RATE=1;   // refund 100% of the unlock cost (anti-softlock only)
+function curColRGB(p){ return skin[p.t] || hexToRgb(p.col); }
 function renderTools(){
   toolsEl.innerHTML="";
   PALETTE.forEach(p=>{
     const el=document.createElement("div");
     const lock=p.cost>0 && !unlocked.has(p.t);
     const sellable=sellMode && p.cost>0 && unlocked.has(p.t);
+    const tier=upg[p.t]||0, dmgWeapon=powerOf(p.t)>1 && p.t!==EMPTY;
     el.className="tool"+(p.t===tool?" sel":"")+(lock?" locked":"");
-    const tag = lock ? `<div class="cost">${fmtCoin(p.cost)}c</div>`
-              : sellable ? `<div class="cost" style="color:var(--danger)">+${fmtCoin(Math.round(p.cost*SELL_RATE))}c</div>` : "";
-    el.innerHTML=`<span class="dot" style="background:${p.col}"></span>
-      <span><span class="nm">${p.nm}</span>${tag}</span>`;
+    const c=curColRGB(p);
+    const tag = lock ? `<span class="cost">${fmtCoin(p.cost)}c</span>`
+              : sellable ? `<span class="cost" style="color:var(--danger)">+${fmtCoin(Math.round(p.cost*SELL_RATE))}c</span>` : "";
+    el.innerHTML=`<span class="dot" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span>
+      <span class="nm" style="flex:1">${p.nm}${tier?` <b style="color:var(--toxic)">${TIER_NAME[tier]}</b>`:""}</span>${tag}`;
+    if(p.t!==EMPTY){
+      const ctr=document.createElement("span"); ctr.style.cssText="display:flex;gap:4px;align-items:center;margin-left:6px";
+      const ci=document.createElement("input"); ci.type="color"; ci.value=rgbToHex(c); ci.title="Custom colour";
+      ci.style.cssText="width:20px;height:20px;border:none;background:none;padding:0;cursor:pointer;flex:none";
+      ci.onclick=e=>e.stopPropagation();
+      ci.oninput=e=>{ skin[p.t]=hexToRgb(e.target.value); curPack="Custom"; saveSkins(); renderTools(); };
+      ctr.appendChild(ci);
+      if(dmgWeapon && !lock){
+        const ub=document.createElement("button"); ub.className="ubtn";
+        if(tier>=MAX_TIER){ ub.textContent="MAX"; ub.disabled=true; }
+        else { const uc=upgCost(p); ub.textContent="⬆"+fmtCoin(uc); ub.disabled=coins<uc; }
+        ub.onclick=e=>{ e.stopPropagation(); if((upg[p.t]||0)>=MAX_TIER) return; const uc=upgCost(p);
+          if(coins>=uc){ coins-=uc; upg[p.t]=(upg[p.t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
+        ctr.appendChild(ub);
+      }
+      el.appendChild(ctr);
+    }
     el.onclick=()=>{
       if(sellable){ coins+=Math.round(p.cost*SELL_RATE); unlocked.delete(p.t); if(tool===p.t) tool=ACID; sfx("coin"); }
       else if(lock){ if(coins>=p.cost){ coins-=p.cost; unlocked.add(p.t); tool=p.t; sfx("unlock"); } }
@@ -1233,10 +1267,7 @@ function resetGame(){
 }
 
 /* ---- SKINS ---- */
-const SKINNABLE=[
-  {t:SAND,nm:"Sand"},{t:WATER,nm:"Water"},{t:ACID,nm:"Acid"},{t:FIRE,nm:"Fire"},{t:WOOD,nm:"Wood"},
-  {t:TNT,nm:"TNT"},{t:OIL,nm:"Oil"},{t:STONE,nm:"Stone"},{t:GLASS,nm:"Glass"},{t:LAVA,nm:"Lava"},{t:PLASMA,nm:"Plasma"}
-];
+const SKINNABLE=PALETTE.filter(p=>p.t!==EMPTY).map(p=>({t:p.t,nm:p.nm}));   // every weapon is recolourable
 const SKINPACKS={
   Default:{},
   Neon:   {[SAND]:[255,233,84],[WATER]:[0,209,255],[ACID]:[57,255,20],[FIRE]:[255,0,128],[WOOD]:[123,0,255],[TNT]:[255,60,60]},
@@ -1257,7 +1288,7 @@ function renderSkins(){
       curPack=name;
       for(const k in skin) delete skin[k];
       Object.assign(skin, SKINPACKS[name]);
-      renderSkins();
+      saveSkins(); renderSkins(); renderTools();
     };
     skinsEl.appendChild(b);
   });
@@ -1268,7 +1299,7 @@ SKINNABLE.forEach(m=>{const o=document.createElement("option");o.value=m.t;o.tex
 function hexToRgb(h){const n=parseInt(h.slice(1),16);return[(n>>16)&255,(n>>8)&255,n&255];}
 document.getElementById("skinApply").onclick=()=>{
   skin[+skinMat.value]=hexToRgb(skinCol.value);
-  curPack="Custom"; renderSkins();
+  curPack="Custom"; saveSkins(); renderSkins(); renderTools();
 };
 
 /* ---- CHAT with profanity filter ---- */
