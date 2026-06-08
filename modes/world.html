@@ -224,6 +224,7 @@ function placeCities(cities, allowBlocked){
   }
 }
 // normal levels: distance (rings) from the capital — near = low, far = high
+function lvlForRing(r){ return Math.min(999, Math.max(1, r)); }
 function assignLevelsFrom(capId){
   const cap=byId(capId), nC=camp.cities.length, ring=new Array(nC).fill(Infinity);
   ring[capId]=0; const q=[capId]; let h=0;
