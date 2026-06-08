@@ -80,9 +80,9 @@
     <div class="opt sel" data-m="city">City Only</div>
     <div class="opt" data-m="country">Include Countries</div>
   </div>
-  <div class="legend" style="max-width:460px">Conquer the planet. Each siege is an Acid Siege battle (waves = city level × 5). Every enemy city
-    starts at level 1 and <b>rises over time</b> — faster the higher your own level — so conquer fast. In <b>Include Countries</b>
-    cities form nations: declare war on a nation to siege the cities inside, and it strikes back at your border cities.</div>
+  <div class="legend" style="max-width:460px">Conquer the planet. Each siege is an Acid Siege battle (waves = city level × 5); cities are weaker near your
+    capital and tougher far away, and <b>all of them harden over time</b> — faster as you level up, and much faster on higher
+    difficulty. In <b>Include Countries</b>, declare war on a nation to siege the cities inside; it strikes back at your border.</div>
   <div class="opts" style="margin-top:6px">
     <button class="mbtn" id="newBtn">NEW CAMPAIGN</button>
     <button class="mbtn ghost" id="resumeBtn">RESUME</button>
@@ -223,15 +223,26 @@ function placeCities(cities, allowBlocked){
     cities.push({id, gx:gx2, gy:gy2, lvl:1, cont:reg, name:cityName(id*97+(Math.random()*1e6|0)), col:randCol(id*131+5), owner:"enemy"});
   }
 }
-// enemy cities all share a level that climbs over REAL time. The rate scales with YOUR level:
-// every 5 minutes their level rises by max(1, round(yourLevel/10))  →  lvl1: +1/5min · lvl100: +10/5min.
+// normal levels: distance (rings) from the capital — near = low, far = high
+function assignLevelsFrom(capId){
+  const cap=byId(capId), nC=camp.cities.length, ring=new Array(nC).fill(Infinity);
+  ring[capId]=0; const q=[capId]; let h=0;
+  while(h<q.length){ const id=q[h++]; byId(id).nb.forEach(n=>{ if(ring[n]===Infinity){ ring[n]=ring[id]+1; q.push(n); } }); }
+  let maxR=0; ring.forEach(r=>{ if(r!==Infinity&&r>maxR) maxR=r; });
+  camp.cities.forEach(c=>{ let r=ring[c.id];
+    if(r===Infinity){ const d=Math.hypot(c.gx-cap.gx,c.gy-cap.gy); r=maxR+2+Math.floor(d/35); }
+    c.baseLvl=lvlForRing(r); c.lvl=c.baseLvl; });
+}
+// on top of the base level, enemy cities HARDEN over real time so cheap-but-huge weapons + fast money don't
+// trivialise them. Rate scales with YOUR level (you're stronger → they must be) and is amplified by difficulty.
+const DIFF_BOOST={ easy:0.5, medium:1, hard:1.7, extreme:2.8 };
 function applyBoost(){
   if(!camp || camp.boost==null) return false; let changed=false;
-  const now=Date.now();
-  while(now - camp.lastBoost >= 300000){ camp.boost += Math.max(1, Math.round(camp.bank.level/10)); camp.lastBoost += 300000; changed=true; }
-  const lv=1+camp.boost;
-  camp.cities.forEach(c=>{ if(c.owner==="enemy" && c.lvl!==lv){ c.lvl=lv; changed=true; } });
-  if(camp.countries) camp.countries.forEach(co=>{ co.level=lv; });
+  const mult=DIFF_BOOST[camp.diff]||1, now=Date.now();
+  while(now - camp.lastBoost >= 300000){ camp.boost += Math.max(1, Math.round(camp.bank.level/10)) * mult; camp.lastBoost += 300000; changed=true; }
+  const add=Math.round(camp.boost);
+  camp.cities.forEach(c=>{ if(c.owner==="enemy"){ const lv=(c.baseLvl||1)+add; if(c.lvl!==lv){ c.lvl=lv; changed=true; } } });
+  if(camp.countries) camp.countries.forEach(co=>{ const en=countryEnemyCities(co); if(en.length) co.level=Math.max(...en.map(c=>c.lvl)); });
   if(changed){ save(); if(camp.mode==="country") buildTerritory(); }
   return changed;
 }
@@ -265,6 +276,7 @@ function save(){ try{ const c={...camp, cities:camp.cities.map(({nb,...r})=>r)};
 function load(){ try{ const c=JSON.parse(localStorage.getItem(SAVE)); if(!c||!c.cities||!c.cities.length) return false;
     c.mode=c.mode||"city"; c.startCol=c.startCol||[86,240,96]; if(c.capital==null) c.capital=-1;
     c.empire=c.empire||"Your Empire"; if(c.boost==null) c.boost=0; if(c.lastBoost==null) c.lastBoost=Date.now();
+    c.cities.forEach(x=>{ if(x.baseLvl==null) x.baseLvl=x.lvl||1; });
     c.bank=c.bank||{coins:2000,level:1,unlocked:[ACIDID,WATERID,SANDID,EMPTYID],brushLevel:1};
     if(c.mode==="country" && !c.countries) c.mode="city";   // legacy save without nations → fall back safely
     computeNeighbors(c.cities); camp=c; return true; }catch{ return false; } }
@@ -466,8 +478,8 @@ function chooseStart(c){
   // unblock the middle and populate it now that the player has a foothold
   camp.middleOpen=true; const extra=camp.cities.slice(); placeCities(extra,true);
   camp.cities=extra; computeNeighbors(camp.cities);
-  camp.cities.forEach(x=>{ if(x.owner==="enemy") x.lvl=1; });          // all enemy cities start at level 1
-  camp.boost=0; camp.lastBoost=Date.now();                            // they rise over real time (see applyBoost)
+  assignLevelsFrom(c.id);                                             // normal distance-from-capital levels
+  camp.boost=0; camp.lastBoost=Date.now();                            // + difficulty-scaled hardening over time
   if(camp.mode==="country") formCountries();
   document.getElementById("startScreen").classList.add("hidden");
   paintTerrain(); buildTerritory(); save(); hud(); drawCities(); toast(`Homeland founded at ${c.name}.`);
