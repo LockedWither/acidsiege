@@ -80,9 +80,9 @@
     <div class="opt sel" data-m="city">City Only</div>
     <div class="opt" data-m="country">Include Countries</div>
   </div>
-  <div class="legend" style="max-width:460px">Conquer the planet. Each siege is an Acid Siege battle (waves = city level × 5), the enemy levels up
-    every wave, and the farther a city sits from your capital the higher its level. In <b>Include Countries</b> cities form
-    nations — declare war on a nation to siege the cities inside, and it will strike back at your border cities.</div>
+  <div class="legend" style="max-width:460px">Conquer the planet. Each siege is an Acid Siege battle (waves = city level × 5). Every enemy city
+    starts at level 1 and <b>rises over time</b> — faster the higher your own level — so conquer fast. In <b>Include Countries</b>
+    cities form nations: declare war on a nation to siege the cities inside, and it strikes back at your border cities.</div>
   <div class="opts" style="margin-top:6px">
     <button class="mbtn" id="newBtn">NEW CAMPAIGN</button>
     <button class="mbtn ghost" id="resumeBtn">RESUME</button>
@@ -97,6 +97,7 @@
       <a class="btn alt" href="/" style="margin-top:8px;text-decoration:none;text-align:center;display:block">← Main menu</a></div>
     <div class="card">
       <h2>Treasury</h2><div class="coins" id="coinN">0</div>
+      <div class="row"><span>Empire</span><b id="empN">—</b></div>
       <div class="row"><span>Cities held</span><b id="ownN">0</b></div>
       <div class="row"><span>World</span><b id="pctN">0%</b></div>
       <div class="row"><span>Your level</span><b id="lvlN">1</b></div>
@@ -130,6 +131,8 @@
 <div class="screen hidden" id="startScreen" style="background:transparent;pointer-events:none;justify-content:flex-start;padding-top:20px">
   <div style="background:rgba(4,20,26,.9);border:1px solid var(--panel-edge);border-radius:14px;padding:12px 22px;display:flex;flex-direction:column;align-items:center;gap:8px">
     <h1 class="logo" style="font-size:clamp(20px,4.5vw,34px)">CHOOSE YOUR HOMELAND</h1>
+    <input id="empireName" maxlength="22" placeholder="Name your empire" value="Your Empire"
+      style="pointer-events:auto;background:rgba(0,0,0,.3);border:1px solid var(--panel-edge);border-radius:8px;color:var(--ink);padding:8px 10px;font-family:inherit;font-size:14px;text-align:center;width:220px">
     <div class="sub">Click any city on the map to begin there</div>
     <button class="mbtn ghost" id="startCancel" style="pointer-events:auto">Cancel</button>
   </div>
@@ -220,15 +223,17 @@ function placeCities(cities, allowBlocked){
     cities.push({id, gx:gx2, gy:gy2, lvl:1, cont:reg, name:cityName(id*97+(Math.random()*1e6|0)), col:randCol(id*131+5), owner:"enemy"});
   }
 }
-function lvlForRing(r){ return Math.min(999, Math.max(1, r)); }
-function assignLevelsFrom(capId){
-  const cap=byId(capId), nC=camp.cities.length, ring=new Array(nC).fill(Infinity);
-  ring[capId]=0; const q=[capId]; let h=0;
-  while(h<q.length){ const id=q[h++]; byId(id).nb.forEach(n=>{ if(ring[n]===Infinity){ ring[n]=ring[id]+1; q.push(n); } }); }
-  let maxR=0; ring.forEach(r=>{ if(r!==Infinity&&r>maxR) maxR=r; });
-  camp.cities.forEach(c=>{ let r=ring[c.id];
-    if(r===Infinity){ const d=Math.hypot(c.gx-cap.gx,c.gy-cap.gy); r=maxR+2+Math.floor(d/35); }
-    c.lvl=lvlForRing(r); });
+// enemy cities all share a level that climbs over REAL time. The rate scales with YOUR level:
+// every 5 minutes their level rises by max(1, round(yourLevel/10))  →  lvl1: +1/5min · lvl100: +10/5min.
+function applyBoost(){
+  if(!camp || camp.boost==null) return false; let changed=false;
+  const now=Date.now();
+  while(now - camp.lastBoost >= 300000){ camp.boost += Math.max(1, Math.round(camp.bank.level/10)); camp.lastBoost += 300000; changed=true; }
+  const lv=1+camp.boost;
+  camp.cities.forEach(c=>{ if(c.owner==="enemy" && c.lvl!==lv){ c.lvl=lv; changed=true; } });
+  if(camp.countries) camp.countries.forEach(co=>{ co.level=lv; });
+  if(changed){ save(); if(camp.mode==="country") buildTerritory(); }
+  return changed;
 }
 // group enemy cities into countries; closer to the capital = smaller (2-4), far = large (10-25)
 function formCountries(){
@@ -259,6 +264,7 @@ function newCampaign(diff,mode){
 function save(){ try{ const c={...camp, cities:camp.cities.map(({nb,...r})=>r)}; localStorage.setItem(SAVE,JSON.stringify(c)); }catch{} }
 function load(){ try{ const c=JSON.parse(localStorage.getItem(SAVE)); if(!c||!c.cities||!c.cities.length) return false;
     c.mode=c.mode||"city"; c.startCol=c.startCol||[86,240,96]; if(c.capital==null) c.capital=-1;
+    c.empire=c.empire||"Your Empire"; if(c.boost==null) c.boost=0; if(c.lastBoost==null) c.lastBoost=Date.now();
     c.bank=c.bank||{coins:2000,level:1,unlocked:[ACIDID,WATERID,SANDID,EMPTYID],brushLevel:1};
     if(c.mode==="country" && !c.countries) c.mode="city";   // legacy save without nations → fall back safely
     computeNeighbors(c.cities); camp=c; return true; }catch{ return false; } }
@@ -386,6 +392,7 @@ function hud(){ if(!camp) return;
   document.getElementById("lvlN").textContent=camp.bank.level;
   document.getElementById("diffN").textContent=camp.diff+(camp.mode==="country"?" · nations":"");
   const sc=camp.startCol; document.getElementById("swMine").style.background=`rgb(${sc[0]},${sc[1]},${sc[2]})`;
+  document.getElementById("empN").textContent=camp.empire||"—";
   document.getElementById("legHint").textContent = camp.mode==="country"
     ? "Declare war on a nation to siege the cities inside." : "You can only war enemy cities bordering yours.";
 }
@@ -399,7 +406,7 @@ function cityAt(mx,my){ const r=ov.getBoundingClientRect(); const rad=Math.max(6
 ov.addEventListener("pointermove",e=>{ if(!camp||choosing){ hoverlbl.style.display="none"; return; }
   const r=ov.getBoundingClientRect(); const c=cityAt(e.clientX-r.left,e.clientY-r.top);
   if(!c){ hoverlbl.style.display="none"; return; }
-  let label = c.owner==="mine"?"Your Empire" : c.owner==="gray"?"Ruins of "+c.name : (camp.mode==="country"&&countryOf(c)?countryOf(c).name:c.name);
+  let label = c.owner==="mine"?(camp.empire||"Your Empire") : c.owner==="gray"?"Ruins of "+c.name : (camp.mode==="country"&&countryOf(c)?countryOf(c).name:c.name);
   const sr=document.getElementById("stage").getBoundingClientRect();
   hoverlbl.textContent=label; hoverlbl.style.display="block";
   hoverlbl.style.left=(e.clientX-sr.left)+"px"; hoverlbl.style.top=(e.clientY-sr.top)+"px";
@@ -454,11 +461,13 @@ function nearestMine(c){ let best=1e9,id=null; myCities().forEach(m=>{ const d=M
 function declareWarCountry(co,w){ if(w.cost){ if(camp.bank.coins<w.cost) return; camp.bank.coins-=w.cost; }
   co.atWar=true; save(); hidePop(); hud(); drawCities(); toast(`War declared on ${co.name}. Its cities are now open to siege.`); }
 function chooseStart(c){
+  const nm=(document.getElementById("empireName").value||"").trim(); camp.empire=nm||"Your Empire";
   camp.startCol=[86,240,96]; c.owner="mine"; camp.capital=c.id; choosing=false;
   // unblock the middle and populate it now that the player has a foothold
   camp.middleOpen=true; const extra=camp.cities.slice(); placeCities(extra,true);
   camp.cities=extra; computeNeighbors(camp.cities);
-  assignLevelsFrom(c.id);
+  camp.cities.forEach(x=>{ if(x.owner==="enemy") x.lvl=1; });          // all enemy cities start at level 1
+  camp.boost=0; camp.lastBoost=Date.now();                            // they rise over real time (see applyBoost)
   if(camp.mode==="country") formCountries();
   document.getElementById("startScreen").classList.add("hidden");
   paintTerrain(); buildTerritory(); save(); hud(); drawCities(); toast(`Homeland founded at ${c.name}.`);
@@ -479,6 +488,7 @@ function applyResult(){
   let r; try{ r=JSON.parse(localStorage.getItem(RES)); }catch{}
   localStorage.removeItem(RES); if(!r) return;
   camp.bank={ coins:Math.max(0,Math.floor(+r.coins||0)), level:Math.max(1,Math.floor(+r.playerLevel||1)), unlocked:r.unlocked||camp.bank.unlocked, brushLevel:Math.max(1,Math.floor(+r.brushLevel||1)) };
+  applyBoost();   // catch up enemy growth for the time the battle took
   const tc=byId(r.city), atk=(r.attacker!==""&&r.attacker!=null)?byId(+r.attacker):null;
   let msg;
   if(r.win){ if(tc){ razeFx(tc); tc.owner="gray"; } msg=(tc?tc.name:"The city")+" razed — capture it to annex it."; }
@@ -520,7 +530,7 @@ document.getElementById("winOk").onclick=()=>{ document.getElementById("winScree
 let diff="medium", mode="city";
 document.querySelectorAll("#diffOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#diffOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); diff=o.dataset.d; });
 document.querySelectorAll("#modeOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#modeOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); mode=o.dataset.m; });
-function showMap(){ document.getElementById("menu").classList.add("hidden"); whenMap(()=>{ buildTerrain(); paintTerrain(); buildTerritory(); fitOverlay(); hud(); }); }
+function showMap(){ document.getElementById("menu").classList.add("hidden"); whenMap(()=>{ buildTerrain(); applyBoost(); paintTerrain(); buildTerritory(); fitOverlay(); hud(); }); }
 document.getElementById("newBtn").onclick=()=>{ whenMap(()=>{ buildTerrain(); newCampaign(diff,mode); paintTerrain();
   document.getElementById("menu").classList.add("hidden"); fitOverlay(); hud(); choosing=true; document.getElementById("startScreen").classList.remove("hidden"); }); };
 document.getElementById("resumeBtn").onclick=()=>{ if(load()){ showMap(); applyResult(); } else toast("No saved campaign."); };
@@ -544,7 +554,7 @@ document.getElementById("restartBtn").onclick=()=>{ if(confirm("Restart the whol
 window.addEventListener("resize", ()=>{ if(camp) fitOverlay(); });
 window.addEventListener("pagehide", ()=>{ if(camp) save(); });          // belt-and-suspenders save
 window.addEventListener("visibilitychange", ()=>{ if(document.hidden && camp) save(); });
-setInterval(()=>{ if(camp) save(); }, 15000);                            // periodic autosave
+setInterval(()=>{ if(camp){ if(applyBoost()) hud(); save(); } }, 15000);  // periodic autosave + enemy level growth
 requestAnimationFrame(loop);
 if(localStorage.getItem(RES) && load()){ showMap(); applyResult(); }     // returning from a battle → straight back in
 else if(localStorage.getItem(SAVE)) document.getElementById("resumeBtn").style.outline="2px solid var(--toxic)";  // saved game → highlight RESUME on the menu
