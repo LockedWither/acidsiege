@@ -86,6 +86,7 @@
   <div class="opts" style="margin-top:6px">
     <button class="mbtn" id="newBtn">NEW CAMPAIGN</button>
     <button class="mbtn ghost" id="resumeBtn">RESUME</button>
+    <button class="mbtn ghost" id="menuLoadBtn">⤒ LOAD SAVE</button>
     <a class="mbtn ghost" href="/" style="text-decoration:none">← MENU</a>
   </div>
 </div>
@@ -109,7 +110,9 @@
         <div><span class="sw" style="background:#8a8f95"></span> Destroyed (capture for coins)</div>
         <div style="margin-top:6px;color:var(--muted)" id="legHint">Click a city for info.</div>
       </div>
-      <button class="btn" id="saveBtn" style="margin-top:10px">💾 Save game</button>
+      <button class="btn" id="saveBtn" style="margin-top:10px">⤓ Download save</button>
+      <button class="btn alt" id="loadFileBtn" style="margin-top:6px">⤒ Load save file</button>
+      <input type="file" id="loadFile" accept="application/json,.json" style="display:none">
       <button class="btn alt" id="restartBtn" style="margin-top:6px">Restart campaign</button>
     </div>
   </aside>
@@ -522,7 +525,19 @@ document.getElementById("newBtn").onclick=()=>{ whenMap(()=>{ buildTerrain(); ne
   document.getElementById("menu").classList.add("hidden"); fitOverlay(); hud(); choosing=true; document.getElementById("startScreen").classList.remove("hidden"); }); };
 document.getElementById("resumeBtn").onclick=()=>{ if(load()){ showMap(); applyResult(); } else toast("No saved campaign."); };
 document.getElementById("startCancel").onclick=()=>{ document.getElementById("startScreen").classList.add("hidden"); choosing=false; };
-document.getElementById("saveBtn").onclick=()=>{ if(camp){ save(); toast("Campaign saved ✓"); } };
+document.getElementById("saveBtn").onclick=()=>{ if(!camp){ toast("No campaign to save."); return; }
+  save();   // also keep the browser copy in sync
+  const data=JSON.stringify({...camp, cities:camp.cities.map(({nb,...r})=>r)});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([data],{type:"application/json"}));
+  a.download="acidsiege-conquest.json"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+  toast("Save downloaded ⤓"); };
+document.getElementById("loadFileBtn").onclick=()=>document.getElementById("loadFile").click();
+document.getElementById("menuLoadBtn").onclick=()=>document.getElementById("loadFile").click();
+document.getElementById("loadFile").onchange=e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=()=>{ try{ const c=JSON.parse(rd.result); if(!c||!c.cities) throw 0;
+      localStorage.setItem(SAVE, rd.result); localStorage.removeItem(RES);
+      if(load()){ showMap(); toast("Save loaded ⤒"); } else throw 0;
+    }catch{ toast("That file isn't a valid save."); } e.target.value=""; }; rd.readAsText(f); };
 document.getElementById("restartBtn").onclick=()=>{ if(confirm("Restart the whole campaign?")){ localStorage.removeItem(SAVE); localStorage.removeItem(RES); location.reload(); } };
 
 /* ---------- boot ---------- */
