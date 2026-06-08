@@ -109,7 +109,8 @@
         <div><span class="sw" style="background:#8a8f95"></span> Destroyed (capture for coins)</div>
         <div style="margin-top:6px;color:var(--muted)" id="legHint">Click a city for info.</div>
       </div>
-      <button class="btn alt" id="restartBtn" style="margin-top:10px">Restart campaign</button>
+      <button class="btn" id="saveBtn" style="margin-top:10px">💾 Save game</button>
+      <button class="btn alt" id="restartBtn" style="margin-top:6px">Restart campaign</button>
     </div>
   </aside>
 
@@ -200,16 +201,16 @@ function computeNeighbors(cities){
     cities.forEach(b=>{ if(b!==a && b.cont===a.cont){ const d=Math.hypot(a.gx-b.gx,a.gy-b.gy); if(d<bd){bd=d;best=b;} } });
     if(best){ a.nb.push(best.id); if(!best.nb.includes(a.id)) best.nb.push(a.id); } } });
 }
-// place cities into the given regions; each continent gets its own random density → replayable patterns
+// place cities consistently on every continent (the landmasses never change); only the jitter +
+// country division vary per world, so it's always Earth — just carved up differently each game.
 function placeCities(cities, allowBlocked){
-  const S=CITY_S; const dens={};
+  const S=CITY_S;
   for(let gy=Math.floor(S/2); gy<GH; gy+=S) for(let gx=Math.floor(S/2); gx<GW; gx+=S){
     let gx2=Math.round(gx+(Math.random()-0.5)*S*0.85), gy2=Math.round(gy+(Math.random()-0.5)*S*0.85);
     if(gx2<0||gx2>=GW||gy2<0||gy2>=GH||!land[I(gx2,gy2)]){ if(!land[I(gx,gy)]) continue; gx2=gx; gy2=gy; }
     const reg=regionOf(gx2,gy2); if(!reg) continue;
     if(BLOCKED.has(reg) !== allowBlocked) continue;   // first pass: non-blocked only · middle pass: blocked only
-    if(dens[reg]===undefined) dens[reg]=0.06+Math.random()*0.30;   // per-continent skip rate this world
-    if(Math.random()<dens[reg]) continue;
+    if(Math.random()<0.08) continue;                  // light, uniform thinning (keeps every continent populated)
     let c=0; for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ const x=gx2+dx,y=gy2+dy; if(x>=0&&x<GW&&y>=0&&y<GH&&land[I(x,y)]) c++; }
     if(c<5) continue;
     const id=cities.length;
@@ -253,7 +254,11 @@ function newCampaign(diff,mode){
   computeNeighbors(camp.cities); save();
 }
 function save(){ try{ const c={...camp, cities:camp.cities.map(({nb,...r})=>r)}; localStorage.setItem(SAVE,JSON.stringify(c)); }catch{} }
-function load(){ try{ const c=JSON.parse(localStorage.getItem(SAVE)); if(!c||!c.cities) return false; computeNeighbors(c.cities); camp=c; return true; }catch{ return false; } }
+function load(){ try{ const c=JSON.parse(localStorage.getItem(SAVE)); if(!c||!c.cities||!c.cities.length) return false;
+    c.mode=c.mode||"city"; c.startCol=c.startCol||[86,240,96]; if(c.capital==null) c.capital=-1;
+    c.bank=c.bank||{coins:2000,level:1,unlocked:[ACIDID,WATERID,SANDID,EMPTYID],brushLevel:1};
+    if(c.mode==="country" && !c.countries) c.mode="city";   // legacy save without nations → fall back safely
+    computeNeighbors(c.cities); camp=c; return true; }catch{ return false; } }
 const byId=id=>camp.cities[id];
 const myCities=()=>camp.cities.filter(c=>c.owner==="mine");
 const countryOf=c=>(camp.countries&&c.country>=0)?camp.countries[c.country]:null;
@@ -360,6 +365,11 @@ function drawCities(){
     octx.fillStyle="rgba(0,0,0,.85)"; octx.fillText(c.lvl,x+1,y+1);
     octx.fillStyle="#fff"; octx.fillText(c.lvl,x,y);
   }
+  // raze animation: the old colour fades out, revealing the gray ruins underneath
+  for(let k=fadeFx.length-1;k>=0;k--){ const f=fadeFx[k]; const fx2=(f.gx+0.5)/GW*r.width, fy2=(f.gy+0.5)/GH*r.height;
+    const s=sz*(2.6-1.4*f.life)+sz;
+    octx.fillStyle=`rgba(${f.col[0]},${f.col[1]},${f.col[2]},${f.life})`; octx.fillRect(fx2-s/2,fy2-s/2,s,s);
+    f.life-=0.035; if(f.life<=0) fadeFx.splice(k,1); }
 }
 function loop(){ pulse+=0.08; if(camp&&!menuOpen()) drawCities(); requestAnimationFrame(loop); }
 function menuOpen(){ return !document.getElementById("menu").classList.contains("hidden"); }
@@ -467,14 +477,18 @@ function applyResult(){
   localStorage.removeItem(RES); if(!r) return;
   camp.bank={ coins:Math.max(0,Math.floor(+r.coins||0)), level:Math.max(1,Math.floor(+r.playerLevel||1)), unlocked:r.unlocked||camp.bank.unlocked, brushLevel:Math.max(1,Math.floor(+r.brushLevel||1)) };
   const tc=byId(r.city), atk=(r.attacker!==""&&r.attacker!=null)?byId(+r.attacker):null;
-  let title,sub;
-  if(r.win){ if(tc) tc.owner="gray"; title="CITY RAZED"; sub=(tc?tc.name:"The city")+" lies in ruins — capture it to annex it."; }
-  else if(atk){ atk.owner="gray"; title="DEFEAT"; sub="Your assault failed — "+atk.name+" fell."; }
-  else { title="FLEET LOST"; sub="Your landing was repelled — no territory lost. Regroup and try again."; }
+  let msg;
+  if(r.win){ if(tc){ razeFx(tc); tc.owner="gray"; } msg=(tc?tc.name:"The city")+" razed — capture it to annex it."; }
+  else if(atk){ razeFx(atk); atk.owner="gray"; msg="Defeat — "+atk.name+" fell."; }
+  else { msg="Fleet repelled — no territory lost."; }
   const raids=runRaids();
-  if(raids.length) sub += "\n⚔ Enemy raids: "+raids.join(", ");
-  buildTerritory(); save(); winScreen(title,sub); checkWin();
+  if(raids.length) msg += " · ⚔ raids: "+raids.join(", ");
+  buildTerritory(); save(); hud(); toast(msg); checkWin();   // no more "city razed" screen — fade animates on the map
 }
+// capture a city's current colour, then it animates fading away to reveal the gray ruins beneath
+let fadeFx=[];
+function razeFx(c){ const col=(c.owner==="mine")?camp.startCol:(camp.mode==="country"&&countryOf(c)?countryOf(c).col:c.col);
+  fadeFx.push({gx:c.gx, gy:c.gy, col:col.slice(), life:1}); }
 // countries you're at war with (and, in city mode, bordering enemies on hard/extreme) strike your in-range cities
 function runRaids(){
   const lost=[]; const prot=C.cityProt(camp.bank.level);
@@ -483,12 +497,12 @@ function runRaids(){
       const targets=new Set();
       countryEnemyCities(co).forEach(c=>c.nb.forEach(n=>{ if(byId(n).owner==="mine") targets.add(n); }));
       if(!targets.size) continue;
-      if(botBestDmg(co.level) > prot){ const arr=[...targets]; const m=byId(arr[(Math.random()*arr.length)|0]); m.owner="gray"; lost.push(m.name); }
+      if(botBestDmg(co.level) > prot){ const arr=[...targets]; const m=byId(arr[(Math.random()*arr.length)|0]); razeFx(m); m.owner="gray"; lost.push(m.name); }
     }
   } else if(camp.diff==="hard"||camp.diff==="extreme"){
     const p=camp.diff==="extreme"?0.8:0.5;
     if(Math.random()<p){ const targets=[]; myCities().forEach(m=>m.nb.forEach(n=>{ const e=byId(n); if(e.owner==="enemy") targets.push([e,m]); }));
-      if(targets.length){ const [e,m]=targets[(Math.random()*targets.length)|0]; if(botBestDmg(e.lvl)>prot){ m.owner="gray"; lost.push(m.name); } } }
+      if(targets.length){ const [e,m]=targets[(Math.random()*targets.length)|0]; if(botBestDmg(e.lvl)>prot){ razeFx(m); m.owner="gray"; lost.push(m.name); } } }
   }
   return lost;
 }
@@ -508,6 +522,7 @@ document.getElementById("newBtn").onclick=()=>{ whenMap(()=>{ buildTerrain(); ne
   document.getElementById("menu").classList.add("hidden"); fitOverlay(); hud(); choosing=true; document.getElementById("startScreen").classList.remove("hidden"); }); };
 document.getElementById("resumeBtn").onclick=()=>{ if(load()){ showMap(); applyResult(); } else toast("No saved campaign."); };
 document.getElementById("startCancel").onclick=()=>{ document.getElementById("startScreen").classList.add("hidden"); choosing=false; };
+document.getElementById("saveBtn").onclick=()=>{ if(camp){ save(); toast("Campaign saved ✓"); } };
 document.getElementById("restartBtn").onclick=()=>{ if(confirm("Restart the whole campaign?")){ localStorage.removeItem(SAVE); localStorage.removeItem(RES); location.reload(); } };
 
 /* ---------- boot ---------- */
@@ -516,8 +531,8 @@ window.addEventListener("pagehide", ()=>{ if(camp) save(); });          // belt-
 window.addEventListener("visibilitychange", ()=>{ if(document.hidden && camp) save(); });
 setInterval(()=>{ if(camp) save(); }, 15000);                            // periodic autosave
 requestAnimationFrame(loop);
-if(localStorage.getItem(RES) && load()){ showMap(); applyResult(); }     // returning from a battle
-else if(load()){ showMap(); }                                           // a saved campaign exists → resume straight in
+if(localStorage.getItem(RES) && load()){ showMap(); applyResult(); }     // returning from a battle → straight back in
+else if(localStorage.getItem(SAVE)) document.getElementById("resumeBtn").style.outline="2px solid var(--toxic)";  // saved game → highlight RESUME on the menu
 
 </script>
 </body>

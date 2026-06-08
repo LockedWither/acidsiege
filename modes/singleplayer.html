@@ -496,7 +496,8 @@ function rebuildCost(){ return 30000; }   // rebuild your own razed city — del
 const COIN_PER_CELL=1;
 let difficulty = localStorage.getItem("as_diff") || "medium";   // easy | medium | hard
 function coinReward(w){ return difficulty==="easy" ? 9 : 4; }   // easy pays 9, else 4 (× wStep × coinLevelMult)
-function fmtCoin(n){ n=Math.floor(n); return n>=1e12 ? (n/1e12).toLocaleString(undefined,{maximumFractionDigits:2})+"T" : n.toLocaleString(); }   // trillions+ → "10T"
+function fmtCoin(n){ n=Math.floor(n); const f=(v,s)=>v.toLocaleString(undefined,{maximumFractionDigits:2})+s;
+  if(n>=1e15) return f(n/1e15,"Q"); if(n>=1e12) return f(n/1e12,"T"); if(n>=1e9) return f(n/1e9,"B"); if(n>=1e6) return f(n/1e6,"M"); return n.toLocaleString(); }   // M/B/T/Q
 function coinLevelMult(L){ const m=Math.min(L,200), c=1+0.045*Math.pow(m-1,1.1); return L>200 ? c+(L-200)*0.05 : c; }   // climbs to ~lv200 then nearly flat — money slows late game
 function mult(L){return 1+(L-1)*0.6;}
 function upCost(L){return Math.round(400*Math.pow(L,1.6));}

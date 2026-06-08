@@ -21,7 +21,8 @@
   function cityProt(L){ const a=0.02*(L-1)*(L-1)*(L-1); const e=L>40?L-40:0; return Math.round(a + 0.18*e*e*e); }
   // coin multiplier by level — climbs to ~lv200 then nearly flat
   function coinLevelMult(L){ const m=Math.min(L,200), c=1+0.045*Math.pow(m-1,1.1); return L>200 ? c+(L-200)*0.05 : c; }
-  function fmtCoin(n){ n=Math.floor(n); return n>=1e12 ? (n/1e12).toLocaleString(undefined,{maximumFractionDigits:2})+"T" : n.toLocaleString(); }
+  function fmtCoin(n){ n=Math.floor(n); const f=(v,s)=>v.toLocaleString(undefined,{maximumFractionDigits:2})+s;
+    if(n>=1e15) return f(n/1e15,"Q"); if(n>=1e12) return f(n/1e12,"T"); if(n>=1e9) return f(n/1e9,"B"); if(n>=1e6) return f(n/1e6,"M"); return n.toLocaleString(); }
   function hexToRgb(h){ const n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
 
   // ---- base palette (ids 0..22) ----

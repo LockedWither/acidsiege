@@ -250,7 +250,8 @@ function startGame(){ started=true; document.getElementById("lobby").classList.a
 }
 
 // ---- HUD ----
-function fmtCoin(n){ n=Math.floor(n); return n>=1e12 ? (n/1e12).toLocaleString(undefined,{maximumFractionDigits:2})+"T" : n.toLocaleString(); }
+function fmtCoin(n){ n=Math.floor(n); const f=(v,s)=>v.toLocaleString(undefined,{maximumFractionDigits:2})+s;
+  if(n>=1e15) return f(n/1e15,"Q"); if(n>=1e12) return f(n/1e12,"T"); if(n>=1e9) return f(n/1e9,"B"); if(n>=1e6) return f(n/1e6,"M"); return n.toLocaleString(); }
 function hud(meta){
   const me=meta.players[mySide], opp=meta.players[mySide^1];
   document.getElementById("roundN").textContent=meta.round;
