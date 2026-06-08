@@ -427,10 +427,16 @@ ov.addEventListener("pointerleave",()=>hoverlbl.style.display="none");
 ov.addEventListener("pointerdown",e=>{
   const r=ov.getBoundingClientRect(); const c=cityAt(e.clientX-r.left,e.clientY-r.top);
   if(!c){ hidePop(); return; }
-  if(choosing){ chooseStart(c); return; }
-  selected=c; const sr=document.getElementById("stage").getBoundingClientRect();
+  const sr=document.getElementById("stage").getBoundingClientRect();
+  selected=c;                                        // select (highlights the city)
+  if(choosing){ confirmStart(c, e.clientX-sr.left, e.clientY-sr.top); return; }
   showPop(c, e.clientX-sr.left, e.clientY-sr.top);
 });
+function confirmStart(c, px, py){                     // pick a homeland → confirm before committing
+  popBox(`<div class="nm">${c.name}</div><div class="meta">${REGION_NAME[c.cont]||c.cont} · Found your empire here?</div>
+    <button class="btn" id="popStart">✓ START HERE</button>`, px, py);
+  document.getElementById("popStart").onclick=()=>{ hidePop(); chooseStart(c); };
+}
 function popBox(html,px,py){ pop.innerHTML=html+`<button class="btn alt" id="popCancel" style="margin-top:6px">Cancel</button>`;
   const sw=document.getElementById("stage").clientWidth, sh=document.getElementById("stage").clientHeight;
   pop.style.left=Math.min(px+8,sw-215)+"px"; pop.style.top=Math.min(py+8,sh-160)+"px"; pop.classList.add("show");
