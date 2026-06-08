@@ -231,6 +231,7 @@
   </div>
   <div class="menubtns">
     <button class="mbtn play" id="playBtn">PLAY</button>
+    <button class="mbtn ghost" id="giveUpBtn" style="display:none;color:var(--danger);border-color:rgba(255,83,71,.4)">🏳 GIVE UP — RETURN TO MAP</button>
     <button class="mbtn ghost" id="howtoBtn">HOW TO PLAY</button>
   </div>
   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
@@ -616,10 +617,10 @@ function loseGame(){
   if(reviveCount()>0) showRevivePrompt();                   // offer a revive (1 token, regen 1 / 20 min)
   else { clearSave(); showDefeat(); }                       // no revive → run is over, drop the save
 }
-function campaignEnd(win){
+function campaignEnd(win, retreat){
   gameOver=true; running=false; sfx(win?"coin":"lose");
   try{ localStorage.setItem("as_camp_result", JSON.stringify({
-    win, city:CAMPAIGN.city, attacker:CAMPAIGN.attacker, defense:CAMPAIGN.defense,
+    win, retreat:!!retreat, city:CAMPAIGN.city, attacker:CAMPAIGN.attacker, defense:CAMPAIGN.defense,
     coins:Math.floor(coins), playerLevel, unlocked:[...unlocked], brushLevel })); }catch{}
   location.href="/world";
 }
@@ -1434,6 +1435,7 @@ function openDrawer(){ sideEl.classList.add("open"); drawerBack.classList.add("s
 function closeDrawer(){ sideEl.classList.remove("open"); drawerBack.classList.remove("show"); }
 playBtn.onclick=startGame;
 howtoBtn.onclick=()=>howtoEl.classList.toggle("hidden");
+document.getElementById("giveUpBtn").onclick=()=>{ if(CAMPAIGN && confirm("Give up this siege and return to the world map? No territory will be captured.")) campaignEnd(false,true); };
 const diffBtns=[...document.querySelectorAll(".diff")];
 function renderDiff(){ diffBtns.forEach(b=>b.classList.toggle("sel", b.dataset.diff===difficulty)); }
 diffBtns.forEach(b=>b.onclick=()=>{ difficulty=b.dataset.diff; localStorage.setItem("as_diff",difficulty); renderDiff(); });
@@ -1483,10 +1485,10 @@ function spendRevive(){ const s=reviveState(); if(s.count<=0) return false; if(s
 
 /* ---- server save of the last (non-death) game ---- */
 const CLIENT_ID=(()=>{ let id=localStorage.getItem("as_id"); if(!id){ id="p"+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("as_id",id); } return id; })();
-function saveGame(){ if(gameOver||sandbox) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};
+function saveGame(){ if(gameOver||sandbox||CAMPAIGN) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};   // World Conquest battles must NOT touch the single-player save
   fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state})}).catch(()=>{}); }
 function clearSave(){ fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state:null})}).catch(()=>{}); }
-function applySave(s,force){ if(!s||(running&&!force)) return;               // only resume if on the menu (force = file import)
+function applySave(s,force){ if(!s||CAMPAIGN||(running&&!force)) return;       // only resume if on the menu (force = file import); never during a Conquest battle
   coins=s.coins||0; playerLevel=s.playerLevel||1; wave=s.wave||1; razings=s.razings||0; brushLevel=s.brushLevel||1; brush=brushLevel+1;
   enemyLevel=Math.floor((wave-1)/5)+1; unlocked.clear(); (s.unlocked||[ACID,WATER,SAND,EMPTY]).forEach(t=>unlocked.add(t)); unlocked.add(EMPTY);
   clearArena(); buildCities(); renderTools(); renderBrushBtn(); }
@@ -1600,6 +1602,7 @@ requestAnimationFrame(loop);
   tool=[...unlocked].filter(t=>t!==EMPTY&&powerOf(t)>1).sort((a,b)=>powerOf(b)-powerOf(a))[0]||ACID;   // auto-equip your best weapon
   clearArena(); buildCities(); renderTools(); renderBrushBtn();
   setSandbox(false);
+  document.getElementById("giveUpBtn").style.display="";   // offer "give up" in the pause menu during a siege
   const nm=q.get("name"); if(nm) document.getElementById("botBadge").textContent=(CAMPAIGN.defense?"DEFEND vs ":"SIEGE: ")+decodeURIComponent(nm);
   startGame();
 })();

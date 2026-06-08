@@ -34,6 +34,7 @@
   .legend{font-size:11px;color:var(--muted);line-height:1.7}
   .sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px}
   #stage{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--panel-edge);background:#0a2138}
+  #view{position:absolute;inset:0;transform-origin:0 0;will-change:transform}
   #base{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}
   #ov{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:pointer}
   #hoverlbl{position:absolute;z-index:4;pointer-events:none;background:rgba(4,20,26,.92);border:1px solid var(--panel-edge);
@@ -119,8 +120,7 @@
   </aside>
 
   <main id="stage">
-    <canvas id="base"></canvas>
-    <canvas id="ov"></canvas>
+    <div id="view"><canvas id="base"></canvas><canvas id="ov"></canvas></div>
     <div id="hoverlbl"></div>
     <div id="toast"></div>
     <div id="pop"></div>
@@ -410,26 +410,38 @@ function hud(){ if(!camp) return;
     ? "Declare war on a nation to siege the cities inside." : "You can only war enemy cities bordering yours.";
 }
 
-/* ---------- interaction ---------- */
+/* ---------- interaction (scroll to zoom, drag to pan) ---------- */
 let selected=null, choosing=false;
-const pop=document.getElementById("pop"), hoverlbl=document.getElementById("hoverlbl");
+const pop=document.getElementById("pop"), hoverlbl=document.getElementById("hoverlbl"), view=document.getElementById("view"), stage=document.getElementById("stage");
+let zoom=1, panX=0, panY=0;
+function clampPan(){ const w=stage.clientWidth, h=stage.clientHeight;
+  panX=Math.min(0,Math.max(w*(1-zoom),panX)); panY=Math.min(0,Math.max(h*(1-zoom),panY));
+  if(zoom<=1){ panX=0; panY=0; } }
+function applyView(){ clampPan(); view.style.transform=`translate(${panX}px,${panY}px) scale(${zoom})`; }
+stage.addEventListener("wheel",e=>{ e.preventDefault(); const r=stage.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top, old=zoom;
+  zoom=Math.max(1,Math.min(7, zoom*(e.deltaY<0?1.18:1/1.18)));
+  panX=mx-(mx-panX)*(zoom/old); panY=my-(my-panY)*(zoom/old); applyView(); },{passive:false});
 function hidePop(){ pop.classList.remove("show"); selected=null; }
-function cityAt(mx,my){ const r=ov.getBoundingClientRect(); const rad=Math.max(6,r.width/GW*CITY_S*0.5)+3; let hit=null,best=1e9;
+function cityAt(mx,my){ const r=ov.getBoundingClientRect(); const rad=(Math.max(6,r.width/GW*CITY_S*0.5)+3); let hit=null,best=1e9;
   for(const c of camp.cities){ const [x,y]=cxy(c); const d=Math.hypot(x-mx,y-my); if(d<rad&&d<best){best=d;hit=c;} } return hit; }
-ov.addEventListener("pointermove",e=>{ if(!camp||choosing){ hoverlbl.style.display="none"; return; }
+let pDown=false, pMoved=false, pSX=0, pSY=0, pPX=0, pPY=0, downCity=null;
+ov.addEventListener("pointerdown",e=>{ pDown=true; pMoved=false; pSX=e.clientX; pSY=e.clientY; pPX=panX; pPY=panY;
+  const r=ov.getBoundingClientRect(); downCity=cityAt(e.clientX-r.left,e.clientY-r.top); ov.setPointerCapture(e.pointerId); });
+ov.addEventListener("pointermove",e=>{
+  if(pDown){ const dx=e.clientX-pSX, dy=e.clientY-pSY; if(!pMoved && Math.hypot(dx,dy)>5) pMoved=true;
+    if(pMoved){ hoverlbl.style.display="none"; if(zoom>1){ panX=pPX+dx; panY=pPY+dy; applyView(); } } return; }
+  if(!camp||choosing){ hoverlbl.style.display="none"; return; }
   const r=ov.getBoundingClientRect(); const c=cityAt(e.clientX-r.left,e.clientY-r.top);
   if(!c){ hoverlbl.style.display="none"; return; }
-  let label = c.owner==="mine"?(camp.empire||"Your Empire") : c.owner==="gray"?"Ruins of "+c.name : (camp.mode==="country"&&countryOf(c)?countryOf(c).name:c.name);
-  const sr=document.getElementById("stage").getBoundingClientRect();
-  hoverlbl.textContent=label; hoverlbl.style.display="block";
+  const label = c.owner==="mine"?(camp.empire||"Your Empire") : c.owner==="gray"?"Ruins of "+c.name : (camp.mode==="country"&&countryOf(c)?countryOf(c).name:c.name);
+  const sr=stage.getBoundingClientRect(); hoverlbl.textContent=label; hoverlbl.style.display="block";
   hoverlbl.style.left=(e.clientX-sr.left)+"px"; hoverlbl.style.top=(e.clientY-sr.top)+"px";
 });
 ov.addEventListener("pointerleave",()=>hoverlbl.style.display="none");
-ov.addEventListener("pointerdown",e=>{
-  const r=ov.getBoundingClientRect(); const c=cityAt(e.clientX-r.left,e.clientY-r.top);
-  if(!c){ hidePop(); return; }
-  const sr=document.getElementById("stage").getBoundingClientRect();
-  selected=c;                                        // select (highlights the city)
+ov.addEventListener("pointerup",e=>{ if(!pDown) return; pDown=false; if(pMoved) return;   // a drag = pan, not a click
+  const c=downCity; if(!c){ hidePop(); return; }
+  const sr=stage.getBoundingClientRect(); selected=c;
   if(choosing){ confirmStart(c, e.clientX-sr.left, e.clientY-sr.top); return; }
   showPop(c, e.clientX-sr.left, e.clientY-sr.top);
 });
@@ -510,10 +522,11 @@ function applyResult(){
   applyBoost();   // catch up enemy growth for the time the battle took
   const tc=byId(r.city), atk=(r.attacker!==""&&r.attacker!=null)?byId(+r.attacker):null;
   let msg;
-  if(r.win){ if(tc){ razeFx(tc); tc.owner="gray"; } msg=(tc?tc.name:"The city")+" razed — capture it to annex it."; }
+  if(r.retreat){ msg="Retreated from "+(tc?tc.name:"the siege")+" — no territory lost."; }   // gave up: no penalty
+  else if(r.win){ if(tc){ razeFx(tc); tc.owner="gray"; } msg=(tc?tc.name:"The city")+" razed — capture it to annex it."; }
   else if(atk){ razeFx(atk); atk.owner="gray"; msg="Defeat — "+atk.name+" fell."; }
   else { msg="Fleet repelled — no territory lost."; }
-  const raids=runRaids();
+  const raids=r.retreat?[]:runRaids();    // a clean retreat draws no counter-attacks
   if(raids.length) msg += " · ⚔ raids: "+raids.join(", ");
   buildTerritory(); save(); hud(); toast(msg); checkWin();   // no more "city razed" screen — fade animates on the map
 }
@@ -549,7 +562,7 @@ document.getElementById("winOk").onclick=()=>{ document.getElementById("winScree
 let diff="medium", mode="city";
 document.querySelectorAll("#diffOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#diffOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); diff=o.dataset.d; });
 document.querySelectorAll("#modeOpts .opt").forEach(o=>o.onclick=()=>{ document.querySelectorAll("#modeOpts .opt").forEach(x=>x.classList.remove("sel")); o.classList.add("sel"); mode=o.dataset.m; });
-function showMap(){ document.getElementById("menu").classList.add("hidden"); whenMap(()=>{ buildTerrain(); applyBoost(); paintTerrain(); buildTerritory(); fitOverlay(); hud(); }); }
+function showMap(){ document.getElementById("menu").classList.add("hidden"); whenMap(()=>{ buildTerrain(); applyBoost(); paintTerrain(); buildTerritory(); fitOverlay(); hud(); zoom=1;panX=0;panY=0;applyView(); }); }
 document.getElementById("newBtn").onclick=()=>{ whenMap(()=>{ buildTerrain(); newCampaign(diff,mode); paintTerrain();
   document.getElementById("menu").classList.add("hidden"); fitOverlay(); hud(); choosing=true; document.getElementById("startScreen").classList.remove("hidden"); }); };
 document.getElementById("resumeBtn").onclick=()=>{ if(load()){ showMap(); applyResult(); } else toast("No saved campaign."); };
@@ -570,7 +583,7 @@ document.getElementById("loadFile").onchange=e=>{ const f=e.target.files[0]; if(
 document.getElementById("restartBtn").onclick=()=>{ if(confirm("Restart the whole campaign?")){ localStorage.removeItem(SAVE); localStorage.removeItem(RES); location.reload(); } };
 
 /* ---------- boot ---------- */
-window.addEventListener("resize", ()=>{ if(camp) fitOverlay(); });
+window.addEventListener("resize", ()=>{ if(camp){ fitOverlay(); applyView(); } });
 window.addEventListener("pagehide", ()=>{ if(camp) save(); });          // belt-and-suspenders save
 window.addEventListener("visibilitychange", ()=>{ if(document.hidden && camp) save(); });
 setInterval(()=>{ if(camp){ if(applyBoost()) hud(); save(); } }, 15000);  // periodic autosave + enemy level growth
