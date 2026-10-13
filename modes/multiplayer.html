@@ -45,7 +45,8 @@
     border-radius:8px;color:var(--ink);padding:7px;font-family:inherit;font-size:12px}
   .chatin button{border:none;border-radius:8px;padding:0 12px;cursor:pointer;font-weight:800;color:#06141b;background:var(--toxic)}
   #lobby{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
-    text-align:center;background:radial-gradient(900px 600px at 50% -10%,#15414a 0,transparent 60%),linear-gradient(160deg,var(--bg0),var(--bg2))}
+    text-align:center;overflow:auto;
+    background:radial-gradient(900px 600px at 50% -10%,#15414a 0,transparent 60%),linear-gradient(160deg,var(--bg0),var(--bg2))}
   #lobby h1{font-size:clamp(38px,11vw,80px);line-height:.9;text-shadow:0 0 30px rgba(126,252,74,.4),4px 4px 0 #07181f}
   #lobby .mbtn{font-family:Bungee,Impact;font-size:18px;padding:15px 30px;border:none;border-radius:14px;cursor:pointer;color:#06141b;
     background:linear-gradient(180deg,var(--toxic),var(--toxic2));box-shadow:0 8px 24px rgba(126,252,74,.3)}
@@ -94,10 +95,22 @@
   </div>
   <div style="display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted)">Name
     <input id="nameInput" maxlength="16" style="background:rgba(0,0,0,.3);border:1px solid var(--edge);border-radius:8px;color:var(--ink);padding:6px 8px;font-family:inherit;font-size:12px;width:130px"></div>
-  <button class="mbtn" id="lbBtn" style="font-size:13px;padding:9px 16px;background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--edge)">🏆 LEADERBOARD</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+    <button class="mbtn" id="lbBtn" style="font-size:13px;padding:9px 16px;background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--edge)">🏆 LEADERBOARD</button>
+    <button class="mbtn" id="howBtn" style="font-size:13px;padding:9px 16px;background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--edge)">ⓘ HOW TO PLAY</button>
+  </div>
   <div id="lboard" class="hidden" style="max-width:min(360px,90vw);background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:12px 14px;font-size:13px;color:var(--muted);max-height:42vh;overflow:auto">
     <div id="lbcats" style="display:flex;gap:5px;flex-wrap:wrap;justify-content:center;margin-bottom:8px"></div>
     <ol id="lbList" style="margin:0;padding-left:22px;line-height:1.7"></ol>
+  </div>
+  <div id="howto" class="hidden" style="max-width:min(460px,90vw);text-align:left;background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:14px 17px;font-size:13px;line-height:1.65;color:var(--muted)">
+    <h3 style="margin:0 0 8px;color:var(--toxic);font-size:13px;letter-spacing:1px">HOW TO PLAY — ONLINE PVP</h3>
+    The same falling-sand siege as solo, but live: paint chemicals on the <b>enemy city</b> while holding yours together.
+    <b>Your city is always on the left</b> — Player 2 sees the arena mirrored, so nobody fights "backwards".<br><br>
+    <b>Controls:</b> hold on the battlefield to paint the selected chemical. Damage earns coins.
+    <b>Upgrades:</b> unlock chemicals from the list, <b>⬆</b> raises a weapon's damage tier, <b>LEVEL UP</b> hardens your city (🛡), <b>BRUSH</b> widens your strokes, <b>SELL MODE</b> refunds a weapon you regret.<br><br>
+    <b>Win:</b> raze the enemy city faster than they raze yours. 2 v 2 shares one city per team — coordinate in chat!<br><br>
+    New to the game? Run the <b>🎓 tutorial in Single Player</b> first — same engine, no pressure.
   </div>
   <div class="status" id="status"></div>
   <div style="margin-top:6px;color:var(--muted);font-size:12px;letter-spacing:2px">MADE BY LIAM HUTSON</div>
@@ -227,6 +240,7 @@ function loadLB(){ const cats=document.getElementById("lbcats"); [...cats.childr
     document.getElementById("lbList").innerHTML = list.length ? list.map(e=>`<li><b style="color:var(--ink)">${esc(e.name)}</b> — ${e.value.toLocaleString()}</li>`).join("") : "<li>No scores yet</li>"; }).catch(()=>{});
 }
 document.getElementById("lbBtn").onclick=showLeaderboard;
+document.getElementById("howBtn").onclick=()=>document.getElementById("howto").classList.toggle("hidden");
 // ---- in-game menu + mobile controls drawer ----
 const sideEl=document.getElementById("side"), drawerBack=document.getElementById("drawerBack");
 function closeDrawer(){ sideEl.classList.remove("open"); drawerBack.classList.remove("show"); }
@@ -321,7 +335,7 @@ function markSel(){ [...toolsEl.children].forEach(el=>el.classList.toggle("sel",
 function refreshToolLocks(me){ meUpg=me.upg||{}; [...toolsEl.children].forEach(el=>{ const t=+el.dataset.t; const p=palette.find(q=>q.t===t); if(!p) return;
     const locked=p.cost>0&&!unlocked.has(t); el.classList.toggle("locked",locked);
     const sellable=sellMode&&p.cost>0&&unlocked.has(t);
-    el.querySelector(".cost").textContent = locked?fmtCoin(p.cost)+"c" : sellable?("+"+fmtCoin(Math.round(p.cost*0.5))+"c") : "";
+    el.querySelector(".cost").textContent = locked?fmtCoin(p.cost)+"c" : sellable?("+"+fmtCoin(Math.round(p.cost))+"c") : "";
     const tier=meUpg[t]||0; const tb=el.querySelector(".tier"); if(tb) tb.textContent=tier?TIER_NAME[tier]:"";
     const ub=el.querySelector('[data-up]'); if(ub){ if(tier>=3){ ub.textContent="MAX"; ub.disabled=true; }
       else { const uc=upgCostMP(p); ub.textContent="⬆"+fmtCoin(uc); ub.disabled=locked||me.coins<uc; } }
