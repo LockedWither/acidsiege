@@ -70,6 +70,24 @@
   .row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-top:6px}
   .row b{font-weight:800}
 
+  #tools{display:block}
+  .svgwheel{display:block;width:100%;height:auto;user-select:none;-webkit-tap-highlight-color:transparent}
+  .svgwheel .ring{fill:none;stroke:var(--line);stroke-dasharray:2 5;stroke-width:1}
+  .svgwheel .hexC{cursor:pointer}
+  .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
+  .svgwheel .hexC.prev polygon{stroke:#eafff0;stroke-width:1.7}
+  @keyframes hexpulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.35}}
+  .tsheet{background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:9px 10px;margin-top:10px}
+  .tsrow{display:flex;align-items:center;gap:8px}
+  .tdot{width:12px;height:12px;border-radius:4px;flex:none}
+  .tname{font-weight:800;font-size:13.5px}
+  .ttier{color:var(--toxic);font-weight:800;font-size:11px}
+  .tprice{margin-left:auto;font-weight:700;font-size:11.5px;color:var(--gold);font-variant-numeric:tabular-nums}
+  .tsrow2{display:flex;gap:6px;align-items:center;margin-top:8px}
+  .tsbtn{width:auto;padding:8px 10px;font-size:12px}
+  .tscol{margin-left:auto;font-size:11px;color:var(--muted);display:flex;gap:5px;align-items:center}
+  .tscol input{width:22px;height:22px;border:none;background:none;padding:0;cursor:pointer}
+  .tsmsg{font-size:11px;color:var(--muted);margin-top:6px;min-height:14px}
   .tools{display:flex;flex-direction:column;gap:6px;overflow-x:hidden}
   .tool{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:11px;cursor:pointer;min-width:0;
     background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);transition:.12s;user-select:none;position:relative}
@@ -347,9 +365,24 @@
     </div>
 
     <div class="card">
-      <h2>Chemicals</h2>
+      <h2>Arsenal</h2>
       <button class="btn alt" id="sellBtn" style="margin-bottom:8px">SELL MODE: OFF</button>
       <div class="tools" id="tools"></div>
+      <div class="tsheet" id="toolSheet">
+        <div class="tsrow">
+          <span class="tdot" id="tsDot"></span>
+          <b class="tname" id="tsName">Acid</b>
+          <span class="ttier" id="tsTier"></span>
+          <span class="tprice" id="tsPrice">FREE</span>
+        </div>
+        <div class="tsrow2">
+          <button class="btn alt tsbtn" id="tsBuy">UNLOCK</button>
+          <button class="btn alt tsbtn" id="tsUp">⬆</button>
+          <button class="btn alt tsbtn" id="tsSell">SELL</button>
+          <label class="tscol">colour <input type="color" id="tsCol" title="Custom colour"></label>
+        </div>
+        <div class="tsmsg" id="tsMsg"></div>
+      </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:11px">
         <button class="btn alt" id="brushMinus" style="width:auto;padding:9px 14px">−</button>
         <span id="brushSize" style="flex:1;text-align:center;font-weight:800;font-size:13px">Brush 2</span>
@@ -487,7 +520,7 @@ const TIER_MULT=[1,1.3,1.7,2.2], TIER_NAME=["","I","II","III"], MAX_TIER=3;
 let upg={}; try{ upg=JSON.parse(localStorage.getItem("as_upg"))||{}; }catch{}
 function umul(t){ return TIER_MULT[upg[t]||0]; }                       // weapon damage multiplier from its tier
 function pm(i,t){ return origin[i]===ORIGIN_PLAYER ? TIER_MULT[upg[t]||0] : 1; }   // only the player's weapons get buffed
-function upgCost(p){ const unit=Math.max(1500,(p.cost||0)*0.5), to=(upg[p.t]||0)+1; return Math.round(unit*[0,1,3,7][to]); }
+function upgCost(p){ const unit=Math.max(1500,p.cost||0), to=(upg[p.t]||0)+1; return Math.round(unit*[0.35,0.6,0.85][to-1]); }   // 35% / 60% / 85% of the tool
 function saveUpg(){ try{ localStorage.setItem("as_upg",JSON.stringify(upg)); }catch{} }
 function saveSkins(){ try{ localStorage.setItem("as_skins",JSON.stringify(skin)); }catch{} }
 function rgbToHex(c){ return "#"+[c[0],c[1],c[2]].map(v=>Math.max(0,Math.min(255,v|0)).toString(16).padStart(2,"0")).join(""); }
@@ -582,8 +615,18 @@ function buildCities(){
 }
 
 // ---- damage / waves ----
-const pops=[];
-function pop(gx,gy,a){ if(pops.length<60) pops.push({x:gx,y:gy,t:1,a:a}); }
+const pops=[];                                    // +N popups: outlined, bucket-merged, capped
+const popBucket={sum:0,wx:0,wy:0,t:0};            // 150ms roll-up of simultaneous city damage → ONE popup
+const popNow=()=>performance.now();
+function popBucketAdd(gx,gy,a){ const b=popBucket; b.sum+=a; b.wx+=gx*a; b.wy+=gy*a; if(!b.t) b.t=popNow(); }
+function popFlush(){ const b=popBucket; if(!b.t) return;
+  const x=b.wx/b.sum, y=b.wy/b.sum, a=b.sum;
+  const near=pops.find(p=>Math.abs(p.x-x)<8&&Math.abs(p.y-y)<7&&popNow()-p.born<420);   // merge into a live neighbor
+  if(near){ near.a+=a; near.x=(near.x+x)/2; near.y=(near.y+y)/2; near.t=1; near.born=popNow(); }
+  else if(pops.length>=14){ pops.reduce((m,p)=>p.t<m.t?p:m,pops[0]).a+=a; }             // full: fold into oldest
+  else pops.push({x,y,t:1,a,born:popNow()});
+  b.sum=0; b.wx=0; b.wy=0; b.t=0;
+}
 let coinFlash=0;
 const RAZE_RATIO=0.10;                                       // a city is "razed" at 90% destroyed
 function enemyRazed(){  return cityCells/cityCellsMax   <= RAZE_RATIO; }
@@ -593,7 +636,7 @@ function damageCity(n,gx,gy){
   let gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel);
   if(CAMPAIGN) gain*=CAMPAIGN.rmul;                                // World Conquest: empire-size coin bonus
   coins+=gain; cityCells-=n; coinFlash=1;
-  if(gx!==undefined && Math.random()<0.22) pop(gx,gy,gain);
+  if(gx!==undefined) popBucketAdd(gx,gy,gain);
   if(!gameOver && enemyRazed()) nextWave();                 // enemy 90% gone → next wave
 }
 function damagePCity(n){ pcityCells-=n;
@@ -646,8 +689,10 @@ const solidPass  = t => t===EMPTY||isGas(t)||isLiquid(t);
 function setCell(i,t,o){ grid[i]=t; origin[i]=o; moved[i]=1; }
 function swap(i,j){const t=grid[i], o=origin[i], h=health[i]; grid[i]=grid[j]; origin[i]=origin[j]; health[i]=health[j]; grid[j]=t; origin[j]=o; health[j]=h; moved[i]=1; moved[j]=1; }
 
-function explodeR(cx,cy,R,fireProb,dmg){
+function explodeR(cx,cy,R,fireProb,dmg,wid){
   boomFX(R);                                                // sound + screen shake (throttled)
+  const efam=wid!==undefined?FAM[wid]:null;
+  if(efam==="run"||efam==="fallout") castFX(efam,wid,cx,cy,R);
   const oc=origin[I(cx,cy)];                                // explosion debris inherits the bomb's origin
   for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
     if(dx*dx+dy*dy>R*R) continue;
@@ -660,12 +705,12 @@ function explodeR(cx,cy,R,fireProb,dmg){
   }
 }
 // bombs: HUGE city-sized blast radius, LOW per-cell damage (area weapons that pepper a whole city)
-function explode(cx,cy){ const m=origin[I(cx,cy)]===ORIGIN_PLAYER?umul(TNT):1; explodeR(cx,cy,20,0.30,25*m); }     // TNT
+function explode(cx,cy){ const m=origin[I(cx,cy)]===ORIGIN_PLAYER?umul(TNT):1; explodeR(cx,cy,20,0.30,25*m,TNT); }     // TNT
 function detonate(x,y,t){                                  // bomb yield by type (player's bombs hit harder when upgraded)
   const m=origin[I(x,y)]===ORIGIN_PLAYER?umul(t):1;
-  if(t===HBOMB) explodeR(x,y,46,0.45,350*m);               // covers a whole city, lightly
-  else if(t===NUKE) explodeR(x,y,42,0.40,120*m);           // one nuke blankets a city
-  else explodeR(x,y,20,0.30,25*m);
+  if(t===HBOMB) explodeR(x,y,46,0.45,350*m,t);             // covers a whole city, lightly
+  else if(t===NUKE) explodeR(x,y,42,0.40,120*m,t);         // one nuke blankets a city
+  else explodeR(x,y,20,0.30,25*m,t);
 }
 
 // ---- step functions ----
@@ -833,7 +878,7 @@ function stepGas(x,y,i){
 
 function stepNew(x,y,i){   // generic driver for the data-defined super-weapon tiers (ids NEW_BASE+)
   const d=DEFBYID[grid[i]];
-  if(d.kind==="blast"){ if(y+1<ROWS){ const dd=I(x,y+1); if(solidPass(grid[dd])){ swap(i,dd); return; } } explodeR(x,y,d.r,d.fp,d.dmg*pm(i,d.id)); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }   // explode on impact, then consumed
+  if(d.kind==="blast"){ if(y+1<ROWS){ const dd=I(x,y+1); if(solidPass(grid[dd])){ swap(i,dd); return; } } explodeR(x,y,d.r,d.fp,d.dmg*pm(i,d.id),d.id); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }   // explode on impact, then consumed
   for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){
     if(!inB(nx,ny)) continue; const j=I(nx,ny), tj=grid[j];
     if(BASE_HP[tj]!==undefined){ applyDamage(j,d.dmg*pm(i,d.id)); }
@@ -980,6 +1025,176 @@ function baseColor(t,i){
     default:    { const c=NEWCOL[t]; if(c) return [c[0]+j*0.4,c[1]+j*0.4,c[2]+j*0.4]; return BG; }
   }
 }
+/* ============================================================
+   SUPER-WEAPON FX — 8 signature families (canvas 2D, no sprites)
+   ============================================================ */
+const fx=[];
+const fxR=(E,i)=>{ const s=Math.sin((E.s+i)*57.31)*43758.55; return s-Math.floor(s); };
+function castFX(fam,t,gx,gy,R){ if(fx.length>=20) fx.shift();
+  fx.push({fam,t0:0,tool:t,x:gx,y:gy,t:0,R:R||10,col:NEWCOL[t]||[142,240,42],s:(Math.random()*1e4)|0}); }
+function fxTickDraw(ctx,sx,sy){        // called from render(); lifetimes advance in loop() (freeze on pause)
+  for(let k=fx.length-1;k>=0;k--){
+    const E=fx[k];
+    const x=E.x*sx, y=E.y*sy, c=E.col, R=Math.max(1,E.R), S=sy;
+    const C=(a,dr,dg,db)=>`rgba(${dr|0},${dg|0},${db|0},${a})`;
+    ctx.save();
+    switch(E.fam){
+      case "run":{                                        // inbound tracer → glint → shockwave (+ sub-booms)
+        if(E.t<0.22){ const p=E.t/0.22, rail=(E.tool===36||E.tool===38||E.tool===56);
+          const x1=rail?x:x+(fxR(E,1)-0.5)*16*S, y1=rail?0:y-42*S;
+          ctx.globalAlpha=0.9*(1-p*0.3); ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=2.2;
+          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x1+(x-x1)*p, y1+(y-y1)*p); ctx.stroke();
+          ctx.globalAlpha=0.3; ctx.lineWidth=5; ctx.stroke(); }
+        if(E.t>=0.2&&E.t<0.4){ const q=(E.t-0.2)/0.2; ctx.globalAlpha=1-q;
+          ctx.fillStyle="#fff8e8"; ctx.beginPath(); ctx.arc(x,y,(2+q*7)*S*0.28+2,0,7); ctx.fill(); }
+        { const q=Math.max(0,(E.t-0.25)/0.6); ctx.globalAlpha=Math.max(0,0.85*(1-q));
+          ctx.strokeStyle=C(1,255,190,90); ctx.lineWidth=2.4;
+          ctx.beginPath(); ctx.arc(x,y,(4+q*R*1.5)*S*0.3+2,0,7); ctx.stroke(); }
+        if(E.t>0.28){ const q=(E.t-0.28)/0.72; ctx.globalAlpha=Math.max(0,0.7*(1-q)); ctx.strokeStyle=C(1,255,160,60);
+          for(let j=0;j<8;j++){ const a=fxR(E,j)*7, l=(4+q*R)*S*0.3;
+            ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.cos(a)*l*1.8, y+Math.sin(a)*l*1.8); ctx.stroke(); } }
+        if(E.tool===25||E.tool===26){ const n=6, q=(E.t-0.3)/0.7;      // staggered bomblets
+          for(let j=0;j<n;j++){ const st=0.3+j*0.07; if(E.t<st) continue;
+            const bq=(E.t-st)/0.35; if(bq>1) continue;
+            const bx=x+(fxR(E,j+10)-0.5)*R*2.4*S*0.3, by=y+(fxR(E,j+20)-0.5)*R*2.4*S*0.3;
+            ctx.globalAlpha=(1-bq)*0.9; ctx.fillStyle="#ffe8b0"; ctx.beginPath(); ctx.arc(bx,by,(1.5+bq*3.5)*S*0.25+1,0,7); ctx.fill();
+            ctx.strokeStyle=C(1,255,170,60); ctx.beginPath(); ctx.arc(bx,by,(2+bq*8)*S*0.25+1,0,7); ctx.stroke(); } }
+        break; }
+      case "fallout":{                                    // canister → whiteout → mushroom → dust ring → fallout
+        if(E.t<0.16){ const p=E.t/0.16; ctx.globalAlpha=0.9; ctx.fillStyle="#cfd8d0";
+          ctx.fillRect(x-1.6*S*0.3, y-30*S*0.24+(28*S*0.24)*p, 3.2*S*0.3, 5*S*0.24); }
+        if(E.t>=0.16&&E.t<0.3){ ctx.globalAlpha=0.95*(1-(E.t-0.16)/0.14);
+          ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,cv.width,cv.height); }
+        if(E.t>=0.26){ const q=Math.min(1,(E.t-0.26)/0.6);
+          ctx.globalAlpha=Math.max(0,0.8*(1-q));                            // rising fireball
+          ctx.fillStyle=C(1,255,150,50); ctx.beginPath();
+          ctx.ellipse(x, y-q*R*1.1*S*0.3, (3+q*R*0.85)*S*0.3, (2.4+q*R*0.6)*S*0.3, 0,0,7); ctx.fill();
+          ctx.fillStyle=C(1,255,235,190); ctx.beginPath();
+          ctx.ellipse(x, y-q*R*1.1*S*0.3, (1.6+q*R*0.42)*S*0.3, (1.3+q*R*0.3)*S*0.3, 0,0,7); ctx.fill();
+          ctx.globalAlpha=Math.max(0,0.55*(1-q));                           // stem + cap
+          ctx.fillStyle=C(1,110,90,70); ctx.fillRect(x-2*S*0.3, y-R*0.6*S*0.3-q*R*1.4*S*0.3, 4*S*0.3, R*0.8*S*0.3);
+          ctx.fillStyle=C(1,140,110,80); ctx.beginPath();
+          ctx.ellipse(x, y-R*0.6*S*0.3-q*R*1.4*S*0.3, (4+q*R*1.15)*S*0.3, (2.4+q*R*0.5)*S*0.3, 0,0,7); ctx.fill(); }
+        { const q=Math.max(0,(E.t-0.3)/0.7); ctx.globalAlpha=Math.max(0,0.6*(1-q));   // ground dust ring
+          ctx.strokeStyle=C(1,200,170,140); ctx.lineWidth=2;
+          ctx.beginPath(); ctx.ellipse(x,y,(6+q*R*1.9)*S*0.3,(2+q*R*0.5)*S*0.3,0,0,7); ctx.stroke(); }
+        if(E.t>0.45){ const q=(E.t-0.45)/0.55; ctx.globalAlpha=Math.max(0,0.8*(1-q)); // fallout motes
+          for(let j=0;j<12;j++){ const mx=x+(fxR(E,j)-0.5)*R*2.2*S*0.3, my=y-R*S*0.3-q*R*1.6*S*0.3;
+            ctx.fillStyle=C(1,c[0],c[1],c[2]); ctx.fillRect(mx,my+q*R*2.2*S*0.3,1.6,1.6); } }
+        break; }
+      case "deluge":{                                     // molten crack OR raincloud → curtain → crest
+        const molten=FAM_MOLTEN.has(PALETTE.find(p=>p.t===E.tool)?.nm);
+        if(molten){ if(E.t<0.5){ const q=E.t/0.5; ctx.globalAlpha=0.8*(1-q*0.4);
+            ctx.strokeStyle=C(1,255,120,40); ctx.lineWidth=1.8;
+            for(let j=0;j<5;j++){ const a=fxR(E,j)*7;
+              ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.cos(a)*q*R*S*0.35, y+Math.sin(a)*q*R*0.5*S*0.35); ctx.stroke(); }
+            ctx.globalAlpha=0.5*(1-E.t); ctx.fillStyle=C(1,255,170,60);
+            ctx.beginPath(); ctx.arc(x,y,R*S*0.28*(0.4+E.t*0.8),0,7); ctx.fill(); }
+          if(E.t>0.15){ const q=(E.t-0.15)/0.85; ctx.globalAlpha=Math.max(0,0.85*(1-q));
+            for(let j=0;j<10;j++){ const ex=x+(fxR(E,j)-0.5)*R*1.6*S*0.3;      // rising embers
+              ctx.fillStyle=C(1,255,150+fxR(E,j+3)*60,40);
+              ctx.fillRect(ex, y-q*R*(1.4+fxR(E,j+7))*S*0.3, 1.8, 2.4); } }
+        } else {
+          if(E.t<0.4){ const q=E.t/0.4; ctx.globalAlpha=q*0.75;              // rolling cloud band
+            for(let j=0;j<4;j++){ ctx.fillStyle=C(1,26,33,26); ctx.beginPath();
+              ctx.ellipse(x+(j-1.5)*R*0.7*S*0.2, Math.max(6,y-R*4*S*0.24), R*0.85*S*0.24, R*0.3*S*0.24, 0,0,7); ctx.fill(); }
+            ctx.globalAlpha=q*0.5; ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=1.6;
+            ctx.beginPath(); ctx.ellipse(x, Math.max(6,y-R*4*S*0.24), R*1.5*S*0.24, R*0.42*S*0.24, 0,0,7); ctx.stroke(); }
+          if(E.t>=0.12&&E.t<0.55){ const q=(E.t-0.12)/0.43; ctx.globalAlpha=0.85;
+            ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=1.7;
+            for(let j=0;j<14;j++){ const dx=(fxR(E,j)-0.5)*R*1.9*S*0.2;
+              const gy0=Math.max(6,y-R*4*S*0.24), gy=gy0+q*(y-(gy0))+ (j%5)*2;
+              ctx.beginPath(); ctx.moveTo(x+dx, gy0); ctx.lineTo(x+dx, gy); ctx.stroke(); } }
+          if(E.t>=0.5){ const q=(E.t-0.5)/0.5; ctx.globalAlpha=0.9*(1-q);    // advancing crest
+            const cxx=x-R*2*S*0.2+q*R*3*S*0.2;
+            ctx.fillStyle=C(1,c[0],c[1],c[2]); ctx.beginPath();
+            ctx.moveTo(cxx-R*0.8*S*0.2, y); ctx.quadraticCurveTo(cxx, y-R*0.9*S*0.24, cxx+R*0.8*S*0.2, y); ctx.fill();
+            ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=1.2; ctx.stroke(); }
+        }
+        break; }
+      case "cut":{                                        // muzzle bloom → beam column → meanders/afterglow
+        const ion=E.tool===39||E.tool===67, strands=ion?3+(fxR(E,1)*2|0):1;
+        if(E.t<0.12){ const p=E.t/0.12; ctx.globalAlpha=p*0.8; ctx.fillStyle=C(1,c[0],c[1],c[2]);
+          ctx.beginPath(); ctx.arc(x, 4, (2+p*4)*S*0.3, 0,7); ctx.fill(); }
+        if(E.t>=0.1&&E.t<0.72){ const q=(E.t-0.1)/0.62, w=(1.4+2.2*Math.sin(Math.min(1,q*2)*Math.PI/2))*S*0.3;
+          ctx.globalAlpha=0.28; ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=w*2.6;
+          ctx.beginPath(); ctx.moveTo(x,4); ctx.lineTo(x, y+R*S*0.2); ctx.stroke();
+          ctx.globalAlpha=0.95; ctx.strokeStyle="#f2fbff"; ctx.lineWidth=w*0.7;
+          for(let j=0;j<strands;j++){ const dx0=(j-((strands-1)/2))*R*0.5*S*0.2;
+            ctx.beginPath(); ctx.moveTo(x+dx0, 4);
+            for(let seg=1;seg<=6;seg++) ctx.lineTo(x+dx0+Math.sin(seg*1.7+E.s)*R*0.16*S*0.2*(ion?2.2:0.4), 4+(y-4+R*S*0.2)*seg/6);
+            ctx.stroke(); }
+          ctx.globalAlpha=0.7*(1-q*0.5); ctx.fillStyle=C(1,c[0],c[1],c[2]);
+          ctx.beginPath(); ctx.ellipse(x, y+R*S*0.2, R*0.8*S*0.24, R*0.28*S*0.24, 0,0,7); ctx.fill(); }
+        if(E.t>=0.72){ const q=(E.t-0.72)/0.28; ctx.globalAlpha=Math.max(0,0.5*(1-q));
+          ctx.fillStyle=C(1,c[0],c[1],c[2]); ctx.beginPath(); ctx.arc(x,y,R*0.5*S*0.24,0,7); ctx.fill(); }
+        break; }
+      case "cataclysm":{                                  // sky charge → converging rays → coronas + petals
+        if(E.t<0.42){ const q=E.t/0.42; ctx.globalAlpha=0.14*q; ctx.fillStyle=C(1,255,210,74); ctx.fillRect(0,0,cv.width,cv.height);
+          ctx.globalAlpha=0.9*q;
+          for(let j=0;j<12;j++){ const a=Math.PI*2*j/12+fxR(E,j)*0.4, rr=(1-q)*34*S*0.3;
+            ctx.strokeStyle=C(1,255,214,110); ctx.lineWidth=1.6;
+            ctx.beginPath(); ctx.moveTo(x+Math.cos(a)*rr, y+Math.sin(a)*rr); ctx.lineTo(x+Math.cos(a)*rr*0.3, y+Math.sin(a)*rr*0.3); ctx.stroke(); } }
+        { const q=Math.max(0,(E.t-0.4)/0.6); ctx.globalAlpha=Math.max(0,1-q);
+          for(let ring=1;ring<=2;ring++){ ctx.strokeStyle=C(1,255,210,74,ring>1?0.5:0.8); ctx.lineWidth=2.2-ring*0.5;
+            ctx.beginPath(); ctx.arc(x,y,(3+q*ring*R*1.1)*S*0.3,0,7); ctx.stroke(); }
+          ctx.fillStyle="#fff3d0"; ctx.beginPath(); ctx.arc(x,y,(2+q*R*0.42)*S*0.3,0,7); ctx.fill();
+          for(let j=0;j<12;j++){ const a=Math.PI*2*j/12, l=(2+q*R*0.5)*S*0.3;
+            ctx.strokeStyle=C(1,255,170,60); ctx.beginPath();
+            ctx.moveTo(x+Math.cos(a)*R*0.42*S*0.3*q, y+Math.sin(a)*R*0.42*S*0.3*q);
+            ctx.lineTo(x+Math.cos(a)*(R*0.42*q+l), y+Math.sin(a)*(R*0.42*q+l)); ctx.stroke(); } }
+        break; }
+      case "vanish":{                                     // motes merge → ring → light pillar wipe
+        if(E.t<0.36){ const q=E.t/0.36, ro=(1-q)*R*1.4*S*0.3+2, spin=q*9;
+          for(const sg of[-1,1]){ ctx.fillStyle=C(1,c[0],c[1],c[2]); ctx.beginPath();
+            ctx.arc(x+Math.cos(spin)*ro*sg, y+Math.sin(spin)*ro, 2.4,0,7); ctx.fill();
+            ctx.fillStyle="rgba(255,120,255,.7)"; ctx.beginPath();
+            ctx.arc(x+Math.cos(spin)*ro*sg+2, y+Math.sin(spin)*ro+1.4, 2.4,0,7); ctx.fill(); } }
+        if(E.t>=0.36&&E.t<0.5){ const q=(E.t-0.36)/0.14; ctx.globalAlpha=1-q*0.4;
+          ctx.strokeStyle=C(1,c[0]+40,c[1],c[2]+60); ctx.lineWidth=2.2;
+          ctx.beginPath(); ctx.arc(x,y,(2+(1-q)*R*0.9)*S*0.3,0,7); ctx.stroke(); }
+        if(E.t>=0.5){ const q=(E.t-0.5)/0.5; ctx.globalAlpha=Math.max(0,0.5*(1-q));
+          const g=ctx.createLinearGradient(0,y-R*2*S*0.3,0,y+R*0.6*S*0.3);
+          g.addColorStop(0,C(0,c[0],c[1],c[2])); g.addColorStop(1,C(1,c[0],c[1],c[2]));
+          ctx.fillStyle=g; ctx.fillRect(x-(2.5+q*3)*S*0.3, y-R*2*S*0.3, (5+q*6)*S*0.3, R*2.6*S*0.3);
+          ctx.globalAlpha=0.9*(1-q); ctx.fillStyle="#fff";                // downward wipe line
+          ctx.fillRect(x-9*S*0.3, y-R*2*S*0.3+q*R*2.4*S*0.3, 18*S*0.3, 1.6); }
+        break; }
+      case "pull":{                                       // lens creep → inward spiral → horizon disc
+        const q=Math.min(1,E.t/0.45);
+        ctx.globalAlpha=0.55*q; ctx.fillStyle="rgba(8,5,14,1)";
+        ctx.beginPath(); ctx.arc(x,y,(3+q*R*0.9)*S*0.3,0,7); ctx.fill();
+        ctx.globalAlpha=Math.max(0,(1-Math.abs(E.t-0.45)*2)); ctx.strokeStyle=C(1,c[0],c[1],c[2]);
+        for(let j=0;j<11;j++){ const a=j*1.31+E.t*4.4, r1=(12-E.t*22)*S*0.3+R*0.4*S*0.3, r2=r1-(3+q*9)*S*0.3;
+          ctx.beginPath(); ctx.moveTo(x+Math.cos(a)*r1, y+Math.sin(a)*r1);
+          ctx.lineTo(x+Math.cos(a+0.5)*Math.max(1,r2), y+Math.sin(a+0.5)*Math.max(1,r2)); ctx.stroke(); }
+        const dz=Math.max(0,(E.t-0.5)/0.5); ctx.globalAlpha=0.9*dz; ctx.fillStyle="rgba(10,6,20,1)";
+        ctx.beginPath(); ctx.arc(x,y,(4+dz*R*0.55)*S*0.3,0,7); ctx.fill();
+        ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=1.4; ctx.setLineDash([3,4]);
+        ctx.beginPath(); ctx.arc(x,y,(6+dz*R*0.75)*S*0.3,0,7); ctx.stroke(); ctx.setLineDash([]);
+        break; }
+      case "fracture":{                                   // scanline wrongness → fissure → crisp emptiness
+        const full=E.tool===72;
+        if(E.t<0.24||(E.tool===76&&fxR(E,(E.t*30)|0)<0.5)){
+          for(let j=0;j<(full?8:4);j++){ const yy=(fxR(E,j)*0.9+0.02)*cv.height, hh=1.5+fxR(E,j+5)*2;
+            const off=(fxR(E,j+9)-0.5)*(full?7:3);
+            ctx.globalAlpha=0.5; ctx.drawImage(cv,0,yy,cv.width,hh,off,yy,cv.width,hh); } }
+        if(E.t>=0.14&&E.t<0.55){ const q=(E.t-0.14)/0.41; ctx.globalAlpha=0.95;
+          ctx.strokeStyle=C(1,255,74,210); ctx.lineWidth=2;
+          ctx.beginPath(); ctx.moveTo(x-q*R*1.5*S*0.3, y);
+          for(let seg=1;seg<=5;seg++){ const px=x-q*R*1.5*S*0.3+q*R*1.5*S*0.3*2*seg/5;
+            ctx.lineTo(px, y+((seg*37+E.s)%11-5)*2.2); } ctx.stroke();
+          ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=1; ctx.stroke(); }
+        if(E.t>=0.3){ const q=(E.t-0.3)/0.7; ctx.globalAlpha=1;
+          ctx.fillStyle="#0a0e0a"; ctx.beginPath(); ctx.arc(x,y,(2+q*R*0.95)*S*0.3,0,7); ctx.fill();
+          ctx.strokeStyle=C(1,Math.min(255,c[0]+80),c[1],c[2]); ctx.lineWidth=1.8;
+          ctx.globalAlpha=Math.max(0,0.8*(1-q)); ctx.stroke(); }
+        break; }
+    }
+    ctx.restore();
+  }
+}
+
 function render(){
   let p=0;
   for(let i=0;i<grid.length;i++){
@@ -1008,16 +1223,22 @@ function render(){
   ctx.beginPath(); ctx.moveTo(P_END*sx,CEIL_Y*sy); ctx.lineTo(P_END*sx,FLOOR_Y*sy); ctx.stroke();  // middle divider
   ctx.restore();
 
-  // coin popups
+  // super-weapon FX layer (8 signature families)
+  fxTickDraw(ctx,sx,sy);
+
+  // coin popups — one per 150ms bucket, outlined, sized by amount (lifetimes advanced in loop())
+  if(popBucket.t && performance.now()-popBucket.t>150) popFlush();
   ctx.save();
-  ctx.font=`800 ${Math.round(sy*4)}px Outfit, sans-serif`;
   ctx.textAlign="center";
   for(let k=pops.length-1;k>=0;k--){
-    const f=pops[k]; f.t-=0.025; f.y-=0.25;
-    if(f.t<=0){ pops.splice(k,1); continue; }
-    ctx.globalAlpha=Math.max(0,f.t);
-    ctx.fillStyle="#ffb627";
-    ctx.fillText("+"+Math.round(f.a), f.x*sx, f.y*sy);
+    const f=pops[k];
+    const txt="+"+fmtCoin(Math.round(f.a));
+    const fs=Math.round(sy*(4+Math.min(3.4,Math.log10(f.a+1)*0.72)));
+    ctx.font=`800 ${fs}px Outfit, sans-serif`;
+    ctx.globalAlpha=Math.max(0,Math.min(1,f.t<0.3?f.t/0.3:1));
+    ctx.lineJoin="round"; ctx.lineWidth=Math.max(2,sy*0.62);
+    ctx.strokeStyle="rgba(16,22,12,0.85)"; ctx.strokeText(txt, f.x*sx, f.y*sy);
+    ctx.fillStyle="#ffdf8a"; ctx.fillText(txt, f.x*sx, f.y*sy);
   }
   ctx.restore();
 }
@@ -1055,7 +1276,10 @@ function evtToGrid(e){
   const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
   px=Math.floor(cx/r.width*COLS); py=Math.floor(cy/r.height*ROWS);
 }
-cv.addEventListener("pointerdown",e=>{if(gameOver||!running)return; down=true;evtToGrid(e);place(px,py);sfx("place");cv.setPointerCapture(e.pointerId);});
+cv.addEventListener("pointerdown",e=>{if(gameOver||!running)return; down=true;evtToGrid(e);place(px,py);sfx("place");
+  const fam=FAM[tool];
+  if(fam&&fam!=="run"&&fam!=="fallout") castFX(fam,tool,px,py,brush+3);   // super-weapon cast signature
+  cv.setPointerCapture(e.pointerId);});
 cv.addEventListener("pointermove",e=>{evtToGrid(e); if(down&&!gameOver&&running) place(px,py);});
 addEventListener("pointerup",()=>down=false);
 
@@ -1161,50 +1385,170 @@ const BOT_WEAPONS=[ {id:FIRE,dmg:DMG[FIRE]},{id:ACID,dmg:DMG[ACID]},{id:NAPALM,d
   .concat(NEWDEFS.filter(d=>d.kind!=="blast").map(d=>({id:d.id,dmg:d.dmg})))
   .sort((a,b)=>a.dmg-b.dmg);
 const unlocked=new Set([ACID,WATER,SAND,EMPTY]);
+const everUnlocked=new Set(unlocked);                     // chain memory: selling a tool never re-locks its gate
+const FREE0=new Set([ACID,WATER,SAND,EMPTY]);
+const granted=new Set();                                  // campaign-granted tools: equippable, never sellable (no coin faucet)
+/* ---- super-weapon FX families (built from weapon names, after the palette is assembled) ---- */
+const FAM_NAMES={
+  run:["TNT","Cluster Bomb","Daisy Cutter","Bunker Buster","Fuel-Air Bomb","Rail Mortar","Railgun Slug","Bunker Nuke"],
+  fallout:["Nuke","H-Bomb","Neutron Bomb","Cobalt Bomb","Tsar Bomba"],
+  deluge:["Thermite","Caustic Wave","Sulfur Deluge","Mercury Flood","Corrosive Tide","Quicksilver Sea","Plasma Sludge","Acid Monsoon","Magma Surge"],
+  cut:["Plasma Cannon","Ion Storm","Plasma Tempest","Fusion Lance","Plasmoid Swarm","Quasar Cannon"],
+  cataclysm:["Meteor Strike","Nova Charge","Supernova","Hypernova","Photon Nova","Neutron Star Shard","Solar Flare","Neutronium Slug"],
+  vanish:["Gamma Burst","Antiproton Beam","Tachyon Burst","Gamma Ray Burst","Quark Bomb","Strangelet","Annihilation Core","Strange Matter"],
+  pull:["Void Lance","Black Hole","Singularity","Dark Matter Bomb","Graviton Bomb","Dark Pulse","Void Collapse","Omega Singularity"],
+  fracture:["Vacuum Decay","Big Rip","Entropy Wave","Cosmic String","Reality Tear","Doomsday Glitch","Eternity Engine"],
+};
+const FAM={}; PALETTE.forEach(p=>{ for(const k in FAM_NAMES) if(FAM_NAMES[k].includes(p.nm)) FAM[p.t]=k; });
+const FAM_MOLTEN=new Set(["Thermite","Magma Surge"]);
+/* ---- ARSENAL skill tree: 9 branches of hexagons, tiers gated in ascending power ---- */
+const NAMEID={}; PALETTE.forEach(p=>NAMEID[p.nm]=p.t); const T=nm=>NAMEID[nm];
+const ARSENAL=[
+ {name:"Foundations", col:"#d9c08a", tiers:["Eraser","Sand","Water","Wood","Glass","Stone","City Block"].map(T)},
+ {name:"Chemical",    col:"#9cff5a", tiers:["Acid","Virus","Caustic Wave","Sulfur Deluge","Mercury Flood","Corrosive Tide","Quicksilver Sea","Plasma Sludge","Acid Monsoon"].map(T)},
+ {name:"Inferno",     col:"#ff7e3a", tiers:["Oil","Fire","Lava","Magma","Napalm","Thermite","Magma Surge"].map(T)},
+ {name:"Demolition",  col:"#ff4a5a", tiers:["TNT","Cluster Bomb","Daisy Cutter","Nuke","H-Bomb","Bunker Buster","Fuel-Air Bomb","Tsar Bomba","Rail Mortar","Railgun Slug","Bunker Nuke"].map(T)},
+ {name:"Beams",       col:"#4dc3ff", tiers:["Plasma","Plasma Cannon","Ion Storm","Plasma Tempest","Fusion Lance","Plasmoid Swarm","Quasar Cannon"].map(T)},
+ {name:"Radiation",   col:"#3ee8b0", tiers:["Antimatter","Neutron Bomb","Cobalt Bomb","Gamma Burst","Antiproton Beam","Tachyon Burst","Gamma Ray Burst"].map(T)},
+ {name:"Cosmic",      col:"#ffd24a", tiers:["Meteor Strike","Nova Charge","Supernova","Quark Bomb","Neutronium Slug","Strangelet","Dark Matter Bomb","Graviton Bomb","Photon Nova","Neutron Star Shard","Solar Flare","Hypernova"].map(T)},
+ {name:"Annihilation",col:"#6a4aff", tiers:["Void Lance","Black Hole","Singularity","Annihilation Core","Dark Pulse","Void Collapse","Strange Matter"].map(T)},
+ {name:"Reality",     col:"#ff4ad2", tiers:["Vacuum Decay","Big Rip","Entropy Wave","Cosmic String","Reality Tear","Doomsday Glitch","Eternity Engine","Omega Singularity"].map(T)},
+];
+ARSENAL.forEach(b=>b.tiers=b.tiers.filter(x=>x!==undefined));
+if(ARSENAL.reduce((a,b)=>a+b.tiers.length,0)!==PALETTE.length) console.warn("Arsenal tree: tool count mismatch",ARSENAL.reduce((a,b)=>a+b.tiers.length,0),"of",PALETTE.length);
+const BRANCH_OF={}; ARSENAL.forEach((b,bi)=>b.tiers.forEach((t,ti)=>BRANCH_OF[t]={b:bi,i:ti}));
+const PAL_BYT={}; PALETTE.forEach(p=>PAL_BYT[p.t]=p);
+function isOwned(t){ return FREE0.has(t)||unlocked.has(t); }
+function gateOK(t){ const pos=BRANCH_OF[t]; if(!pos||pos.i===0) return true; return everUnlocked.has(ARSENAL[pos.b].tiers[pos.i-1]); }
+function grantChain(t){ const pos=BRANCH_OF[t];                     // campaign grants own their whole prefix, never sellable
+  if(!pos){ unlocked.add(t); everUnlocked.add(t); granted.add(t); return; }
+  for(let k=0;k<=pos.i;k++){ const id=ARSENAL[pos.b].tiers[k]; unlocked.add(id); everUnlocked.add(id); granted.add(id); } }
 const toolsEl=document.getElementById("tools");
-let sellMode=false;
+let sellMode=false, sheetTool=ACID;
 const SELL_RATE=1;   // refund 100% of the unlock cost (anti-softlock only)
 function curColRGB(p){ return skin[p.t] || hexToRgb(p.col); }
-function renderTools(){
-  toolsEl.innerHTML="";
-  PALETTE.forEach(p=>{
-    const el=document.createElement("div");
-    const lock=p.cost>0 && !unlocked.has(p.t);
-    const sellable=sellMode && p.cost>0 && unlocked.has(p.t);
-    const tier=upg[p.t]||0, dmgWeapon=powerOf(p.t)>1 && p.t!==EMPTY;
-    el.className="tool"+(p.t===tool?" sel":"")+(lock?" locked":"");
-    const c=curColRGB(p);
-    const tag = lock ? `<span class="cost">${fmtCoin(p.cost)}c</span>`
-              : sellable ? `<span class="cost" style="color:var(--danger)">+${fmtCoin(Math.round(p.cost*SELL_RATE))}c</span>` : "";
-    el.innerHTML=`<span class="dot" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span>
-      <span class="nm" style="flex:1">${p.nm}${tier?` <b style="color:var(--toxic)">${TIER_NAME[tier]}</b>`:""}</span>${tag}`;
-    if(p.t!==EMPTY){
-      const ctr=document.createElement("span"); ctr.style.cssText="display:flex;gap:4px;align-items:center;margin-left:6px";
-      const ci=document.createElement("input"); ci.type="color"; ci.value=rgbToHex(c); ci.title="Custom colour";
-      ci.style.cssText="width:20px;height:20px;border:none;background:none;padding:0;cursor:pointer;flex:none";
-      ci.onclick=e=>e.stopPropagation();
-      ci.oninput=e=>{ skin[p.t]=hexToRgb(e.target.value); curPack="Custom"; saveSkins(); renderTools(); };
-      ctr.appendChild(ci);
-      if(dmgWeapon && !lock){
-        const ub=document.createElement("button"); ub.className="ubtn";
-        if(tier>=MAX_TIER){ ub.textContent="MAX"; ub.disabled=true; }
-        else { const uc=upgCost(p); ub.textContent="⬆"+fmtCoin(uc); ub.disabled=coins<uc; }
-        ub.onclick=e=>{ e.stopPropagation(); if((upg[p.t]||0)>=MAX_TIER) return; const uc=upgCost(p);
-          if(coins>=uc){ coins-=uc; upg[p.t]=(upg[p.t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
-        ctr.appendChild(ub);
-      }
-      el.appendChild(ctr);
-    }
-    el.onclick=()=>{
-      if(sellable){ coins+=Math.round(p.cost*SELL_RATE); unlocked.delete(p.t); if(tool===p.t) tool=ACID; sfx("coin"); }
-      else if(lock){ if(coins>=p.cost){ coins-=p.cost; unlocked.add(p.t); tool=p.t; sfx("unlock"); } }
-      else { tool=p.t; }
-      renderTools();
-    };
-    toolsEl.appendChild(el);
-  });
+const tsDot=document.getElementById("tsDot"), tsName=document.getElementById("tsName"), tsTier=document.getElementById("tsTier"),
+      tsPrice=document.getElementById("tsPrice"), tsUp=document.getElementById("tsUp"), tsSell=document.getElementById("tsSell"),
+      tsCol=document.getElementById("tsCol"), tsMsg=document.getElementById("tsMsg"), tsBuy=document.getElementById("tsBuy");
+function renderSheet(){
+  const t=sheetTool, p=PAL_BYT[t]; if(!p) return;
+  const c=curColRGB(p), ownedNow=isOwned(t), tier=upg[t]||0;
+  tsDot.style.background=`rgb(${c[0]},${c[1]},${c[2]})`;
+  tsName.textContent=p.nm; tsTier.textContent=TIER_NAME[tier]||"";
+  tsPrice.textContent=!ownedNow?fmtCoin(p.cost)+"c":(t===tool?"EQUIPPED":"OWNED");
+  tsPrice.style.color=ownedNow?"var(--toxic)":"var(--gold)";
+  const dmgW=powerOf(t)>1&&t!==EMPTY;
+  tsUp.style.display=(dmgW&&ownedNow)?"":"none";
+  if(dmgW&&ownedNow){ tsUp.textContent=tier>=MAX_TIER?"MAX TIER":`⬆ ${TIER_NAME[tier+1]||"II"} — ${fmtCoin(upgCost(p))}`;
+    tsUp.disabled=tier>=MAX_TIER||coins<upgCost(p); }
+  tsBuy.textContent=ownedNow?(t===tool?"EQUIPPED":"EQUIP"):(gateOK(t)?`UNLOCK — ${fmtCoin(p.cost)}c`:"GATED");
+  tsBuy.disabled=ownedNow?(t===tool):(!gateOK(t)||coins<p.cost);
+  tsSell.style.display=(sellMode&&p.cost>0&&unlocked.has(t)&&!granted.has(t))?"":"none";
+  if(tsSell.style.display==="") tsSell.textContent=`SELL +${fmtCoin(Math.round(p.cost*SELL_RATE))}c`;
+  tsCol.value=rgbToHex(c);
+  if(!ownedNow){ const pos=BRANCH_OF[t];
+    tsMsg.textContent=pos&&pos.i>0&&!gateOK(t)?`Gated — unlock ${PAL_BYT[ARSENAL[pos.b].tiers[pos.i-1]].nm} first`
+      :`Tap again (or UNLOCK) to buy — then painting is free`;
+  } else tsMsg.textContent=t===tool?"Painting is free once unlocked":"Owned — tap EQUIP";
 }
-document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap a weapon to refund 100%)":"OFF"); renderTools(); };
+function tapTool(t,preview){
+  const p=PAL_BYT[t]; if(!p) return;
+  if(preview){ sheetTool=t; renderTools(); return; }        // touch: first tap identifies, the sheet acts
+  const ownedNow=isOwned(t), sellable=sellMode&&p.cost>0&&unlocked.has(t)&&!granted.has(t);
+  if(sellable){ coins+=Math.round(p.cost*SELL_RATE); unlocked.delete(t); if(tool===t) tool=ACID; sfx("coin"); }
+  else if(!ownedNow){
+    if(!gateOK(t)){ sfx("lose"); }
+    else if(coins>=p.cost){ coins-=p.cost; unlocked.add(t); everUnlocked.add(t); tool=t; sfx("unlock"); }
+  }
+  else { tool=t; }
+  sheetTool=t; renderTools();
+}
+/* ---- wheel geometry: every hex is snapped onto a true pointy-top honeycomb lattice (occupancy-dodged),
+       so tiers touch side-to-side and never overlap — chains may wobble a hair as they step outward ---- */
+const HXQ={};                                     // occupied lattice cells for the current build
+let hexEls=[];                                    // [{t,g,poly,title}] for in-place state refresh (no rebuild churn)
+let wheelTouchT=0;                                // last touch-start time on the wheel (touch taps preview, not buy)
+function hexState(t){
+  const p=PAL_BYT[t], b=ARSENAL[BRANCH_OF[t].b], price=p.cost||0;
+  const ownedNow=isOwned(t);
+  let cls="gated";
+  if(ownedNow) cls="owned";
+  else if(gateOK(t)) cls=coins>=price?"canBuy":"dimGold";
+  const c=curColRGB(p);
+  const pa={};
+  if(cls==="owned"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.4)`; pa.stroke=b.col; pa["stroke-width"]="1.3"; }
+  else if(cls==="canBuy"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.14)`; pa.stroke=b.col; pa["stroke-width"]="1.9"; }
+  else if(cls==="dimGold"){ pa.fill="rgba(255,182,39,0.07)"; pa.stroke="rgba(255,182,39,0.6)"; pa["stroke-width"]="1.2"; }
+  else { pa.fill="rgba(255,255,255,0.02)"; pa.stroke="#2a3826"; pa["stroke-width"]="1"; }
+  return {cls,pa,title:`${p.nm} — ${price?fmtCoin(price)+"c":"free"}${cls==="gated"?" (gated)":""}`};
+}
+function refreshWheel(){
+  for(const h of hexEls){
+    const s=hexState(h.t);
+    h.g.setAttribute("class",`hexC ${s.cls}`+(sheetTool===h.t&&s.cls!=="owned"?" prev":""));
+    for(const k of ["fill","stroke","stroke-width"]) h.poly.setAttribute(k,s.pa[k]);
+    h.title.textContent=s.title;
+  }
+}
+function buildWheel(){
+  const SVGNS="http://www.w3.org/2000/svg";
+  toolsEl.innerHTML=""; for(const k in HXQ) delete HXQ[k];
+  hexEls=[];
+  const svg=document.createElementNS(SVGNS,"svg");
+  svg.setAttribute("viewBox","0 0 340 372"); svg.setAttribute("class","svgwheel");
+  const mk=(tag,at)=>{ const el=document.createElementNS(SVGNS,tag); for(const k in at) el.setAttribute(k,at[k]); return el; };
+  const cx=170, cy=186, HX=8.2, rad=d=>d*Math.PI/180, NB=ARSENAL.length;
+  const cellXY=(q,r)=>[HX*Math.sqrt(3)*(q+r/2), HX*1.5*r];
+  const snap=(gx,gy)=>{                                     // ideal offset (from the core) → nearest free lattice cell
+    const fq=(Math.sqrt(3)/3*gx-1/3*gy)/HX, fr=(2/3*gy)/HX;
+    let rx=Math.round(fq), ry=Math.round(-fq-fr), rz=Math.round(fr);
+    const dx=Math.abs(rx-fq), dy=Math.abs(ry+fq+fr), dz=Math.abs(rz-fr);
+    if(dx>dy&&dx>dz) rx=-ry-rz; else if(dy>dz) ry=-rx-rz; else rz=-rx-ry;
+    let best=[rx,rz], bd=1e9;
+    for(const [q,r] of [[rx,rz],[rx,rz-1],[rx-1,rz],[rx-1,rz+1],[rx,rz+1],[rx+1,rz],[rx+1,rz-1]]){
+      if(HXQ[q+","+r]) continue;
+      const [px,py]=cellXY(q,r), d2=(px-gx)*(px-gx)+(py-gy)*(py-gy);
+      if(d2<bd){ bd=d2; best=[q,r]; } }
+    HXQ[best[0]+","+best[1]]=1; return cellXY(best[0],best[1]);
+  };
+  for(let i=0;i<12;i++) svg.appendChild(mk("circle",{cx,cy,r:(21.3+i*1.5*HX).toFixed(1),class:"ring"}));
+  ARSENAL.forEach((b,bi)=>{
+    const P=[];
+    for(let i=0;i<b.tiers.length;i++){
+      const a=rad(-90+bi*(360/NB)), rr=21.3+i*1.5*HX;
+      const [ox,oy]=snap(Math.cos(a)*rr, Math.sin(a)*rr);
+      P.push([cx+ox, cy+oy]);
+    }
+    for(let i=1;i<b.tiers.length;i++){
+      const [x1,y1]=P[i-1], [x2,y2]=P[i];
+      svg.appendChild(mk("line",{x1:x1.toFixed(1),y1:y1.toFixed(1),x2:x2.toFixed(1),y2:y2.toFixed(1),stroke:b.col,"stroke-opacity":"0.3","stroke-width":"1.6"}));
+    }
+    b.tiers.forEach((t,i)=>{
+      if(!PAL_BYT[t]) return;
+      const [x,y]=P[i], s=hexState(t);
+      const g=mk("g",{transform:`translate(${x.toFixed(1)},${y.toFixed(1)})`});
+      let pts=""; for(let k=0;k<6;k++){ const aa=rad(60*k+30); pts+=(HX*Math.cos(aa)).toFixed(1)+","+(HX*Math.sin(aa)).toFixed(1)+" "; }
+      const poly=mk("polygon",{points:pts.trim(),...s.pa});
+      g.appendChild(poly);
+      const title=mk("title",{}); title.textContent=s.title; g.appendChild(title);
+      g.addEventListener("pointerenter",()=>{ if(sheetTool!==t){ sheetTool=t; renderSheet(); } });
+      g.addEventListener("click",()=>tapTool(t, performance.now()-wheelTouchT<600));
+      svg.appendChild(g);
+      hexEls.push({t,g,poly,title});
+    });
+  });
+  let hpts=""; for(let k=0;k<6;k++){ const a=rad(60*k+30); hpts+=(9*Math.cos(a)).toFixed(1)+","+(9*Math.sin(a)).toFixed(1)+" "; }
+  svg.appendChild(mk("polygon",{points:hpts.trim(),fill:"rgba(142,240,42,0.2)",stroke:"rgba(142,240,42,0.6)","stroke-width":"1.2",transform:`translate(${cx},${cy})`}));
+  svg.addEventListener("pointerdown",e=>{ wheelTouchT = e.pointerType==="touch" ? performance.now() : 0; });
+  toolsEl.appendChild(svg);
+}
+function renderTools(){ if(!hexEls.length) buildWheel(); refreshWheel(); renderSheet(); }
+document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap an owned hex to refund 100%)":"OFF"); renderTools(); };
+tsCol.oninput=e=>{ skin[sheetTool]=hexToRgb(e.target.value); curPack="Custom"; saveSkins(); renderTools(); };
+tsUp.onclick=()=>{ const t=sheetTool, p=PAL_BYT[t]; if(!p||!isOwned(t)||(upg[t]||0)>=MAX_TIER) return;
+  const uc=upgCost(p); if(coins>=uc){ coins-=uc; upg[t]=(upg[t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
+tsSell.onclick=()=>{ if(!sellMode) return; tapTool(sheetTool); };
+tsBuy.onclick=()=>tapTool(sheetTool);
 renderTools();
 
 const brushBtn=document.getElementById("brushBtn"), brushSizeEl=document.getElementById("brushSize"),
@@ -1266,7 +1610,9 @@ rebuildBtn.onclick=()=>{
 function resetGame(){
   coins=STARTING_COINS; playerLevel=1; enemyLevel=1; wave=1; razings=0; gameOver=false;
   unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t));
-  tool=ACID; pops.length=0; botNextMs=0; botHoldUntil=0;
+  everUnlocked.clear(); unlocked.forEach(t=>everUnlocked.add(t));
+  sheetTool=ACID; tool=ACID; pops.length=0; fx.length=0; popBucket.sum=0; popBucket.wx=0; popBucket.wy=0; popBucket.t=0;
+  granted.clear(); botNextMs=0; botHoldUntil=0;
   brushLevel=1; brush=brushLevel+1;
   clearArena(); buildCities(); renderTools(); renderBrushBtn();
 }
@@ -1365,10 +1711,14 @@ function swatchBG(L){
   }
 }
 const mCoins=document.getElementById("mCoins");
+let hudTreeCoins=-1, hudTreeT=0;   // throttle for the wheel's wallet-driven refresh
 function hud(){
   const coinStr=fmtCoin(coins);
   coinN.textContent=coinStr; mCoins.textContent=coinStr;
   if(coinFlash){ coinN.classList.remove("pulse"); void coinN.offsetWidth; coinN.classList.add("pulse"); coinFlash=0; }
+  // the wheel's pulsing "can buy" glow follows the wallet as coins roll in (throttled, not during pause menus)
+  const tNow=performance.now();
+  if(running && tNow-hudTreeT>500 && hudTreeCoins!==coins && document.activeElement!==tsCol){ hudTreeCoins=coins; hudTreeT=tNow; renderTools(); }
   pSwatch.style.background=swatchBG(playerLevel);
   pLv.textContent=playerLevel; pName.textContent=levelName(playerLevel);
   pMult.textContent="🪙×"+coinLevelMult(playerLevel).toFixed(1);   // level cash multiplier
@@ -1476,7 +1826,7 @@ $("sbCoinsSet").onclick=()=>{ coins=Math.max(0,Math.floor(+$("sbCoins").value||0
 $("sbPLvlSet").onclick=()=>{ playerLevel=Math.max(1,Math.floor(+$("sbPLvl").value||1)); };
 $("sbELvlSet").onclick=()=>{ enemyLevel=Math.max(1,Math.floor(+$("sbELvl").value||1)); };
 $("sbBrushSet").onclick=()=>{ const n=Math.max(1,Math.min(30,Math.floor(+$("sbBrush").value||1))); brushLevel=Math.max(1,n-1); brush=n; renderBrushBtn(); };
-$("sbUnlock").onclick=()=>{ PALETTE.forEach(p=>{ if(p.t!==EMPTY) unlocked.add(p.t); }); renderTools(); };
+$("sbUnlock").onclick=()=>{ PALETTE.forEach(p=>{ if(p.t!==EMPTY){ unlocked.add(p.t); everUnlocked.add(p.t); } }); renderTools(); };
 $("sbRebuild").onclick=()=>{ buildCities(); };
 
 /* ---- revive tokens (1 regenerates every 20 min, banked up to 3) ---- */
@@ -1491,12 +1841,15 @@ function spendRevive(){ const s=reviveState(); if(s.count<=0) return false; if(s
 
 /* ---- server save of the last (non-death) game ---- */
 const CLIENT_ID=(()=>{ let id=localStorage.getItem("as_id"); if(!id){ id="p"+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("as_id",id); } return id; })();
-function saveGame(){ if(gameOver||sandbox||CAMPAIGN) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};   // World Conquest battles must NOT touch the single-player save
+function saveGame(){ if(gameOver||sandbox||CAMPAIGN) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked],ever:[...everUnlocked]};   // World Conquest battles must NOT touch the single-player save
   fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state})}).catch(()=>{}); }
 function clearSave(){ fetch("/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:CLIENT_ID,state:null})}).catch(()=>{}); }
 function applySave(s,force){ if(!s||CAMPAIGN||(running&&!force)) return;       // only resume if on the menu (force = file import); never during a Conquest battle
   coins=s.coins||0; playerLevel=s.playerLevel||1; wave=s.wave||1; razings=s.razings||0; brushLevel=s.brushLevel||1; brush=brushLevel+1;
-  enemyLevel=Math.floor((wave-1)/5)+1; unlocked.clear(); (s.unlocked||[ACID,WATER,SAND,EMPTY]).forEach(t=>unlocked.add(t)); unlocked.add(EMPTY);
+  enemyLevel=Math.floor((wave-1)/5)+1;
+  unlocked.clear(); (s.unlocked||[ACID,WATER,SAND,EMPTY]).forEach(t=>unlocked.add(t)); unlocked.add(EMPTY);
+  everUnlocked.clear(); (s.ever||[...unlocked]).forEach(t=>everUnlocked.add(t)); unlocked.forEach(t=>everUnlocked.add(t));
+  unlocked.forEach(t=>{ const pos=BRANCH_OF[t]; if(pos) for(let k=0;k<pos.i;k++) everUnlocked.add(ARSENAL[pos.b].tiers[k]); });   // legacy saves: close chains in ever (gates pass; nothing granted)
   clearArena(); buildCities(); renderTools(); renderBrushBtn(); }
 fetch("/load?id="+CLIENT_ID).then(r=>r.json()).then(applySave).catch(()=>{});
 setInterval(()=>{ if(running&&!gameOver) saveGame(); }, 30000);              // periodic checkpoint
@@ -1556,7 +1909,7 @@ function loadLB(){ const cats=document.getElementById("lbcats"); cats.innerHTML=
 function showLeaderboard(){ const box=document.getElementById("lboard"); box.classList.toggle("hidden"); if(!box.classList.contains("hidden")) loadLB(); }
 
 /* ---- save to file ---- */
-function exportSave(){ const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked]};
+function exportSave(){ const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked],ever:[...everUnlocked]};
   const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));
   a.download="acidsiege-save.json"; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
 
@@ -1575,8 +1928,10 @@ importFile.onchange=e=>{ const f=e.target.files[0]; if(!f)return; const r=new Fi
 
 let acc=0,last=performance.now();
 function loop(now){
-  acc+=now-last; last=now;
-  if(running && !gameOver && !(sandbox&&paused) && !tutPause){
+  const dt=now-last; last=now;
+  acc+=dt;
+  const simOn = running && !gameOver && !(sandbox&&paused) && !tutPause;
+  if(simOn){
     const stepMs=16/Math.max(0.05,simSpeed);        // higher simSpeed → smaller interval → faster sim
     const cap=Math.max(3,Math.ceil(simSpeed*3));    // allow more substeps per frame when sped up
     let n=0;
@@ -1585,6 +1940,10 @@ function loop(now){
   } else {
     acc=0;
   }
+  // super-weapon FX and +N popups live on SIM time — they freeze on pause, keep pace on any refresh rate
+  const fxk=simOn ? Math.min(60,dt)/800 : 0;
+  for(let i=fx.length-1;i>=0;i--){ fx[i].t+=fxk; if(fxk && fx[i].t>=1) fx.splice(i,1); }
+  for(let i=pops.length-1;i>=0;i--){ const f=pops[i]; f.t-=fxk; f.y-=10.6*fxk; if(fxk && (f.t<=0||f.y<2)) pops.splice(i,1); }
   render(); hud();
   if(shakeT>0){ const s=shakeT*7; frameEl.style.transform="translate("+((Math.random()*2-1)*s)+"px,"+((Math.random()*2-1)*s)+"px)"; shakeT*=0.86; if(shakeT<0.02){ shakeT=0; frameEl.style.transform=""; } }
   requestAnimationFrame(loop);
@@ -1601,11 +1960,15 @@ requestAnimationFrame(loop);
   playerLevel = Math.max(1,num("plv",1));
   brushLevel = Math.max(1,num("brush",1)); brush = brushLevel+1;
   const un=(q.get("un")||"").split(",").map(Number).filter(n=>!isNaN(n));
-  unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t)); un.forEach(t=>unlocked.add(t));
+  unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t));
+  everUnlocked.clear(); unlocked.forEach(t=>everUnlocked.add(t));
+  granted.clear();
+  un.forEach(t=>{ if(isFinite(t)&&PAL_BYT[t]) grantChain(t); });   // granted tiers re-anchor to their branch prefix
   const eStart=Math.max(1,num("elv",1));
   CAMPAIGN={ city:q.get("city"), enemyStart:eStart, attacker:q.get("atk")||null, defense:q.get("def")==="1", rmul:Math.max(1,+q.get("rmul")||1) };
   maxWaves=Math.max(1,num("waves",5)); enemyLevel=eStart; wave=1; razings=0; gameOver=false;
   tool=[...unlocked].filter(t=>t!==EMPTY&&powerOf(t)>1).sort((a,b)=>powerOf(b)-powerOf(a))[0]||ACID;   // auto-equip your best weapon
+  sheetTool=tool;
   clearArena(); buildCities(); renderTools(); renderBrushBtn();
   setSandbox(false);
   document.getElementById("giveUpBtn").style.display="";   // offer "give up" in the pause menu during a siege
@@ -1695,7 +2058,7 @@ requestAnimationFrame(loop);
     {t:"COINS", el:()=>document.getElementById("coinN").closest(".card"), m:true,
      b:"Damage that <b>destroys enemy city cells</b> pays <b>coins</b>, plus a big bonus each raze. Levels multiply the take (🪙 next card) — coins buy weapons, armor and brush."},
     {t:"YOUR ARSENAL", el:()=>document.getElementById("tools"), m:true, align:"start",
-     b:"<b>Acid</b> is free from wave one. Locked tools show their price — click to buy. <b>⬆</b> upgrades a weapon's damage tier (I–III; saved for solo and Conquest). Bombs detonate on impact, and <b>Sand+Fire=Glass</b>, <b>Lava+Water=Stone</b>."},
+     b:"This is your <b>arsenal tree</b> — nine spokes of hexagons on one comb. <b>Acid</b> is free at the hub end of the green spoke: click its hex to equip. A hex becomes buyable once the hex below it on its spoke is unlocked — selling never re-locks a tier. Hover or tap any hex to identify it; the sheet below holds prices, <b>⬆ damage tiers (I–III)</b> and colours. <b>Sand+Fire=Glass</b>, <b>Lava+Water=Stone</b>."},
     {t:"POUR ACID", el:enemyRect, m:false, act:true,
      b:"Hands-on: <b>drag on the enemy city</b> to pour acid. Acid eats city blocks — watch the coins tick up. Go ahead, I'll wait."},
     {t:"DEFENSE", el:()=>document.getElementById("upBtn").closest(".card"), m:true,
