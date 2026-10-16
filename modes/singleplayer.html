@@ -532,6 +532,7 @@ const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,
 function rebuildCost(){ return 30000; }   // rebuild your own razed city — deliberately steep
 const COIN_PER_CELL=1;
 let difficulty = localStorage.getItem("as_diff") || "medium";   // easy | medium | hard
+let classicMode = false;      // menu mode pick: arsenal (new) | classic (pre-tree rules) | sandbox — set before PLAY
 function coinReward(w){ return difficulty==="easy" ? 9 : 4; }   // easy pays 9, else 4 (× wStep × coinLevelMult)
 function fmtCoin(n){ n=Math.floor(n); const f=(v,s)=>v.toLocaleString(undefined,{maximumFractionDigits:2})+s;
   if(n>=1e15) return f(n/1e15,"Q"); if(n>=1e12) return f(n/1e12,"T"); if(n>=1e9) return f(n/1e9,"B"); if(n>=1e6) return f(n/1e6,"M"); return n.toLocaleString(); }   // M/B/T/Q
@@ -631,17 +632,24 @@ let coinFlash=0;
 const RAZE_RATIO=0.10;                                       // a city is "razed" at 90% destroyed
 function enemyRazed(){  return cityCells/cityCellsMax   <= RAZE_RATIO; }
 function playerRazed(){ return pcityCells/pcityCellsMax <= RAZE_RATIO; }
+const CASH_BUFF=2.2;                                         // cash compensation for the level-per-raze ramp (one tuning knob)
+function advanceRaze(){                                      // a city hit 90% — cue the cinematic, then advance once
+  if(!classicMode && !CAMPAIGN && !razeCine){
+    razeCine=2.2; botHoldUntil=performance.now()+2900; botNextMs=botHoldUntil; sfx("raze");   // cinematic: slow burn + banner
+  } else if(!razeCine) nextWave();                           // classic/campaign: advance immediately
+}
 function damageCity(n,gx,gy){
-  const wStep=Math.floor((wave-1)/5)*5+1;                          // reward steps every 5 waves (same cadence as level/protection)
-  let gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel);
+  const wStep=classicMode?Math.floor((wave-1)/5)*5+1:wave;   // classic: reward steps every 5 waves; new pacing: step every raze
+  let gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel)*CASH_BUFF;
   if(CAMPAIGN) gain*=CAMPAIGN.rmul;                                // World Conquest: empire-size coin bonus
   coins+=gain; cityCells-=n; coinFlash=1;
   if(gx!==undefined) popBucketAdd(gx,gy,gain);
-  if(!gameOver && enemyRazed()) nextWave();                 // enemy 90% gone → next wave
+  if(!gameOver && enemyRazed()) advanceRaze();              // enemy 90% gone → next wave
 }
 function damagePCity(n){ pcityCells-=n;
   if(playerRazed()) loseGame();                             // your city 90% gone → defeat
 }
+let razeCine=0;                                              // seconds left of the raze cinematic (0 = off)
 function nextWave(){
   razings++; wave++;
   if(CAMPAIGN){
@@ -649,7 +657,7 @@ function nextWave(){
     enemyLevel = CAMPAIGN.enemyStart + (wave-1);             // campaign: enemy levels up EVERY wave
     coins += 200*wave; clearLoose(); buildEnemyCity(); sfx("coin"); return;
   }
-  enemyLevel=Math.floor((wave-1)/5)+1;                        // enemy level (colour/pattern + protection) steps every 5 waves
+  enemyLevel=classicMode?Math.floor((wave-1)/5)+1:wave;      // new pacing: enemy levels up EVERY raze (classic: every 5 waves)
   coins += 200*wave;                                          // linear raze bonus (was quadratic)
   clearLoose();             // keep the player's (damaged) city — it does NOT regenerate
   buildEnemyCity();         // only the enemy city is rebuilt fresh
@@ -1060,11 +1068,9 @@ function fxTickDraw(ctx,sx,sy){        // called from render(); lifetimes advanc
             ctx.globalAlpha=(1-bq)*0.9; ctx.fillStyle="#ffe8b0"; ctx.beginPath(); ctx.arc(bx,by,(1.5+bq*3.5)*S*0.25+1,0,7); ctx.fill();
             ctx.strokeStyle=C(1,255,170,60); ctx.beginPath(); ctx.arc(bx,by,(2+bq*8)*S*0.25+1,0,7); ctx.stroke(); } }
         break; }
-      case "fallout":{                                    // canister → whiteout → mushroom → dust ring → fallout
+      case "fallout":{                                    // canister → flash → mushroom → dust ring → fallout
         if(E.t<0.16){ const p=E.t/0.16; ctx.globalAlpha=0.9; ctx.fillStyle="#cfd8d0";
           ctx.fillRect(x-1.6*S*0.3, y-30*S*0.24+(28*S*0.24)*p, 3.2*S*0.3, 5*S*0.24); }
-        if(E.t>=0.16&&E.t<0.3){ ctx.globalAlpha=0.95*(1-(E.t-0.16)/0.14);
-          ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,cv.width,cv.height); }
         if(E.t>=0.26){ const q=Math.min(1,(E.t-0.26)/0.6);
           ctx.globalAlpha=Math.max(0,0.8*(1-q));                            // rising fireball
           ctx.fillStyle=C(1,255,150,50); ctx.beginPath();
@@ -1226,21 +1232,46 @@ function render(){
   // super-weapon FX layer (8 signature families)
   fxTickDraw(ctx,sx,sy);
 
-  // coin popups — one per 150ms bucket, outlined, sized by amount (lifetimes advanced in loop())
+  // coin popups — one per 150ms bucket, then it glides: position/font ease toward the merged center
   if(popBucket.t && performance.now()-popBucket.t>150) popFlush();
   ctx.save();
   ctx.textAlign="center";
   for(let k=pops.length-1;k>=0;k--){
     const f=pops[k];
+    if(f.pdx===undefined){ f.pdx=f.x; f.pdy=f.y; f.fz=2; }
+    f.pdx+=(f.x-f.pdx)*0.18; f.pdy+=(f.y-f.pdy)*0.18;            // glide toward the (possibly merged) centroid
+    f.fz+=((4.2+Math.min(4.2,Math.log10(f.a+1)*0.8))-f.fz)*0.15; // font glides as more damage merges in
     const txt="+"+fmtCoin(Math.round(f.a));
-    const fs=Math.round(sy*(4+Math.min(3.4,Math.log10(f.a+1)*0.72)));
+    if(classicMode){
+      ctx.font=`800 ${Math.round(sy*4)}px Outfit, sans-serif`;
+      ctx.globalAlpha=Math.max(0,f.t);
+      ctx.fillStyle="#ffb627";
+      ctx.fillText(txt, f.pdx*sx, f.pdy*sy);
+      continue;
+    }
+    const fs=Math.max(2,Math.round(sy*f.fz*(1+Math.max(0,f.t-0.93)*8)));   // tiny spawn pop, eased by the glide
     ctx.font=`800 ${fs}px Outfit, sans-serif`;
-    ctx.globalAlpha=Math.max(0,Math.min(1,f.t<0.3?f.t/0.3:1));
-    ctx.lineJoin="round"; ctx.lineWidth=Math.max(2,sy*0.62);
-    ctx.strokeStyle="rgba(16,22,12,0.85)"; ctx.strokeText(txt, f.x*sx, f.y*sy);
-    ctx.fillStyle="#ffdf8a"; ctx.fillText(txt, f.x*sx, f.y*sy);
+    ctx.globalAlpha=Math.max(0,Math.min(1,f.t<0.26?f.t/0.26:1));
+    ctx.lineJoin="round"; ctx.lineWidth=Math.max(2,sy*0.6);
+    ctx.strokeStyle="rgba(16,22,12,0.85)"; ctx.strokeText(txt, f.pdx*sx, f.pdy*sy);
+    ctx.fillStyle="#ffdf8a"; ctx.fillText(txt, f.pdx*sx, f.pdy*sy);
   }
   ctx.restore();
+
+  // raze cinematic banner
+  if(razeCine>0){
+    const inA=Math.min(1,(2.2-razeCine)/0.25), outA=Math.min(1,razeCine/0.45);
+    ctx.save();
+    ctx.globalAlpha=0.55*inA*outA; ctx.fillStyle="#160a06"; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.globalAlpha=inA*outA; ctx.textAlign="center"; ctx.textBaseline="middle";
+    const big=Math.min(cv.height*0.14, cv.width*0.09);
+    ctx.font=`400 ${Math.round(big)}px Bungee, sans-serif`;
+    ctx.fillStyle="#ff6a3c"; ctx.fillText("CITY RAZED", cv.width/2, cv.height/2-big*0.55);
+    ctx.font=`800 ${Math.round(big*0.3)}px Outfit, sans-serif`;
+    ctx.fillStyle="#ffd8a0";
+    ctx.fillText(`WAVE ${(wave+1)} INCOMING · +${fmtCoin(200*(wave+1))}c BONUS`, cv.width/2, cv.height/2+big*0.5);
+    ctx.restore();
+  }
 }
 
 /* ============================================================
@@ -1276,11 +1307,11 @@ function evtToGrid(e){
   const cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
   px=Math.floor(cx/r.width*COLS); py=Math.floor(cy/r.height*ROWS);
 }
-cv.addEventListener("pointerdown",e=>{if(gameOver||!running)return; down=true;evtToGrid(e);place(px,py);sfx("place");
+cv.addEventListener("pointerdown",e=>{if(gameOver||!running||razeCine)return; down=true;evtToGrid(e);place(px,py);sfx("place");
   const fam=FAM[tool];
-  if(fam&&fam!=="run"&&fam!=="fallout") castFX(fam,tool,px,py,brush+3);   // super-weapon cast signature
+  if(fam&&!classicMode&&fam!=="run"&&fam!=="fallout") castFX(fam,tool,px,py,brush+3);   // super-weapon cast signature
   cv.setPointerCapture(e.pointerId);});
-cv.addEventListener("pointermove",e=>{evtToGrid(e); if(down&&!gameOver&&running) place(px,py);});
+cv.addEventListener("pointermove",e=>{evtToGrid(e); if(down&&!gameOver&&running&&!razeCine) place(px,py);});
 addEventListener("pointerup",()=>down=false);
 
 /* ============================================================
@@ -1612,7 +1643,7 @@ function resetGame(){
   unlocked.clear(); [ACID,WATER,SAND,EMPTY].forEach(t=>unlocked.add(t));
   everUnlocked.clear(); unlocked.forEach(t=>everUnlocked.add(t));
   sheetTool=ACID; tool=ACID; pops.length=0; fx.length=0; popBucket.sum=0; popBucket.wx=0; popBucket.wy=0; popBucket.t=0;
-  granted.clear(); botNextMs=0; botHoldUntil=0;
+  granted.clear(); botNextMs=0; botHoldUntil=0; razeCine=0;
   brushLevel=1; brush=brushLevel+1;
   clearArena(); buildCities(); renderTools(); renderBrushBtn();
 }
@@ -1886,6 +1917,7 @@ function sfx(name){ if(muted)return;
   else if(name==="level"){ tone(523,0.08,"square",0.05); setTimeout(()=>tone(784,0.12,"square",0.05),80); }
   else if(name==="unlock"){ tone(660,0.06,"triangle",0.05); setTimeout(()=>tone(990,0.1,"triangle",0.05),70); }
   else if(name==="lose"){ tone(330,0.25,"sawtooth",0.06); setTimeout(()=>tone(150,0.5,"sawtooth",0.06),120); }
+  else if(name==="raze"){ tone(72,0.9,"sine",0.22); setTimeout(()=>tone(58,1.2,"sine",0.2),260); noiseBurst(0.7,0.14,220); }
   else if(name==="revive"){ tone(440,0.1,"square",0.05); setTimeout(()=>tone(660,0.1,"square",0.05),90); setTimeout(()=>tone(990,0.18,"square",0.05),180); }
   else if(name==="place"){ tone(190+Math.random()*70,0.03,"sine",0.025); }
 }
@@ -1932,14 +1964,16 @@ function loop(now){
   acc+=dt;
   const simOn = running && !gameOver && !(sandbox&&paused) && !tutPause;
   if(simOn){
-    const stepMs=16/Math.max(0.05,simSpeed);        // higher simSpeed → smaller interval → faster sim
+    const slow=razeCine>0?2.4:1;                    // cinematic: the sim burns in slow motion
+    const stepMs=16*slow/Math.max(0.05,simSpeed);   // higher simSpeed → smaller interval → faster sim
     const cap=Math.max(3,Math.ceil(simSpeed*3));    // allow more substeps per frame when sped up
     let n=0;
-    while(acc>=stepMs && n<cap){ if(down) place(px,py); step(); botStep(); acc-=stepMs; n++; }
+    while(acc>=stepMs && n<cap){ if(down&&!razeCine) place(px,py); step(); botStep(); acc-=stepMs; n++; }
     if(acc>stepMs*cap) acc=0;                        // don't let backlog build up under heavy speed
   } else {
     acc=0;
   }
+  if(razeCine>0){ razeCine-=dt/1000; if(razeCine<=0){ razeCine=0; nextWave(); } }   // cinematic clock → real wave advance
   // super-weapon FX and +N popups live on SIM time — they freeze on pause, keep pace on any refresh rate
   const fxk=simOn ? Math.min(60,dt)/800 : 0;
   for(let i=fx.length-1;i>=0;i--){ fx[i].t+=fxk; if(fxk && fx[i].t>=1) fx.splice(i,1); }
