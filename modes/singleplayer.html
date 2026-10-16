@@ -996,12 +996,63 @@ function botPickColumn(){   // a surviving player-city column, weighted toward t
   return best;
 }
 function botStep(){
+  if(!classicMode){ botStep2(); return; }                     // new pacing runs the aiming algorithm; classic keeps the legacy steps
   const now=performance.now();
   if(now<botHoldUntil){ botDrop(botCol,botEl); return; }          // mid-hold: keep streaming the weapon
   if(now<botNextMs) return;                                       // waiting for the next 5s slot
   botCol=botPickColumn(); botNextMs=now+botPeriod();              // schedule next hold per difficulty (1s/2.5s/5s)
   if(botCol<0) return;
   botEl=botPickElement(); botHoldUntil=now+BOT_HOLD_MS;           // start a 1.5s hold
+  botDrop(botCol,botEl);
+}
+
+/* ---- smarter bot (arsenal mode): aim where it matters, counter your build, escalate when ignored ---- */
+function botScoreCol(x){                                      // target mass: deck cells + tall towers above
+  if(x<2||x>=P_END-2) return -1;
+  let s=0;
+  for(let y=FLOOR_Y-CITY_THICK;y<FLOOR_Y;y++) if(grid[I(x,y)]===PCITY) s+=2;
+  for(let y=3;y<FLOOR_Y-CITY_THICK;y++) if(grid[I(x,y)]===PCITY) s+=1;
+  return s;
+}
+let botAimScore=0, botPrevPC=0, botEscalate=0, botWide=0;
+function botPickColumn2(){
+  const scored=[];
+  for(let x=2;x<P_END-2;x++){ const s=botScoreCol(x); if(s>0) scored.push([s+(Math.random()*3),x]); }
+  if(!scored.length) return -1;
+  scored.sort((a,b)=>b[0]-a[0]);
+  botWide=(botWide+1)%2;                                      // alternate: best column, then a runner-up — spreads pressure
+  return scored[Math.min(scored.length-1, botWide?((Math.random()*2)|0)+1:0)][1];
+}
+function botPickElement2(){
+  const owned=[...unlocked].filter(t=>t!==EMPTY&&powerOf(t)>1).sort((a,b)=>powerOf(a)-powerOf(b));
+  if(!owned.length) return ACID;
+  if(difficulty==="easy") return owned[0];                    // easy: smallest weapon
+  if(difficulty==="extreme"){                                 // a couple tiers ABOVE your best (even if you don't own it)
+    if(playerLevel<5) return ACID;
+    const bestP=powerOf(owned[owned.length-1]);
+    const above=allWeapons().filter(t=>powerOf(t)>bestP);
+    return above.length?above[Math.min(1,above.length-1)]:(owned[owned.length-1]||ACID);
+  }
+  const back=(difficulty==="hard"?0:1)+botEscalate;           // hard: best; medium: 2nd; both escalate on weak holds
+  return owned[Math.max(0,Math.min(owned.length-1, owned.length-1-back))];
+}
+function botStep2(){
+  const now=performance.now();
+  if(now<botHoldUntil){
+    botDrop(botCol,botEl);
+    if(botAimScore>=0 && botScoreCol(Math.max(2,botCol))<botAimScore*0.35) botHoldUntil=now;   // target finished → move on early
+    return;
+  }
+  if(now<botNextMs) return;
+  if(botPrevPC===0) botPrevPC=pcityCells;                     // first run: baseline your city size
+  const dealt=botPrevPC-pcityCells;                           // how much the last hold destroyed
+  if(dealt<2) botEscalate=Math.min(2,botEscalate+1); else if(dealt>25) botEscalate=Math.max(0,botEscalate-1);
+  botPrevPC=pcityCells;
+  botCol=botPickColumn2();
+  if(botCol<0) return;                                        // nothing left standing? wait
+  botAimScore=botScoreCol(botCol);
+  botNextMs=now+botPeriod()*(0.55+Math.random()*0.9);         // varied rhythm, not a metronome
+  botEl=botPickElement2(); botHoldUntil=now+BOT_HOLD_MS;
   botDrop(botCol,botEl);
 }
 
@@ -1185,7 +1236,7 @@ function fxTickDraw(ctx,sx,sy){        // called from render(); lifetimes advanc
         }
         break; }
       case "deluge":{                                     // molten crack steps OR cloud + droplet curtain + crest
-        const molten=FAM_MOLTEN.has(PAL_BYT[E.tool]?PAL_BYT[E.tool].nm:"");
+        const molten=FAM_MOLTEN.has(E.tool);
         if(molten){
           if(E.t<0.55){ const q=E.t/0.55;
             for(let j=0;j<5;j++){ const a=fxR(E,j)*6.28;
@@ -1540,31 +1591,32 @@ const unlocked=new Set([ACID,WATER,SAND,EMPTY]);
 const everUnlocked=new Set(unlocked);                     // chain memory: selling a tool never re-locks its gate
 const FREE0=new Set([ACID,WATER,SAND,EMPTY]);
 const granted=new Set();                                  // campaign-granted tools: equippable, never sellable (no coin faucet)
-/* ---- super-weapon FX families (built from weapon names, after the palette is assembled) ---- */
-const FAM_NAMES={
-  run:["TNT","Cluster Bomb","Daisy Cutter","Bunker Buster","Fuel-Air Bomb","Rail Mortar","Railgun Slug","Bunker Nuke"],
-  fallout:["Nuke","H-Bomb","Neutron Bomb","Cobalt Bomb","Tsar Bomba"],
-  deluge:["Thermite","Caustic Wave","Sulfur Deluge","Mercury Flood","Corrosive Tide","Quicksilver Sea","Plasma Sludge","Acid Monsoon","Magma Surge"],
-  cut:["Plasma Cannon","Ion Storm","Plasma Tempest","Fusion Lance","Plasmoid Swarm","Quasar Cannon"],
-  cataclysm:["Meteor Strike","Nova Charge","Supernova","Hypernova","Photon Nova","Neutron Star Shard","Solar Flare","Neutronium Slug"],
-  vanish:["Gamma Burst","Antiproton Beam","Tachyon Burst","Gamma Ray Burst","Quark Bomb","Strangelet","Annihilation Core","Strange Matter"],
-  pull:["Void Lance","Black Hole","Singularity","Dark Matter Bomb","Graviton Bomb","Dark Pulse","Void Collapse","Omega Singularity"],
-  fracture:["Vacuum Decay","Big Rip","Entropy Wave","Cosmic String","Reality Tear","Doomsday Glitch","Eternity Engine"],
-};
-const FAM={}; PALETTE.forEach(p=>{ for(const k in FAM_NAMES) if(FAM_NAMES[k].includes(p.nm)) FAM[p.t]=k; });
-const FAM_MOLTEN=new Set(["Thermite","Magma Surge"]);
+/* ---- kid-friendly rename pass (display only; ids and save data never move) ---- */
+const RENAMES={ 24:"Acid Wave",30:"Sulfur Rain",31:"Silver Flood",37:"Acid Tide",42:"Silver Sea",47:"Plasma Goo",55:"Acid Storm",
+  61:"Magma Wave",25:"Bomb Cluster",26:"Sky Sweeper",27:"Drill Bomb",28:"Fire Cloud",34:"Mega Bomb",36:"Rail Bomb",38:"Rail Shot",56:"Drill Nuke",
+  39:"Lightning Storm",54:"Plasma Storm",60:"Sun Beam",67:"Plasma Swarm",71:"Star Cannon",
+  29:"Ghost Bomb",33:"Gamma Blast",57:"Proton Ray",63:"Speed Ray",69:"Space Blast",
+  44:"Meteor",45:"Nova Bomb",48:"Atom Cracker",49:"Star Bullet",50:"Strange Bomb",51:"Dark Bomb",58:"Gravity Bomb",62:"Light Nova",64:"Star Shard",66:"Sun Flare",68:"Mega Nova",
+  40:"Void Spear",43:"Mini Black Hole",53:"Doom Core",59:"Dark Wave",65:"Void Bomb",70:"Strange Goo",
+  52:"Space Eater",73:"Time Wave",74:"Space Whip",75:"Reality Rip",76:"Glitch Wave",77:"Infinity Core",78:"Omega Hole" };
+PALETTE.forEach(p=>{ if(RENAMES[p.t]) p.nm=RENAMES[p.t]; });
+/* ---- super-weapon FX families, keyed by stable ids ---- */
+const FAM_IDS={ run:[6,25,26,27,28,36,38,56], fallout:[19,20,29,32,34], deluge:[23,24,30,31,37,42,47,55,61],
+  cut:[35,39,54,60,67,71], cataclysm:[44,45,46,49,62,64,66,68], vanish:[21,33,57,63,69,48,50,53,70],
+  pull:[40,41,43,51,58,59,65,78], fracture:[52,72,73,74,75,76,77] };
+const FAM={}; for(const k in FAM_IDS) FAM_IDS[k].forEach(t=>{ FAM[t]=k; });
+const FAM_MOLTEN=new Set([23,61]);
 /* ---- ARSENAL skill tree: 9 branches of hexagons, tiers gated in ascending power ---- */
-const NAMEID={}; PALETTE.forEach(p=>NAMEID[p.nm]=p.t); const T=nm=>NAMEID[nm];
 const ARSENAL=[
- {name:"Foundations", col:"#d9c08a", tiers:["Eraser","Sand","Water","Wood","Glass","Stone","City Block"].map(T)},
- {name:"Chemical",    col:"#9cff5a", tiers:["Acid","Virus","Caustic Wave","Sulfur Deluge","Mercury Flood","Corrosive Tide","Quicksilver Sea","Plasma Sludge","Acid Monsoon"].map(T)},
- {name:"Inferno",     col:"#ff7e3a", tiers:["Oil","Fire","Lava","Magma","Napalm","Thermite","Magma Surge"].map(T)},
- {name:"Demolition",  col:"#ff4a5a", tiers:["TNT","Cluster Bomb","Daisy Cutter","Nuke","H-Bomb","Bunker Buster","Fuel-Air Bomb","Tsar Bomba","Rail Mortar","Railgun Slug","Bunker Nuke"].map(T)},
- {name:"Beams",       col:"#4dc3ff", tiers:["Plasma","Plasma Cannon","Ion Storm","Plasma Tempest","Fusion Lance","Plasmoid Swarm","Quasar Cannon"].map(T)},
- {name:"Radiation",   col:"#3ee8b0", tiers:["Antimatter","Neutron Bomb","Cobalt Bomb","Gamma Burst","Antiproton Beam","Tachyon Burst","Gamma Ray Burst"].map(T)},
- {name:"Cosmic",      col:"#ffd24a", tiers:["Meteor Strike","Nova Charge","Supernova","Quark Bomb","Neutronium Slug","Strangelet","Dark Matter Bomb","Graviton Bomb","Photon Nova","Neutron Star Shard","Solar Flare","Hypernova"].map(T)},
- {name:"Annihilation",col:"#6a4aff", tiers:["Void Lance","Black Hole","Singularity","Annihilation Core","Dark Pulse","Void Collapse","Strange Matter"].map(T)},
- {name:"Reality",     col:"#ff4ad2", tiers:["Vacuum Decay","Big Rip","Entropy Wave","Cosmic String","Reality Tear","Doomsday Glitch","Eternity Engine","Omega Singularity"].map(T)},
+ {name:"Foundations", col:"#d9c08a", tiers:[0,1,2,5,13,12,16]},
+ {name:"Chemical",    col:"#9cff5a", tiers:[3,22,24,30,31,37,42,47,55]},
+ {name:"Inferno",     col:"#ff7e3a", tiers:[11,4,14,17,18,23,61]},
+ {name:"Demolition",  col:"#ff4a5a", tiers:[6,25,26,19,20,27,28,34,36,38,56]},
+ {name:"Beams",       col:"#4dc3ff", tiers:[15,35,39,54,60,67,71]},
+ {name:"Radiation",   col:"#3ee8b0", tiers:[21,29,32,33,57,63,69]},
+ {name:"Cosmic",      col:"#ffd24a", tiers:[44,45,46,48,49,50,51,58,62,64,66,68]},
+ {name:"Annihilation",col:"#6a4aff", tiers:[40,41,43,53,59,65,70]},
+ {name:"Reality",     col:"#ff4ad2", tiers:[52,72,73,74,75,76,77,78]},
 ];
 ARSENAL.forEach(b=>b.tiers=b.tiers.filter(x=>x!==undefined));
 if(ARSENAL.reduce((a,b)=>a+b.tiers.length,0)!==PALETTE.length) console.warn("Arsenal tree: tool count mismatch",ARSENAL.reduce((a,b)=>a+b.tiers.length,0),"of",PALETTE.length);

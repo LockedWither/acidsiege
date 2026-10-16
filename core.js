@@ -119,6 +119,15 @@
     DEFBYID[id] = d;
     PALETTE.splice(PALETTE.length-2, 0, {t:id, nm:d.nm, col:d.col, cost:d.cost});
   });
+  /* ---- kid-friendly rename pass (display only; ids stay stable; same table as modes/singleplayer.html) ---- */
+  const RENAMES={ 24:"Acid Wave",30:"Sulfur Rain",31:"Silver Flood",37:"Acid Tide",42:"Silver Sea",47:"Plasma Goo",55:"Acid Storm",
+    61:"Magma Wave",25:"Bomb Cluster",26:"Sky Sweeper",27:"Drill Bomb",28:"Fire Cloud",34:"Mega Bomb",36:"Rail Bomb",38:"Rail Shot",56:"Drill Nuke",
+    39:"Lightning Storm",54:"Plasma Storm",60:"Sun Beam",67:"Plasma Swarm",71:"Star Cannon",
+    29:"Ghost Bomb",33:"Gamma Blast",57:"Proton Ray",63:"Speed Ray",69:"Space Blast",
+    44:"Meteor",45:"Nova Bomb",48:"Atom Cracker",49:"Star Bullet",50:"Strange Bomb",51:"Dark Bomb",58:"Gravity Bomb",62:"Light Nova",64:"Star Shard",66:"Sun Flare",68:"Mega Nova",
+    40:"Void Spear",43:"Mini Black Hole",53:"Doom Core",59:"Dark Wave",65:"Void Bomb",70:"Strange Goo",
+    52:"Space Eater",73:"Time Wave",74:"Space Whip",75:"Reality Rip",76:"Glitch Wave",77:"Infinity Core",78:"Omega Hole" };
+  PALETTE.forEach(p=>{ if(RENAMES[p.t]) p.nm=RENAMES[p.t]; });
 
   window.ACID_CORE = { ids, BASE_HP, DMG, BOMB_PWR, cityProt, coinLevelMult, fmtCoin, hexToRgb, PALETTE, NEWDEFS, DEFBYID };
 })();

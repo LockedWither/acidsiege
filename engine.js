@@ -107,6 +107,15 @@ NEWDEFS.forEach((d,k)=>{ d.id=NEW_BASE+k;
   let cost = k<ORIG ? 150000*Math.pow(1e13/150000, k/(ORIG-1)) : 1e13*Math.pow(100,(k-ORIG+1)/25);   // originals 150k→10T · new 10T→1Q
   const mag=Math.pow(10,Math.floor(Math.log10(cost))-2); d.cost=Math.round(cost/mag)*mag;
   DEFBYID[d.id]=d; PALETTE.splice(PALETTE.length-2,0,{t:d.id,nm:d.nm,col:d.col,cost:d.cost}); });
+/* ---- kid-friendly rename pass (display only; ids stay stable; same table as modes/singleplayer.html) ---- */
+const RENAMES={ 24:"Acid Wave",30:"Sulfur Rain",31:"Silver Flood",37:"Acid Tide",42:"Silver Sea",47:"Plasma Goo",55:"Acid Storm",
+  61:"Magma Wave",25:"Bomb Cluster",26:"Sky Sweeper",27:"Drill Bomb",28:"Fire Cloud",34:"Mega Bomb",36:"Rail Bomb",38:"Rail Shot",56:"Drill Nuke",
+  39:"Lightning Storm",54:"Plasma Storm",60:"Sun Beam",67:"Plasma Swarm",71:"Star Cannon",
+  29:"Ghost Bomb",33:"Gamma Blast",57:"Proton Ray",63:"Speed Ray",69:"Space Blast",
+  44:"Meteor",45:"Nova Bomb",48:"Atom Cracker",49:"Star Bullet",50:"Strange Bomb",51:"Dark Bomb",58:"Gravity Bomb",62:"Light Nova",64:"Star Shard",66:"Sun Flare",68:"Mega Nova",
+  40:"Void Spear",43:"Mini Black Hole",53:"Doom Core",59:"Dark Wave",65:"Void Bomb",70:"Strange Goo",
+  52:"Space Eater",73:"Time Wave",74:"Space Whip",75:"Reality Rip",76:"Glitch Wave",77:"Infinity Core",78:"Omega Hole" };
+PALETTE.forEach(p=>{ if(RENAMES[p.t]) p.nm=RENAMES[p.t]; });
 
 const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000,9000000,20000000,45000000,100000000,220000000,480000000,1050000000,2300000000,5000000000,11000000000,24000000000,52000000000,110000000000,240000000000,520000000000,1100000000000];  // 29 tiers → brush up to 30
 function upCost(L){ return Math.round(400*Math.pow(L,1.6)); }
