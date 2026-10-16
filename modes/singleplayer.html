@@ -72,7 +72,12 @@
 
   #tools{display:block}
   .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
-  #treeWheel svg.svgwheel{height:100%;max-width:96%;width:auto;margin:0 auto}
+  #treeWheel svg.svgwheel{width:max(96%,720px);height:auto;margin:0 auto}
+  .svgwheel .hexC.sel polygon{stroke:#ffffff;stroke-width:2.8;filter:drop-shadow(0 0 7px rgba(255,255,255,.85))}
+  .svgwheel .hexC text{font-weight:800;fill:#cfe6c4}
+  .svgwheel .hexC.dimGold text,.svgwheel .hexC.canBuy text{fill:var(--gold, #ffb627)}
+  .svgwheel .hexC.gated text{fill:#7d9179}
+  .svgwheel text{pointer-events:none}
   .svgwheel .ring{fill:none;stroke:var(--line);stroke-dasharray:2 7;stroke-width:1}
   .svgwheel .hexC{cursor:pointer}
   .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
@@ -433,14 +438,18 @@
   </aside>
 
   <!-- fullscreen arsenal tree (in-game overlay; freezes the battle while open) -->
-  <div id="tree" class="hidden" style="position:fixed;inset:0;z-index:120;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(6,11,8,.98),rgba(8,13,9,.98));backdrop-filter:blur(2px)">
-    <div id="treeHead" style="flex:none;display:flex;align-items:center;gap:14px;padding:14px 18px 6px">
-      <span style="font-family:Bungee,sans-serif;font-size:clamp(22px,4vw,34px);color:var(--toxic);letter-spacing:.04em">ARSENAL</span>
+  <div id="tree" class="hidden" style="position:fixed;inset:0;z-index:120;display:flex;flex-direction:column;backdrop-filter:blur(2px);
+    background:
+      radial-gradient(1000px 620px at 50% -10%, rgba(21,65,74,.85) 0%, transparent 60%),
+      repeating-linear-gradient(45deg, rgba(0,0,0,.16) 0 16px, transparent 16px 32px),
+      linear-gradient(160deg,#06141b,#0a2531 60%,#0e3242)">
+    <div id="treeHead" style="flex:none;display:flex;align-items:center;gap:14px;padding:16px 20px 8px">
+      <span style="font-family:Bungee,sans-serif;font-size:clamp(24px,4.4vw,40px);color:var(--toxic);letter-spacing:.04em;text-shadow:0 0 26px rgba(142,240,42,.35)">ARSENAL</span>
       <span style="font:800 14px/1 Outfit,sans-serif;color:var(--gold);font-variant-numeric:tabular-nums" id="treeCoins">🪙 <b id="tcN">0</b></span>
-      <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward</span>
+      <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward — click to select</span>
       <button class="btn alt" id="treeClose" style="width:auto;padding:10px 16px">✕ CLOSE</button>
     </div>
-    <div id="treeWheel" style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px 12px"></div>
+    <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:flex-start;padding:4px 10px"></div>
     <div id="treeFoot" style="flex:none;padding:6px 16px calc(14px + env(safe-area-inset-bottom));max-width:860px;width:100%;margin:0 auto">
       <div class="tsheet" id="toolSheet">
         <div class="tsrow">
@@ -672,9 +681,12 @@ const RAZE_RATIO=0.10;                                       // a city is "razed
 function enemyRazed(){  return cityCells/cityCellsMax   <= RAZE_RATIO; }
 function playerRazed(){ return pcityCells/pcityCellsMax <= RAZE_RATIO; }
 const CASH_BUFF=2.2;                                         // cash compensation for the level-per-raze ramp (one tuning knob)
+let razeRain=null;                                           // pixel coin rain, spun up with each raze cinematic
 function advanceRaze(){                                      // a city hit 90% — cue the cinematic, then advance once
   if(!classicMode && !CAMPAIGN && !razeCine){
-    razeCine=2.2; botHoldUntil=performance.now()+2900; botNextMs=botHoldUntil; sfx("raze");   // cinematic: slow burn + banner
+    razeCine=2.2; botHoldUntil=performance.now()+2900; botNextMs=botHoldUntil; sfx("raze");
+    razeRain=[]; for(let i=0;i<64;i++) razeRain.push({x:Math.random()*0.9+0.05, v:0.5+Math.random()*0.9,
+      ph:Math.random()*6.28, s:0.2+Math.random()*0.18, drift:(Math.random()-0.5)*0.05, land:Math.random()*0.3+0.7});
   } else if(!razeCine) nextWave();                           // classic/campaign: advance immediately
 }
 function damageCity(n,gx,gy){
@@ -1128,7 +1140,13 @@ function baseColor(t,i){
    ============================================================ */
 const fx=[];
 const fxR=(E,i)=>{ const s=Math.sin((E.s+i)*57.31)*43758.55; return s-Math.floor(s); };
-function castFX(fam,t,gx,gy,R){ if(fx.length>=20) fx.shift();
+function castFX(fam,t,gx,gy,R){
+  if(fam==="run"||fam==="fallout"){                          // bomb cascades: merge into a young neighbour — caps the fx storm
+    for(const E2 of fx){
+      if(fam===E2.fam && E2.tool===t && E2.t<0.4 && Math.hypot(E2.x-gx,E2.y-gy)<14){ E2.t=Math.max(E2.t*0.25,0.1); return; }
+    }
+  }
+  if(fx.length>=8) fx.shift();
   fx.push({fam,t0:0,tool:t,x:gx,y:gy,t:0,R:R||10,col:NEWCOL[t]||[142,240,42],s:(Math.random()*1e4)|0}); }
 /* ---- pixel FX primitives: everything snaps to the cell grid, fillRect-only, no smooth curves ---- */
 function pxRect(g,sx,sy,gx,gy,w,h,col){                 // grid-space rect (rounds to whole cells)
@@ -1176,14 +1194,9 @@ function drawBombCell(g,sx,sy,gx,gy,d){
   g.fillRect(Math.round(gx*sx), Math.round(gy*sy)+Math.ceil(sy*0.16), Math.max(1,Math.ceil(sx)), Math.max(1,Math.ceil(sy*0.66)));
   g.fillStyle=`rgb(${d.dark[0]},${d.dark[1]},${d.dark[2]})`;
   g.fillRect(Math.round(gx*sx), Math.round(gy*sy)+Math.ceil(sy*0.8), Math.max(1,Math.ceil(sx)), Math.max(1,Math.ceil(sy*0.2)));
-  g.fillRect(Math.round(gx*sx), Math.round(gy*sy), Math.max(1,Math.ceil(sx)), 1);
   if((gy%3|0)===0){                                     // warning band every third row
     g.fillStyle=`rgb(${d.stripe[0]},${d.stripe[1]},${d.stripe[2]})`;
     g.fillRect(Math.round(gx*sx), Math.round(gy*sy)+Math.floor(sy*0.45), Math.max(1,Math.ceil(sx)), Math.max(1,Math.floor(sy*0.2)));
-  }
-  if((gx+gy)%3===0){                                    // rivet pixel
-    g.fillStyle=`rgba(${d.dark[0]},${d.dark[1]},${d.dark[2]},0.8)`;
-    g.fillRect(Math.round(gx*sx)+Math.floor(sx*0.4), Math.round(gy*sy)+Math.ceil(sy*0.2), Math.max(1,Math.floor(sx*0.22)), Math.max(1,Math.floor(sy*0.22)));
   }
 }
 function bombSpritePass(ctx,sx,sy){                     // overlay pass in render(): chunky bomb sprites over flat cells
@@ -1212,12 +1225,13 @@ function fxTickDraw(ctx,sx,sy){        // called from render(); lifetimes advanc
         }
         if(E.t>=0.2){ const q=Math.min(1,(E.t-0.2)/0.7);
           const flash=Math.max(0,1-(E.t-0.2)/0.14);
-          if(flash>0) pxDisc(ctx,sx,S,x,y,2+q*R*0.5,C(flash,255,250,220));
-          pxRing(ctx,sx,S,x,y,Math.max(1.5,(E.t-0.22)*R*1.6),C(Math.max(0,0.85-Math.max(0,(E.t-0.2)/0.6)*0.85),255,196,90));
+          if(flash>0.05) pxDisc(ctx,sx,S,x,y,2+q*R*0.5,C(flash,255,250,220));
+          const ringA=Math.max(0,0.85-Math.max(0,(E.t-0.2)/0.6)*0.85);
+          if(ringA>0.05) pxRing(ctx,sx,S,x,y,Math.max(1.5,(E.t-0.22)*R*1.6),C(ringA,255,196,90));
           if(E.t>0.32){ const q2=(E.t-0.32)/0.68;
-            for(let j=0;j<9;j++){                         // stepped debris chunks
+            const da=Math.max(0,0.75-0.75*q2); if(da>0.05) for(let j=0;j<9;j++){  // stepped debris chunks
               const a=fxR(E,j)*6.28, rr=q2*R*1.7;
-              pxRect(ctx,sx,S,x+Math.cos(a)*rr,y+Math.sin(a)*rr*0.72,1.3,1.3,C(Math.max(0,0.75-0.75*q2),255,158,58)); } }
+              pxRect(ctx,sx,S,x+Math.cos(a)*rr,y+Math.sin(a)*rr*0.72,1.3,1.3,C(da,255,158,58)); } }
           if(E.tool===25||E.tool===26){
             for(let j=0;j<6;j++){ const st=0.3+j*0.07; if(E.t<st) continue;
               const bq=(E.t-st)/0.3; if(bq>1) continue;
@@ -1227,24 +1241,27 @@ function fxTickDraw(ctx,sx,sy){        // called from render(); lifetimes advanc
               pxRing(ctx,sx,S,bx,by,bq*R*0.8,C((1-bq)*0.7,255,170,60)); } }
         }
         break; }
-      case "fallout":{                                    // canister blocks → blocky fireball → mushroom in squares → dust ring
+      case "fallout":{                                    // canister blocks → blocky fireball → mushroom in squares
         if(E.t<0.16){ const p=E.t/0.16;
           pxRect(ctx,sx,S,x,y-R*3.2+p*R*2.6,1.4,2.1,C(0.92,207,216,208));
         }
         if(E.t>=0.26){ const q=Math.min(1,(E.t-0.26)/0.6);
           const ca=Math.max(0,0.85*(1-q));
-          pxDisc(ctx,sx,S,x,y-q*R*1.15,2.2+q*R*0.95,C(ca,255,150,50));
-          pxDisc(ctx,sx,S,x,y-q*R*1.15,1.2+q*R*0.5,C(ca,255,235,190));
+          if(ca>0.05){
+            pxDisc(ctx,sx,S,x,y-q*R*1.15,2.2+q*R*0.95,C(ca,255,150,50));
+            pxDisc(ctx,sx,S,x,y-q*R*1.15,1.2+q*R*0.5,C(ca,255,235,190));
+          }
           const my=y-R*0.65-q*R*1.5;
-          if(q>0.35){                                     // stem + cap as blocky rects
-            pxRect(ctx,sx,S,x,y-R*0.55-q*R*1.0,1.1,R*0.55,C(ca*0.7,110,96,74));
-            pxDisc(ctx,sx,S,x,my,2.6+q*R*1.2,C(ca*0.6,146,116,86));
-            pxRing(ctx,sx,S,x,y,Math.max(2.2,(E.t-0.3)*R*2.0),C(Math.max(0,0.6-(E.t-0.28)*1.2),200,170,140));
+          const ringA=Math.max(0,0.6-(E.t-0.28)*1.2);
+          if(q>0.35){
+            if(ca*0.7>0.05) pxRect(ctx,sx,S,x,y-R*0.55-q*R*1.0,1.1,R*0.55,C(ca*0.7,110,96,74));
+            if(ca*0.6>0.05) pxDisc(ctx,sx,S,x,my,2.6+q*R*1.2,C(ca*0.6,146,116,86));
+            if(ringA>0.05) pxRing(ctx,sx,S,x,y,Math.max(2.2,(E.t-0.3)*R*2.0),C(ringA,200,170,140));
           }
           if(E.t>0.45){ const q2=(E.t-0.45)/0.55;         // fallout motes: square dots snowing
-            for(let j=0;j<12;j++){
+            const ma=Math.max(0,0.8-0.8*q2); if(ma>0.05) for(let j=0;j<8;j++){
               const mx=x+(fxR(E,j)-0.5)*R*2.2;
-              pxRect(ctx,sx,S,mx,y-R*1.1+q2*R*2.2*(0.4+fxR(E,j+7)*0.7),0.9,0.9,C(Math.max(0,0.8-0.8*q2),c[0],c[1],c[2]));
+              pxRect(ctx,sx,S,mx,y-R*1.1+q2*R*2.2*(0.4+fxR(E,j+7)*0.7),0.9,0.9,C(ma,c[0],c[1],c[2]));
             } }
         }
         break; }
@@ -1443,18 +1460,31 @@ function render(){
   }
   ctx.restore();
 
-  // raze cinematic banner
+  // raze cinematic: victory banner + pixel coin rain + bonus count-up
   if(razeCine>0){
-    const inA=Math.min(1,(2.2-razeCine)/0.25), outA=Math.min(1,razeCine/0.45);
+    const prog=Math.min(1,1-razeCine/2.2), inA=Math.min(1,(2.2-razeCine)/0.25), outA=Math.min(1,razeCine/0.4);
     ctx.save();
-    ctx.globalAlpha=0.55*inA*outA; ctx.fillStyle="#160a06"; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.globalAlpha=0.55*inA*outA; ctx.fillStyle="rgba(14,50,26,.92)"; ctx.fillRect(0,0,cv.width,cv.height);
+    if(razeRain){                                            // gold pixel coins rain over the razed city
+      for(const cn of razeRain){
+        const cyy=((-0.18+prog*cn.v*1.45)*cv.height)|0, cxn=(cn.x+Math.sin(prog*4+cn.ph)*cn.drift)*cv.width;
+        const sz=cv.height*cn.s*0.05;
+        ctx.globalAlpha=Math.max(0,Math.min(1,inA*outA*(0.35+0.65*Math.sin(prog*9+cn.ph))));
+        ctx.fillStyle="#ffd23c"; ctx.fillRect(cxn, cyy, sz, sz);
+        ctx.fillStyle="#ffe98e"; ctx.fillRect(cxn+sz*0.2, cyy+sz*0.2, sz*0.42, sz*0.42);
+        ctx.fillStyle="#a97b04"; ctx.fillRect(cxn, cyy+sz*0.75, sz, Math.max(1,sz*0.15));
+      }
+    }
     ctx.globalAlpha=inA*outA; ctx.textAlign="center"; ctx.textBaseline="middle";
-    const big=Math.min(cv.height*0.14, cv.width*0.09);
+    const big=Math.min(cv.height*0.16, cv.width*0.1);
     ctx.font=`400 ${Math.round(big)}px Bungee, sans-serif`;
-    ctx.fillStyle="#ff6a3c"; ctx.fillText("CITY RAZED", cv.width/2, cv.height/2-big*0.55);
-    ctx.font=`800 ${Math.round(big*0.3)}px Outfit, sans-serif`;
-    ctx.fillStyle="#ffd8a0";
-    ctx.fillText(`WAVE ${(wave+1)} INCOMING · +${fmtCoin(200*(wave+1))}c BONUS`, cv.width/2, cv.height/2+big*0.5);
+    ctx.lineJoin="round"; ctx.lineWidth=big*0.12; ctx.strokeStyle="rgba(6,20,10,.9)";
+    ctx.strokeText("CITY DESTROYED!", cv.width/2, cv.height/2-big*0.62);
+    ctx.fillStyle="#8ef02a"; ctx.fillText("CITY DESTROYED!", cv.width/2, cv.height/2-big*0.62);
+    ctx.font=`800 ${Math.round(big*0.34)}px Outfit, sans-serif`;
+    const total=200*(wave+1);
+    ctx.fillStyle="#ffe98e";
+    ctx.fillText(`WAVE ${(wave+1)} INCOMING · +${fmtCoin(Math.round(total*Math.min(1,prog*1.5)))}c`, cv.width/2, cv.height/2+big*0.55);
     ctx.restore();
   }
 }
@@ -1667,7 +1697,7 @@ function renderSheet(){
   document.getElementById("tcN").textContent=fmtCoin(coins);   // tree header wallet
   if(!ownedNow){ const pos=BRANCH_OF[t];
     tsMsg.textContent=pos&&pos.i>0&&!gateOK(t)?`Gated — unlock ${PAL_BYT[ARSENAL[pos.b].tiers[pos.i-1]].nm} first`
-      :`Tap again (or UNLOCK) to buy — then painting is free`;
+      :`UNLOCK for ${fmtCoin(p.cost)}c below — painting is free after`;
   } else tsMsg.textContent=t===tool?"Painting is free once unlocked":"Owned — tap EQUIP";
   curToolChip();
 }
@@ -1681,17 +1711,19 @@ function curToolChip(){                                     // sidebar: the tool
   ctUp.disabled=!dmgW||coins<upgCost(p);
   ctUp.textContent=dmgW&&coins>=upgCost(p)?`⬆ ${TIER_NAME[(upg[t]||0)+1]||"II"} — ${fmtCoin(upgCost(p))}`:"⬆";
 }
-function tapTool(t,preview){
+function tapTool(t,select){
   const p=PAL_BYT[t]; if(!p) return;
-  if(preview){ sheetTool=t; renderTools(); return; }        // touch: first tap identifies, the sheet acts
-  const ownedNow=isOwned(t), sellable=sellMode&&p.cost>0&&unlocked.has(t)&&!granted.has(t);
+  const sellable=sellMode&&p.cost>0&&unlocked.has(t)&&!granted.has(t);
   if(sellable){ coins+=Math.round(p.cost*SELL_RATE); unlocked.delete(t); if(tool===t) tool=ACID; sfx("coin"); }
-  else if(!ownedNow){
-    if(!gateOK(t)){ sfx("lose"); }
-    else if(coins>=p.cost){ coins-=p.cost; unlocked.add(t); everUnlocked.add(t); tool=t; sfx("unlock"); }
-  }
-  else { tool=t; }
+  else if(isOwned(t)){ tool=t; }                             // wheel click on an owned hex → quick equip
+  /* locked hexes: the wheel click only SELECTS (white glow); buying happens on the sheet's UNLOCK */
   sheetTool=t; renderTools();
+}
+function sheetAction(){                                      // the sheet's UNLOCK/EQUIP button performs the purchase
+  const t=sheetTool, p=PAL_BYT[t]; if(!p) return;
+  if(isOwned(t)){ tool=t; renderTools(); return; }           // equip an owned tool
+  if(!gateOK(t)){ sfx("lose"); return; }
+  if(coins>=p.cost){ coins-=p.cost; unlocked.add(t); everUnlocked.add(t); tool=t; sfx("unlock"); renderTools(); }
 }
 /* ---- wheel geometry: every hex is snapped onto a true pointy-top honeycomb lattice (occupancy-dodged),
        so tiers touch side-to-side and never overlap — chains may wobble a hair as they step outward ---- */
@@ -1710,12 +1742,13 @@ function hexState(t){
   else if(cls==="canBuy"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.14)`; pa.stroke=b.col; pa["stroke-width"]="1.9"; }
   else if(cls==="dimGold"){ pa.fill="rgba(255,182,39,0.07)"; pa.stroke="rgba(255,182,39,0.6)"; pa["stroke-width"]="1.2"; }
   else { pa.fill="rgba(255,255,255,0.02)"; pa.stroke="#2a3826"; pa["stroke-width"]="1"; }
-  return {cls,pa,title:`${p.nm} — ${price?fmtCoin(price)+"c":"free"}${cls==="gated"?" (gated)":""}`,short:price?fmtCoin(price):"free"};
+  return {cls,pa,title:`${p.nm} — ${price?fmtCoin(price)+"c":"free"}${cls==="gated"?" (gated)":""}`,short:price?fmtCoin(price):"free",
+    lines:(()=>{ const w2=p.nm.split(" "); if(w2.length===1) return [p.nm]; const cut=Math.ceil(w2.length/2); return [w2.slice(0,cut).join(" "), w2.slice(cut).join(" ")]; })()};
 }
 function refreshWheel(){
   for(const h of hexEls){
     const s=hexState(h.t);
-    h.g.setAttribute("class",`hexC ${s.cls}`+(sheetTool===h.t&&s.cls!=="owned"?" prev":""));
+    h.g.setAttribute("class",`hexC ${s.cls}`+(sheetTool===h.t?" sel":""));
     for(const k of ["fill","stroke","stroke-width"]) h.poly.setAttribute(k,s.pa[k]);
     h.title.textContent=s.title;
   }
@@ -1725,9 +1758,9 @@ function buildWheel(){
   host.innerHTML=""; for(const k in HXQ) delete HXQ[k];
   hexEls=[];
   const svg=document.createElementNS(SVGNS,"svg");
-  svg.setAttribute("viewBox","0 0 760 820"); svg.setAttribute("class","svgwheel big");
+  svg.setAttribute("viewBox","0 0 1400 1400"); svg.setAttribute("class","svgwheel big");
   const mk=(tag,at)=>{ const el=document.createElementNS(SVGNS,tag); for(const k in at) el.setAttribute(k,at[k]); return el; };
-  const cx=380, cy=410, HX=17, rad=d=>d*Math.PI/180, NB=ARSENAL.length;
+  const cx=700, cy=700, HX=26, rad=d=>d*Math.PI/180, NB=ARSENAL.length;
   const cellXY=(q,r)=>[HX*Math.sqrt(3)*(q+r/2), HX*1.5*r];
   const snap=(gx,gy)=>{                                     // ideal offset (from the core) → nearest free lattice cell
     const fq=(Math.sqrt(3)/3*gx-1/3*gy)/HX, fr=(2/3*gy)/HX;
@@ -1741,17 +1774,17 @@ function buildWheel(){
       if(d2<bd){ bd=d2; best=[q,r]; } }
     HXQ[best[0]+","+best[1]]=1; return cellXY(best[0],best[1]);
   };
-  for(let i=0;i<12;i++) svg.appendChild(mk("circle",{cx,cy,r:(44.2+i*1.5*HX).toFixed(1),class:"ring"}));
+  for(let i=0;i<12;i++) svg.appendChild(mk("circle",{cx,cy,r:(67.6+i*1.5*HX).toFixed(1),class:"ring"}));
   ARSENAL.forEach((b,bi)=>{
     const base=-90+bi*(360/NB), P=[];
     for(let i=0;i<b.tiers.length;i++){
-      const a=rad(base), rr=44.2+i*1.5*HX;
+      const a=rad(base), rr=67.6+i*1.5*HX;
       const [ox,oy]=snap(Math.cos(a)*rr, Math.sin(a)*rr);
       P.push([cx+ox, cy+oy]);
     }
     for(let i=1;i<b.tiers.length;i++){
       const [x1,y1]=P[i-1], [x2,y2]=P[i];
-      svg.appendChild(mk("line",{x1:x1.toFixed(1),y1:y1.toFixed(1),x2:x2.toFixed(1),y2:y2.toFixed(1),stroke:b.col,"stroke-opacity":"0.3","stroke-width":"2"}));
+      svg.appendChild(mk("line",{x1:x1.toFixed(1),y1:y1.toFixed(1),x2:x2.toFixed(1),y2:y2.toFixed(1),stroke:b.col,"stroke-opacity":"0.32","stroke-width":"2.6"}));
     }
     b.tiers.forEach((t,i)=>{
       if(!PAL_BYT[t]) return;
@@ -1761,23 +1794,29 @@ function buildWheel(){
       const poly=mk("polygon",{points:pts.trim(),class:"hex",...s.pa});
       g.appendChild(poly);
       const title=mk("title",{}); title.textContent=s.title; g.appendChild(title);
-      const pr=mk("text",{x:0,y:HX*0.45,"text-anchor":"middle","font-size":HX*0.62,"font-weight":"700"}); pr.textContent=s.short; g.appendChild(pr);
-      g.addEventListener("pointerenter",()=>{ if(sheetTool!==t){ sheetTool=t; renderSheet(); } });
+      const lines=s.lines, long=Math.max(...lines.map(L=>L.length));
+      const fs=Math.max(9.5,Math.min(HX*0.66,(HX*1.55)/Math.max(1,long)*1.25));
+      const y0=(-(lines.length-1)*0.62)*HX*0.66+HX*0.18;
+      lines.forEach((ln2,k2)=>{ const tx=mk("text",{x:0,y:(y0+k2*HX*0.82).toFixed(1),"text-anchor":"middle","font-size":fs.toFixed(1)}); tx.textContent=ln2; g.appendChild(tx); });
+      g.addEventListener("pointerenter",()=>{ if(sheetTool!==t){ sheetTool=t; renderTools(); } });
       g.addEventListener("click",()=>tapTool(t, performance.now()-wheelTouchT<600));
       svg.appendChild(g);
       hexEls.push({t,g,poly,title});
     });
-    const li=Math.min(b.tiers.length-1,11), lr=44.2+li*1.5*HX+HX*2.1;
+    const li=Math.min(b.tiers.length-1,11), lr=67.6+li*1.5*HX+HX*2.2;
     const lx=cx+Math.cos(rad(base))*lr, ly=cy+Math.sin(rad(base))*lr;
     const rot=((base%360)+360)%360, flip=(rot>90&&rot<270)?rot+180:rot;
-    const label=mk("text",{x:lx.toFixed(1),y:ly.toFixed(1),"text-anchor":"middle","font-size":HX*0.75,"font-weight":"800",fill:b.col,transform:`rotate(${flip} ${lx.toFixed(1)} ${ly.toFixed(1)})`,"letter-spacing":".10em"});
+    const label=mk("text",{x:lx.toFixed(1),y:ly.toFixed(1),"text-anchor":"middle","font-size":HX*0.72,"font-weight":"800",fill:b.col,transform:`rotate(${flip} ${lx.toFixed(1)} ${ly.toFixed(1)})`,"letter-spacing":".12em"});
     label.textContent=b.name.toUpperCase(); svg.appendChild(label);
   });
-  let hpts=""; for(let k=0;k<6;k++){ const a=rad(60*k+30); hpts+=(15*Math.cos(a)).toFixed(1)+","+(15*Math.sin(a)).toFixed(1)+" "; }
-  svg.appendChild(mk("polygon",{points:hpts.trim(),fill:"rgba(142,240,42,0.22)",stroke:"rgba(142,240,42,0.65)","stroke-width":"1.6",transform:`translate(${cx},${cy})`}));
+  let hpts=""; for(let k=0;k<6;k++){ const a=rad(60*k+30); hpts+=(23*Math.cos(a)).toFixed(1)+","+(23*Math.sin(a)).toFixed(1)+" "; }
+  svg.appendChild(mk("polygon",{points:hpts.trim(),fill:"rgba(142,240,42,0.22)",stroke:"rgba(142,240,42,0.65)","stroke-width":"2",transform:`translate(${cx},${cy})`}));
   svg.addEventListener("pointerdown",e=>{ wheelTouchT = e.pointerType==="touch" ? performance.now() : 0; });
   host.appendChild(svg);
+  requestAnimationFrame(()=>{ host.scrollTop=(host.scrollHeight-host.clientHeight)/2; host.scrollLeft=(host.scrollWidth-host.clientWidth)/2; });
 }
+function centerTree(){ const host=document.getElementById("treeWheel");
+  requestAnimationFrame(()=>{ host.scrollTop=(host.scrollHeight-host.clientHeight)/2; host.scrollLeft=(host.scrollWidth-host.clientWidth)/2; }); }
 function renderTools(){
   if(classicMode){ renderToolsClassic(); curToolChip(); return; }
   if(!hexEls.length) buildWheel();
@@ -1833,6 +1872,7 @@ function openTree(){
   if(classicMode) return;
   treeOpen=true; document.getElementById("tree").classList.remove("hidden");
   hudTreeCoins=-1; sheetTool=tool; renderTools();       // fresh state + focus the current tool
+  centerTree();                                          // hub in view; long spokes pan
 }
 function closeTree(){ treeOpen=false; document.getElementById("tree").classList.add("hidden"); }
 document.getElementById("treeBtn").onclick=openTree;
@@ -1843,7 +1883,7 @@ tsCol.oninput=e=>{ skin[sheetTool]=hexToRgb(e.target.value); curPack="Custom"; s
 tsUp.onclick=()=>{ const t=sheetTool, p=PAL_BYT[t]; if(!p||!isOwned(t)||(upg[t]||0)>=MAX_TIER) return;
   const uc=upgCost(p); if(coins>=uc){ coins-=uc; upg[t]=(upg[t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
 tsSell.onclick=()=>{ if(!sellMode) return; tapTool(sheetTool); };
-tsBuy.onclick=()=>tapTool(sheetTool);
+tsBuy.onclick=()=>sheetAction();
 ctUp.onclick=()=>{ if(classicMode) return; const t=tool, p=PAL_BYT[t]; if(!p||!isOwned(t)||(upg[t]||0)>=MAX_TIER) return;
   const uc=upgCost(p); if(coins>=uc){ coins-=uc; upg[t]=(upg[t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
 setModeUI();
