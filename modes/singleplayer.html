@@ -71,12 +71,18 @@
   .row b{font-weight:800}
 
   #tools{display:block}
-  .svgwheel{display:block;width:100%;height:auto;user-select:none;-webkit-tap-highlight-color:transparent}
-  .svgwheel .ring{fill:none;stroke:var(--line);stroke-dasharray:2 5;stroke-width:1}
+  .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
+  #treeWheel svg.svgwheel{height:100%;max-width:96%;width:auto;margin:0 auto}
+  .svgwheel .ring{fill:none;stroke:var(--line);stroke-dasharray:2 7;stroke-width:1}
   .svgwheel .hexC{cursor:pointer}
   .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
   .svgwheel .hexC.prev polygon{stroke:#eafff0;stroke-width:1.7}
+  .svgwheel .hexC.owned text{fill:#cfe6c4}
+  .svgwheel .hexC.canBuy text,.svgwheel .hexC.dimGold text{fill:var(--gold)}
+  .svgwheel .hexC.gated text{fill:#4e5e4a}
+  .svgwheel text{font-family:Outfit,system-ui,sans-serif;pointer-events:none}
   @keyframes hexpulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.35}}
+  .curTool{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px}
   .tsheet{background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:9px 10px;margin-top:10px}
   .tsrow{display:flex;align-items:center;gap:8px}
   .tdot{width:12px;height:12px;border-radius:4px;flex:none}
@@ -367,22 +373,14 @@
     <div class="card">
       <h2>Arsenal</h2>
       <button class="btn alt" id="sellBtn" style="margin-bottom:8px">SELL MODE: OFF</button>
-      <div class="tools" id="tools"></div>
-      <div class="tsheet" id="toolSheet">
-        <div class="tsrow">
-          <span class="tdot" id="tsDot"></span>
-          <b class="tname" id="tsName">Acid</b>
-          <span class="ttier" id="tsTier"></span>
-          <span class="tprice" id="tsPrice">FREE</span>
-        </div>
-        <div class="tsrow2">
-          <button class="btn alt tsbtn" id="tsBuy">UNLOCK</button>
-          <button class="btn alt tsbtn" id="tsUp">⬆</button>
-          <button class="btn alt tsbtn" id="tsSell">SELL</button>
-          <label class="tscol">colour <input type="color" id="tsCol" title="Custom colour"></label>
-        </div>
-        <div class="tsmsg" id="tsMsg"></div>
+      <button class="btn" id="treeBtn" style="margin-bottom:8px">ARSENAL TREE</button>
+      <div class="curTool" id="curTool">
+        <span class="tdot" id="ctDot"></span>
+        <b id="ctName" style="font-weight:800;font-size:13.5px">Acid</b>
+        <span class="ttier" id="ctTier"></span>
+        <button class="btn alt tsbtn" id="ctUp" style="margin-left:auto;padding:7px 9px;font-size:11.5px">⬆</button>
       </div>
+      <div style="display:none" id="classicTools"><div class="tools" id="tools"></div></div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:11px">
         <button class="btn alt" id="brushMinus" style="width:auto;padding:9px 14px">−</button>
         <span id="brushSize" style="flex:1;text-align:center;font-weight:800;font-size:13px">Brush 2</span>
@@ -420,6 +418,34 @@
       </div>
     </div>
   </aside>
+
+  <!-- fullscreen arsenal tree (in-game overlay; freezes the battle while open) -->
+  <div id="tree" class="hidden" style="position:fixed;inset:0;z-index:120;display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(6,11,8,.98),rgba(8,13,9,.98));backdrop-filter:blur(2px)">
+    <div id="treeHead" style="flex:none;display:flex;align-items:center;gap:14px;padding:14px 18px 6px">
+      <span style="font-family:Bungee,sans-serif;font-size:clamp(22px,4vw,34px);color:var(--toxic);letter-spacing:.04em">ARSENAL</span>
+      <span style="font:800 14px/1 Outfit,sans-serif;color:var(--gold);font-variant-numeric:tabular-nums" id="treeCoins">🪙 <b id="tcN">0</b></span>
+      <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward</span>
+      <button class="btn alt" id="treeClose" style="width:auto;padding:10px 16px">✕ CLOSE</button>
+    </div>
+    <div id="treeWheel" style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px 12px"></div>
+    <div id="treeFoot" style="flex:none;padding:6px 16px calc(14px + env(safe-area-inset-bottom));max-width:860px;width:100%;margin:0 auto">
+      <div class="tsheet" id="toolSheet">
+        <div class="tsrow">
+          <span class="tdot" id="tsDot"></span>
+          <b class="tname" id="tsName">Acid</b>
+          <span class="ttier" id="tsTier"></span>
+          <span class="tprice" id="tsPrice">FREE</span>
+        </div>
+        <div class="tsrow2">
+          <button class="btn alt tsbtn" id="tsBuy">UNLOCK</button>
+          <button class="btn alt tsbtn" id="tsUp">⬆</button>
+          <button class="btn alt tsbtn" id="tsSell">SELL</button>
+          <label class="tscol">colour <input type="color" id="tsCol" title="Custom colour"></label>
+        </div>
+        <div class="tsmsg" id="tsMsg"></div>
+      </div>
+    </div>
+  </div>
 
   <main id="stage">
     <div id="frame">
@@ -1460,7 +1486,8 @@ const SELL_RATE=1;   // refund 100% of the unlock cost (anti-softlock only)
 function curColRGB(p){ return skin[p.t] || hexToRgb(p.col); }
 const tsDot=document.getElementById("tsDot"), tsName=document.getElementById("tsName"), tsTier=document.getElementById("tsTier"),
       tsPrice=document.getElementById("tsPrice"), tsUp=document.getElementById("tsUp"), tsSell=document.getElementById("tsSell"),
-      tsCol=document.getElementById("tsCol"), tsMsg=document.getElementById("tsMsg"), tsBuy=document.getElementById("tsBuy");
+      tsCol=document.getElementById("tsCol"), tsMsg=document.getElementById("tsMsg"), tsBuy=document.getElementById("tsBuy"),
+      ctDot=document.getElementById("ctDot"), ctName=document.getElementById("ctName"), ctTier=document.getElementById("ctTier"), ctUp=document.getElementById("ctUp");
 function renderSheet(){
   const t=sheetTool, p=PAL_BYT[t]; if(!p) return;
   const c=curColRGB(p), ownedNow=isOwned(t), tier=upg[t]||0;
@@ -1477,10 +1504,22 @@ function renderSheet(){
   tsSell.style.display=(sellMode&&p.cost>0&&unlocked.has(t)&&!granted.has(t))?"":"none";
   if(tsSell.style.display==="") tsSell.textContent=`SELL +${fmtCoin(Math.round(p.cost*SELL_RATE))}c`;
   tsCol.value=rgbToHex(c);
+  document.getElementById("tcN").textContent=fmtCoin(coins);   // tree header wallet
   if(!ownedNow){ const pos=BRANCH_OF[t];
     tsMsg.textContent=pos&&pos.i>0&&!gateOK(t)?`Gated — unlock ${PAL_BYT[ARSENAL[pos.b].tiers[pos.i-1]].nm} first`
       :`Tap again (or UNLOCK) to buy — then painting is free`;
   } else tsMsg.textContent=t===tool?"Painting is free once unlocked":"Owned — tap EQUIP";
+  curToolChip();
+}
+function curToolChip(){                                     // sidebar: the tool you have selected right now
+  const t=tool, p=PAL_BYT[t]; if(!p) return;
+  const c=curColRGB(p), tier=upg[t]||0;
+  ctDot.style.background=`rgb(${c[0]},${c[1]},${c[2]})`;
+  ctName.textContent=p.nm; ctTier.textContent=TIER_NAME[tier]||"";
+  const dmgW=powerOf(t)>1&&t!==EMPTY;
+  ctUp.style.display=(dmgW&&(upg[t]||0)<MAX_TIER)?"":"none";
+  ctUp.disabled=!dmgW||coins<upgCost(p);
+  ctUp.textContent=dmgW&&coins>=upgCost(p)?`⬆ ${TIER_NAME[(upg[t]||0)+1]||"II"} — ${fmtCoin(upgCost(p))}`:"⬆";
 }
 function tapTool(t,preview){
   const p=PAL_BYT[t]; if(!p) return;
@@ -1511,7 +1550,7 @@ function hexState(t){
   else if(cls==="canBuy"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.14)`; pa.stroke=b.col; pa["stroke-width"]="1.9"; }
   else if(cls==="dimGold"){ pa.fill="rgba(255,182,39,0.07)"; pa.stroke="rgba(255,182,39,0.6)"; pa["stroke-width"]="1.2"; }
   else { pa.fill="rgba(255,255,255,0.02)"; pa.stroke="#2a3826"; pa["stroke-width"]="1"; }
-  return {cls,pa,title:`${p.nm} — ${price?fmtCoin(price)+"c":"free"}${cls==="gated"?" (gated)":""}`};
+  return {cls,pa,title:`${p.nm} — ${price?fmtCoin(price)+"c":"free"}${cls==="gated"?" (gated)":""}`,short:price?fmtCoin(price):"free"};
 }
 function refreshWheel(){
   for(const h of hexEls){
@@ -1522,13 +1561,13 @@ function refreshWheel(){
   }
 }
 function buildWheel(){
-  const SVGNS="http://www.w3.org/2000/svg";
-  toolsEl.innerHTML=""; for(const k in HXQ) delete HXQ[k];
+  const SVGNS="http://www.w3.org/2000/svg", host=document.getElementById("treeWheel");
+  host.innerHTML=""; for(const k in HXQ) delete HXQ[k];
   hexEls=[];
   const svg=document.createElementNS(SVGNS,"svg");
-  svg.setAttribute("viewBox","0 0 340 372"); svg.setAttribute("class","svgwheel");
+  svg.setAttribute("viewBox","0 0 760 820"); svg.setAttribute("class","svgwheel big");
   const mk=(tag,at)=>{ const el=document.createElementNS(SVGNS,tag); for(const k in at) el.setAttribute(k,at[k]); return el; };
-  const cx=170, cy=186, HX=8.2, rad=d=>d*Math.PI/180, NB=ARSENAL.length;
+  const cx=380, cy=410, HX=17, rad=d=>d*Math.PI/180, NB=ARSENAL.length;
   const cellXY=(q,r)=>[HX*Math.sqrt(3)*(q+r/2), HX*1.5*r];
   const snap=(gx,gy)=>{                                     // ideal offset (from the core) → nearest free lattice cell
     const fq=(Math.sqrt(3)/3*gx-1/3*gy)/HX, fr=(2/3*gy)/HX;
@@ -1542,44 +1581,112 @@ function buildWheel(){
       if(d2<bd){ bd=d2; best=[q,r]; } }
     HXQ[best[0]+","+best[1]]=1; return cellXY(best[0],best[1]);
   };
-  for(let i=0;i<12;i++) svg.appendChild(mk("circle",{cx,cy,r:(21.3+i*1.5*HX).toFixed(1),class:"ring"}));
+  for(let i=0;i<12;i++) svg.appendChild(mk("circle",{cx,cy,r:(44.2+i*1.5*HX).toFixed(1),class:"ring"}));
   ARSENAL.forEach((b,bi)=>{
-    const P=[];
+    const base=-90+bi*(360/NB), P=[];
     for(let i=0;i<b.tiers.length;i++){
-      const a=rad(-90+bi*(360/NB)), rr=21.3+i*1.5*HX;
+      const a=rad(base), rr=44.2+i*1.5*HX;
       const [ox,oy]=snap(Math.cos(a)*rr, Math.sin(a)*rr);
       P.push([cx+ox, cy+oy]);
     }
     for(let i=1;i<b.tiers.length;i++){
       const [x1,y1]=P[i-1], [x2,y2]=P[i];
-      svg.appendChild(mk("line",{x1:x1.toFixed(1),y1:y1.toFixed(1),x2:x2.toFixed(1),y2:y2.toFixed(1),stroke:b.col,"stroke-opacity":"0.3","stroke-width":"1.6"}));
+      svg.appendChild(mk("line",{x1:x1.toFixed(1),y1:y1.toFixed(1),x2:x2.toFixed(1),y2:y2.toFixed(1),stroke:b.col,"stroke-opacity":"0.3","stroke-width":"2"}));
     }
     b.tiers.forEach((t,i)=>{
       if(!PAL_BYT[t]) return;
       const [x,y]=P[i], s=hexState(t);
-      const g=mk("g",{transform:`translate(${x.toFixed(1)},${y.toFixed(1)})`});
+      const g=mk("g",{class:`hexC ${s.cls}`,transform:`translate(${x.toFixed(1)},${y.toFixed(1)})`});
       let pts=""; for(let k=0;k<6;k++){ const aa=rad(60*k+30); pts+=(HX*Math.cos(aa)).toFixed(1)+","+(HX*Math.sin(aa)).toFixed(1)+" "; }
-      const poly=mk("polygon",{points:pts.trim(),...s.pa});
+      const poly=mk("polygon",{points:pts.trim(),class:"hex",...s.pa});
       g.appendChild(poly);
       const title=mk("title",{}); title.textContent=s.title; g.appendChild(title);
+      const pr=mk("text",{x:0,y:HX*0.45,"text-anchor":"middle","font-size":HX*0.62,"font-weight":"700"}); pr.textContent=s.short; g.appendChild(pr);
       g.addEventListener("pointerenter",()=>{ if(sheetTool!==t){ sheetTool=t; renderSheet(); } });
       g.addEventListener("click",()=>tapTool(t, performance.now()-wheelTouchT<600));
       svg.appendChild(g);
       hexEls.push({t,g,poly,title});
     });
+    const li=Math.min(b.tiers.length-1,11), lr=44.2+li*1.5*HX+HX*2.1;
+    const lx=cx+Math.cos(rad(base))*lr, ly=cy+Math.sin(rad(base))*lr;
+    const rot=((base%360)+360)%360, flip=(rot>90&&rot<270)?rot+180:rot;
+    const label=mk("text",{x:lx.toFixed(1),y:ly.toFixed(1),"text-anchor":"middle","font-size":HX*0.75,"font-weight":"800",fill:b.col,transform:`rotate(${flip} ${lx.toFixed(1)} ${ly.toFixed(1)})`,"letter-spacing":".10em"});
+    label.textContent=b.name.toUpperCase(); svg.appendChild(label);
   });
-  let hpts=""; for(let k=0;k<6;k++){ const a=rad(60*k+30); hpts+=(9*Math.cos(a)).toFixed(1)+","+(9*Math.sin(a)).toFixed(1)+" "; }
-  svg.appendChild(mk("polygon",{points:hpts.trim(),fill:"rgba(142,240,42,0.2)",stroke:"rgba(142,240,42,0.6)","stroke-width":"1.2",transform:`translate(${cx},${cy})`}));
+  let hpts=""; for(let k=0;k<6;k++){ const a=rad(60*k+30); hpts+=(15*Math.cos(a)).toFixed(1)+","+(15*Math.sin(a)).toFixed(1)+" "; }
+  svg.appendChild(mk("polygon",{points:hpts.trim(),fill:"rgba(142,240,42,0.22)",stroke:"rgba(142,240,42,0.65)","stroke-width":"1.6",transform:`translate(${cx},${cy})`}));
   svg.addEventListener("pointerdown",e=>{ wheelTouchT = e.pointerType==="touch" ? performance.now() : 0; });
-  toolsEl.appendChild(svg);
+  host.appendChild(svg);
 }
-function renderTools(){ if(!hexEls.length) buildWheel(); refreshWheel(); renderSheet(); }
+function renderTools(){
+  if(classicMode){ renderToolsClassic(); curToolChip(); return; }
+  if(!hexEls.length) buildWheel();
+  refreshWheel(); renderSheet();
+}
+/* classic (pre-tree) flat Chemicals bar — the CLASSIC menu mode keeps this UI */
+function renderToolsClassic(){
+  toolsEl.innerHTML="";
+  PALETTE.forEach(p=>{
+    const el=document.createElement("div");
+    const lock=p.cost>0 && !unlocked.has(p.t);
+    const sellable=sellMode && p.cost>0 && unlocked.has(p.t);
+    const tier=upg[p.t]||0, dmgWeapon=powerOf(p.t)>1 && p.t!==EMPTY;
+    el.className="tool"+(p.t===tool?" sel":"")+(lock?" locked":"");
+    const c=curColRGB(p);
+    const tag = lock ? `<span class="cost">${fmtCoin(p.cost)}c</span>`
+              : sellable ? `<span class="cost" style="color:var(--danger)">+${fmtCoin(Math.round(p.cost*SELL_RATE))}c</span>` : "";
+    el.innerHTML=`<span class="dot" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span>
+      <span class="nm" style="flex:1">${p.nm}${tier?` <b style="color:var(--toxic)">${TIER_NAME[tier]}</b>`:""}</span>${tag}`;
+    if(p.t!==EMPTY){
+      const ctr=document.createElement("span"); ctr.style.cssText="display:flex;gap:4px;align-items:center;margin-left:6px";
+      const ci=document.createElement("input"); ci.type="color"; ci.value=rgbToHex(c); ci.title="Custom colour";
+      ci.style.cssText="width:20px;height:20px;border:none;background:none;padding:0;cursor:pointer;flex:none";
+      ci.onclick=e=>e.stopPropagation();
+      ci.oninput=e=>{ skin[p.t]=hexToRgb(e.target.value); curPack="Custom"; saveSkins(); renderTools(); };
+      ctr.appendChild(ci);
+      if(dmgWeapon && !lock){
+        const ub=document.createElement("button"); ub.className="ubtn";
+        if(tier>=MAX_TIER){ ub.textContent="MAX"; ub.disabled=true; }
+        else { const uc=upgCost(p); ub.textContent="⬆"+fmtCoin(uc); ub.disabled=coins<uc; }
+        ub.onclick=e=>{ e.stopPropagation(); if((upg[p.t]||0)>=MAX_TIER) return; const uc=upgCost(p);
+          if(coins>=uc){ coins-=uc; upg[p.t]=(upg[p.t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
+        ctr.appendChild(ub);
+      }
+      el.appendChild(ctr);
+    }
+    el.onclick=()=>{
+      if(sellable){ coins+=Math.round(p.cost*SELL_RATE); unlocked.delete(p.t); if(tool===p.t) tool=ACID; sfx("coin"); }
+      else if(lock){ if(coins>=p.cost){ coins-=p.cost; unlocked.add(p.t); tool=p.t; sfx("unlock"); } }
+      else { tool=p.t; }
+      renderTools();
+    };
+    toolsEl.appendChild(el);
+  });
+}
+function setModeUI(){                                   // menu mode choose: hide/show tree vs classic bar
+  document.getElementById("treeBtn").style.display=classicMode?"none":"";
+  document.getElementById("curTool").style.display=classicMode?"none":"";
+  document.getElementById("classicTools").style.display=classicMode?"":"none";
+}
+let treeOpen=false;
+function openTree(){
+  if(classicMode) return;
+  treeOpen=true; document.getElementById("tree").classList.remove("hidden");
+  hudTreeCoins=-1; sheetTool=tool; renderTools();       // fresh state + focus the current tool
+}
+function closeTree(){ treeOpen=false; document.getElementById("tree").classList.add("hidden"); }
+document.getElementById("treeBtn").onclick=openTree;
+document.getElementById("treeClose").onclick=closeTree;
+addEventListener("keydown",e=>{ if(e.key==="Escape"&&treeOpen) closeTree(); });
 document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap an owned hex to refund 100%)":"OFF"); renderTools(); };
 tsCol.oninput=e=>{ skin[sheetTool]=hexToRgb(e.target.value); curPack="Custom"; saveSkins(); renderTools(); };
 tsUp.onclick=()=>{ const t=sheetTool, p=PAL_BYT[t]; if(!p||!isOwned(t)||(upg[t]||0)>=MAX_TIER) return;
   const uc=upgCost(p); if(coins>=uc){ coins-=uc; upg[t]=(upg[t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
 tsSell.onclick=()=>{ if(!sellMode) return; tapTool(sheetTool); };
 tsBuy.onclick=()=>tapTool(sheetTool);
+ctUp.onclick=()=>{ if(classicMode) return; const t=tool, p=PAL_BYT[t]; if(!p||!isOwned(t)||(upg[t]||0)>=MAX_TIER) return;
+  const uc=upgCost(p); if(coins>=uc){ coins-=uc; upg[t]=(upg[t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
+setModeUI();
 renderTools();
 
 const brushBtn=document.getElementById("brushBtn"), brushSizeEl=document.getElementById("brushSize"),
@@ -1747,9 +1854,9 @@ function hud(){
   const coinStr=fmtCoin(coins);
   coinN.textContent=coinStr; mCoins.textContent=coinStr;
   if(coinFlash){ coinN.classList.remove("pulse"); void coinN.offsetWidth; coinN.classList.add("pulse"); coinFlash=0; }
-  // the wheel's pulsing "can buy" glow follows the wallet as coins roll in (throttled, not during pause menus)
+  // the tree's "can buy" glow follows the wallet while it is open (throttled, never while the colour picker has focus)
   const tNow=performance.now();
-  if(running && tNow-hudTreeT>500 && hudTreeCoins!==coins && document.activeElement!==tsCol){ hudTreeCoins=coins; hudTreeT=tNow; renderTools(); }
+  if(treeOpen && tNow-hudTreeT>500 && hudTreeCoins!==coins && document.activeElement!==tsCol){ hudTreeCoins=coins; hudTreeT=tNow; renderTools(); }
   pSwatch.style.background=swatchBG(playerLevel);
   pLv.textContent=playerLevel; pName.textContent=levelName(playerLevel);
   pMult.textContent="🪙×"+coinLevelMult(playerLevel).toFixed(1);   // level cash multiplier
@@ -1962,7 +2069,7 @@ let acc=0,last=performance.now();
 function loop(now){
   const dt=now-last; last=now;
   acc+=dt;
-  const simOn = running && !gameOver && !(sandbox&&paused) && !tutPause;
+  const simOn = running && !gameOver && !treeOpen && !(sandbox&&paused) && !tutPause;
   if(simOn){
     const slow=razeCine>0?2.4:1;                    // cinematic: the sim burns in slow motion
     const stepMs=16*slow/Math.max(0.05,simSpeed);   // higher simSpeed → smaller interval → faster sim
@@ -2091,8 +2198,9 @@ requestAnimationFrame(loop);
      b:"<b>YOU</b> is your city (left) and <b>CITY</b> is the enemy (right). The dashed yellow lines are <b>build barriers</b> — cities can't cross them, but weapons pass straight through."},
     {t:"COINS", el:()=>document.getElementById("coinN").closest(".card"), m:true,
      b:"Damage that <b>destroys enemy city cells</b> pays <b>coins</b>, plus a big bonus each raze. Levels multiply the take (🪙 next card) — coins buy weapons, armor and brush."},
-    {t:"YOUR ARSENAL", el:()=>document.getElementById("tools"), m:true, align:"start",
-     b:"This is your <b>arsenal tree</b> — nine spokes of hexagons on one comb. <b>Acid</b> is free at the hub end of the green spoke: click its hex to equip. A hex becomes buyable once the hex below it on its spoke is unlocked — selling never re-locks a tier. Hover or tap any hex to identify it; the sheet below holds prices, <b>⬆ damage tiers (I–III)</b> and colours. <b>Sand+Fire=Glass</b>, <b>Lava+Water=Stone</b>."},
+    {t:"YOUR ARSENAL", el:()=>classicMode?document.getElementById("tools"):document.getElementById("treeWheel"), open:!classicMode, m:!classicMode?false:true, align:"start",
+     b:classicMode?"<b>Acid</b> is free from wave one. Locked tools show their price — click to buy. <b>⬆</b> upgrades a weapon's damage tier (I–III). Bombs detonate on impact."
+       :"The <b>ARSENAL TREE</b> — nine spokes of hexagons on one comb, growing hub-outward. <b>Acid</b> is free at the green spoke's hub: click it to equip. A hex unlocks once its spoke's previous tier is unlocked, and selling never re-locks a tier. Hover or tap hexes; the sheet at the bottom handles unlock, upgrades (⬆ I–III), sell and colour."},
     {t:"POUR ACID", el:enemyRect, m:false, act:true,
      b:"Hands-on: <b>drag on the enemy city</b> to pour acid. Acid eats city blocks — watch the coins tick up. Go ahead, I'll wait."},
     {t:"DEFENSE", el:()=>document.getElementById("upBtn").closest(".card"), m:true,
@@ -2118,6 +2226,9 @@ requestAnimationFrame(loop);
   }
   function show(){
     const s=cur(), f=s.el, el=f?f():null;
+    const prev=STEPS[tutIdx-1];
+    if(!s.open&&prev&&prev.open) closeTree();          // leaving the tree step → drop back to the battle
+    if(s.open) openTree();                             // arsenal step → show the full tree
     tutPause=!s.act;                                   // freeze the world while reading; live for the hands-on step
     cardTitle.textContent=s.t;
     cardBody.innerHTML=s.b;
@@ -2125,7 +2236,7 @@ requestAnimationFrame(loop);
     backBtn.disabled=tutIdx===0;
     nextBtn.style.display=s.act?"none":"";
     nextBtn.textContent=s.end?"TO BATTLE →":"NEXT →";
-    card.classList.toggle("act",!!s.act);
+    card.classList.toggle("act",!!s.act||!!s.open);
     hole.classList.toggle("ghost",!!s.act);
     block.classList.toggle("blocking",!s.act);
     const hasHole=!!(s.el&&el);
@@ -2155,6 +2266,7 @@ requestAnimationFrame(loop);
     try{ localStorage.setItem(TUT_KEY,"1"); }catch{}
     sessionDone=true; seen=true;
     tutActive=false; tutPause=false;
+    if(typeof treeOpen!=="undefined"&&treeOpen) closeTree();
     tutEl.style.display="none";
   }
   function start(){
