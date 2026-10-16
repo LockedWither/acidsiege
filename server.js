@@ -34,8 +34,15 @@ function lbSubmit(scope,name,d){
   e.money=Math.max(e.money,Math.floor(+d.money||0)); e.weapons=Math.max(e.weapons,d.weapons|0);
   e.levels=Math.max(e.levels,d.levels|0); e.wave=Math.max(e.wave,d.wave|0); e.wins+=(d.winInc|0); persistLB();
 }
-function lbTop(scope,cat){ const s=lb[scope]||{};
-  return Object.keys(s).map(n=>({name:n,value:s[n][cat]||0})).filter(e=>e.value>0).sort((a,b)=>b.value-a.value).slice(0,50); }
+function lbTop(scope,cat){ const s={};                     // scope "all" merges solo + PvP bests into one global board
+  const scopes=scope==="mp"?["mp"]:scope==="all"?["sp","mp"]:["sp"];
+  scopes.forEach(sc=>{ Object.entries(lb[sc]||{}).forEach(([n,e])=>{
+    const m=s[n]||(s[n]={money:0,weapons:0,levels:0,wave:0,wins:0});
+    m.money=Math.max(m.money,e.money|0); m.weapons=Math.max(m.weapons,e.weapons|0);
+    m.levels=Math.max(m.levels,e.levels|0); m.wave=Math.max(m.wave,e.wave|0); m.wins+=e.wins|0;
+  }); });
+  return Object.keys(s).map(n=>({name:n,value:s[n][cat]||0,wave:s[n].wave,money:s[n].money,levels:s[n].levels,wins:s[n].wins}))
+    .filter(e=>e.value>0).sort((a,b)=>b.value-a.value).slice(0,50); }
 
 // ---- static file server ----
 const MIME = { ".html":"text/html; charset=utf-8", ".js":"text/javascript", ".css":"text/css", ".json":"application/json",
@@ -67,7 +74,7 @@ const server = http.createServer((req,res)=>{
     return;
   }
   if(url==="/leaderboard"){ const u=new URL(req.url,"http://x");
-    const scope=u.searchParams.get("scope")==="mp"?"mp":"sp";
+    let scope=u.searchParams.get("scope")||"sp"; if(scope!=="mp"&&scope!=="all") scope="sp";
     let cat=u.searchParams.get("cat")||"money"; if(!["money","weapons","levels","wave","wins"].includes(cat)) cat="money";
     res.writeHead(200,{"Content-Type":"application/json"}); return res.end(JSON.stringify(lbTop(scope,cat))); }
   if(url==="/score" && req.method==="POST"){
