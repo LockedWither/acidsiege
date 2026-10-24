@@ -1259,6 +1259,33 @@ const fx=[];
 const fxR=(E,i)=>{ const s=Math.sin((E.s+i)*57.31)*43758.55; return s-Math.floor(s); };
 function castFX(fam,t,gx,gy,R){ if(fx.length>=20) fx.shift();
   fx.push({fam,t0:0,tool:t,x:gx,y:gy,t:0,R:R||10,col:NEWCOL[t]||[142,240,42],s:(Math.random()*1e4)|0}); }
+/* ---- pixel FX primitives: everything snaps to the cell grid, fillRect-only, no smooth curves ---- */
+function pxRect(g,sx,sy,gx,gy,w,h,col){                 // grid-space rect (rounds to whole cells)
+  const x=Math.round((gx-w/2)*sx), y=Math.round((gy-h/2)*sy);
+  const W=Math.max(1,Math.round(w*sx)), H=Math.max(1,Math.round(h*sy));
+  g.fillStyle=col; g.fillRect(x,y,W,H);
+}
+function pxDisc(g,sx,sy,gx,gy,r,col){                   // pixelated filled circle: rows of cell-wide squares
+  const cx=Math.round(gx*sx), cy2=Math.round(gy*sy);
+  g.fillStyle=col;
+  for(let d=-r;d<=r;d+=1){                              // one row per CELL for chunky edges
+    const half=Math.sqrt(Math.max(0, r*r-d*d));
+    if(half<0.5) continue;
+    g.fillRect(Math.round(cx-half*sx), Math.round(cy2+d*sy), Math.max(1,Math.round(2*half*sx)), Math.max(1,Math.round(sy)));
+  }
+}
+function pxRing(g,sx,sy,gx,gy,r,col,gap){               // pixelated ring: alternating row segments (dithered)
+  const cy=Math.round(gy*sy), cx=Math.round(gx*sx), R=Math.round(r);
+  g.fillStyle=col;
+  for(let dy=-R;dy<=R;dy++){
+    const d=Math.sqrt(1-(dy*dy)/(R*R+0.01));            // in cell units
+    const half=d*R;
+    const on=Math.abs((dy- (R>>1)*0 )%2)<1;             // simple even-row ring
+    if(!on) continue;
+    const y=Math.round(cy+dy*sy);
+    g.fillRect(Math.round(cx-half*sx), y, Math.max(1,Math.round(2*half*sx)), Math.max(1,Math.round(sy*0.6)));
+  }
+}
 /* ---- bomb pixel sprites: pre-rendered TEXTURE ATLAS (Minecraft-style subtextures) ----
    one 9x9-pixel tile per bomb face is painted ONCE below, then every on-screen bomb cell is a single
    drawImage sub-texture blit — richer art than per-frame fillRects, at a fraction of the cost. ---- */
@@ -1329,158 +1356,190 @@ function bombSpritePass(ctx,sx,sy){                     // overlay pass in rende
 function fxTickDraw(ctx,sx,sy){        // called from render(); lifetimes advance in loop() (freeze on pause)
   for(let k=fx.length-1;k>=0;k--){
     const E=fx[k];
-    const x=E.x*sx, y=E.y*sy, c=E.col, R=Math.max(1,E.R), S=sy;
-    const C=(a,dr,dg,db)=>`rgba(${dr|0},${dg|0},${db|0},${a})`;
+    const x=E.x, y=E.y, c=E.col, R=Math.max(1,E.R), S=sy;
+    const C=(a,r,gg,b)=>`rgba(${r|0},${gg|0},${b|0},${a})`;
+    const col=C(1,c[0],c[1],c[2]);
     ctx.save();
     switch(E.fam){
-      case "run":{                                        // inbound tracer → glint → shockwave (+ sub-booms)
-        if(E.t<0.22){ const p=E.t/0.22, rail=(E.tool===36||E.tool===38||E.tool===56);
-          const x1=rail?x:x+(fxR(E,1)-0.5)*16*S, y1=rail?0:y-42*S;
-          ctx.globalAlpha=0.9*(1-p*0.3); ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=2.2;
-          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x1+(x-x1)*p, y1+(y-y1)*p); ctx.stroke();
-          ctx.globalAlpha=0.3; ctx.lineWidth=5; ctx.stroke(); }
-        if(E.t>=0.2&&E.t<0.4){ const q=(E.t-0.2)/0.2; ctx.globalAlpha=1-q;
-          ctx.fillStyle="#fff8e8"; ctx.beginPath(); ctx.arc(x,y,(2+q*7)*S*0.28+2,0,7); ctx.fill(); }
-        { const q=Math.max(0,(E.t-0.25)/0.6); ctx.globalAlpha=Math.max(0,0.85*(1-q));
-          ctx.strokeStyle=C(1,255,190,90); ctx.lineWidth=2.4;
-          ctx.beginPath(); ctx.arc(x,y,(4+q*R*1.5)*S*0.3+2,0,7); ctx.stroke(); }
-        if(E.t>0.28){ const q=(E.t-0.28)/0.72; ctx.globalAlpha=Math.max(0,0.7*(1-q)); ctx.strokeStyle=C(1,255,160,60);
-          for(let j=0;j<8;j++){ const a=fxR(E,j)*7, l=(4+q*R)*S*0.3;
-            ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.cos(a)*l*1.8, y+Math.sin(a)*l*1.8); ctx.stroke(); } }
-        if(E.tool===25||E.tool===26){ const n=6, q=(E.t-0.3)/0.7;      // staggered bomblets
-          for(let j=0;j<n;j++){ const st=0.3+j*0.07; if(E.t<st) continue;
-            const bq=(E.t-st)/0.35; if(bq>1) continue;
-            const bx=x+(fxR(E,j+10)-0.5)*R*2.4*S*0.3, by=y+(fxR(E,j+20)-0.5)*R*2.4*S*0.3;
-            ctx.globalAlpha=(1-bq)*0.9; ctx.fillStyle="#ffe8b0"; ctx.beginPath(); ctx.arc(bx,by,(1.5+bq*3.5)*S*0.25+1,0,7); ctx.fill();
-            ctx.strokeStyle=C(1,255,170,60); ctx.beginPath(); ctx.arc(bx,by,(2+bq*8)*S*0.25+1,0,7); ctx.stroke(); } }
-        break; }
-      case "fallout":{                                    // canister → flash → mushroom → dust ring → fallout
-        if(E.t<0.16){ const p=E.t/0.16; ctx.globalAlpha=0.9; ctx.fillStyle="#cfd8d0";
-          ctx.fillRect(x-1.6*S*0.3, y-30*S*0.24+(28*S*0.24)*p, 3.2*S*0.3, 5*S*0.24); }
-        if(E.t>=0.26){ const q=Math.min(1,(E.t-0.26)/0.6);
-          ctx.globalAlpha=Math.max(0,0.8*(1-q));                            // rising fireball
-          ctx.fillStyle=C(1,255,150,50); ctx.beginPath();
-          ctx.ellipse(x, y-q*R*1.1*S*0.3, (3+q*R*0.85)*S*0.3, (2.4+q*R*0.6)*S*0.3, 0,0,7); ctx.fill();
-          ctx.fillStyle=C(1,255,235,190); ctx.beginPath();
-          ctx.ellipse(x, y-q*R*1.1*S*0.3, (1.6+q*R*0.42)*S*0.3, (1.3+q*R*0.3)*S*0.3, 0,0,7); ctx.fill();
-          ctx.globalAlpha=Math.max(0,0.55*(1-q));                           // stem + cap
-          ctx.fillStyle=C(1,110,90,70); ctx.fillRect(x-2*S*0.3, y-R*0.6*S*0.3-q*R*1.4*S*0.3, 4*S*0.3, R*0.8*S*0.3);
-          ctx.fillStyle=C(1,140,110,80); ctx.beginPath();
-          ctx.ellipse(x, y-R*0.6*S*0.3-q*R*1.4*S*0.3, (4+q*R*1.15)*S*0.3, (2.4+q*R*0.5)*S*0.3, 0,0,7); ctx.fill(); }
-        { const q=Math.max(0,(E.t-0.3)/0.7); ctx.globalAlpha=Math.max(0,0.6*(1-q));   // ground dust ring
-          ctx.strokeStyle=C(1,200,170,140); ctx.lineWidth=2;
-          ctx.beginPath(); ctx.ellipse(x,y,(6+q*R*1.9)*S*0.3,(2+q*R*0.5)*S*0.3,0,0,7); ctx.stroke(); }
-        if(E.t>0.45){ const q=(E.t-0.45)/0.55; ctx.globalAlpha=Math.max(0,0.8*(1-q)); // fallout motes
-          for(let j=0;j<12;j++){ const mx=x+(fxR(E,j)-0.5)*R*2.2*S*0.3, my=y-R*S*0.3-q*R*1.6*S*0.3;
-            ctx.fillStyle=C(1,c[0],c[1],c[2]); ctx.fillRect(mx,my+q*R*2.2*S*0.3,1.6,1.6); } }
-        break; }
-      case "deluge":{                                     // molten crack OR raincloud → curtain → crest
-        const molten=FAM_MOLTEN.has(E.tool);
-        if(molten){ if(E.t<0.5){ const q=E.t/0.5; ctx.globalAlpha=0.8*(1-q*0.4);
-            ctx.strokeStyle=C(1,255,120,40); ctx.lineWidth=1.8;
-            for(let j=0;j<5;j++){ const a=fxR(E,j)*7;
-              ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.cos(a)*q*R*S*0.35, y+Math.sin(a)*q*R*0.5*S*0.35); ctx.stroke(); }
-            ctx.globalAlpha=0.5*(1-E.t); ctx.fillStyle=C(1,255,170,60);
-            ctx.beginPath(); ctx.arc(x,y,R*S*0.28*(0.4+E.t*0.8),0,7); ctx.fill(); }
-          if(E.t>0.15){ const q=(E.t-0.15)/0.85; ctx.globalAlpha=Math.max(0,0.85*(1-q));
-            for(let j=0;j<10;j++){ const ex=x+(fxR(E,j)-0.5)*R*1.6*S*0.3;      // rising embers
-              ctx.fillStyle=C(1,255,150+fxR(E,j+3)*60,40);
-              ctx.fillRect(ex, y-q*R*(1.4+fxR(E,j+7))*S*0.3, 1.8, 2.4); } }
-        } else {
-          if(E.t<0.4){ const q=E.t/0.4; ctx.globalAlpha=q*0.75;              // rolling cloud band
-            for(let j=0;j<4;j++){ ctx.fillStyle=C(1,26,33,26); ctx.beginPath();
-              ctx.ellipse(x+(j-1.5)*R*0.7*S*0.2, Math.max(6,y-R*4*S*0.24), R*0.85*S*0.24, R*0.3*S*0.24, 0,0,7); ctx.fill(); }
-            ctx.globalAlpha=q*0.5; ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=1.6;
-            ctx.beginPath(); ctx.ellipse(x, Math.max(6,y-R*4*S*0.24), R*1.5*S*0.24, R*0.42*S*0.24, 0,0,7); ctx.stroke(); }
-          if(E.t>=0.12&&E.t<0.55){ const q=(E.t-0.12)/0.43; ctx.globalAlpha=0.85;
-            ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=1.7;
-            for(let j=0;j<14;j++){ const dx=(fxR(E,j)-0.5)*R*1.9*S*0.2;
-              const gy0=Math.max(6,y-R*4*S*0.24), gy=gy0+q*(y-(gy0))+ (j%5)*2;
-              ctx.beginPath(); ctx.moveTo(x+dx, gy0); ctx.lineTo(x+dx, gy); ctx.stroke(); } }
-          if(E.t>=0.5){ const q=(E.t-0.5)/0.5; ctx.globalAlpha=0.9*(1-q);    // advancing crest
-            const cxx=x-R*2*S*0.2+q*R*3*S*0.2;
-            ctx.fillStyle=C(1,c[0],c[1],c[2]); ctx.beginPath();
-            ctx.moveTo(cxx-R*0.8*S*0.2, y); ctx.quadraticCurveTo(cxx, y-R*0.9*S*0.24, cxx+R*0.8*S*0.2, y); ctx.fill();
-            ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=1.2; ctx.stroke(); }
+      case "run":{                                        // stepped tracer → square flash → pixel shockring (+ bomblets)
+        if(E.t<0.24){ const p=E.t/0.24, rail=E.tool===36||E.tool===38||E.tool===56;
+          for(let st=0;st<6;st++){                        // stepped trail blocks marching down
+            const bp=Math.max(0,p-st*0.07); if(bp<=0) continue;
+            const bx=rail?x:x+(fxR(E,1)-0.5)*12, by=y-38+st*4;
+            if(by>y*(0.2+bp*0.8)) continue;
+            pxRect(ctx,sx,S,bx,by,2.2,2.2,C(0.8-(st*0.1),c[0],c[1],c[2]));
+          }
+          pxRect(ctx,sx,S,x,E.t>0.18?y:y-30,1.6,1.6,C(0.9,255,255,240));
+        }
+        if(E.t>=0.2){ const q=Math.min(1,(E.t-0.2)/0.7);
+          const flash=Math.max(0,1-(E.t-0.2)/0.14);
+          if(flash>0) pxDisc(ctx,sx,S,x,y,2+q*R*0.5,C(flash,255,250,220));
+          pxRing(ctx,sx,S,x,y,Math.max(1.5,(E.t-0.22)*R*1.6),C(Math.max(0,0.85-Math.max(0,(E.t-0.2)/0.6)*0.85),255,196,90));
+          if(E.t>0.32){ const q2=(E.t-0.32)/0.68;
+            for(let j=0;j<9;j++){                         // stepped debris chunks
+              const a=fxR(E,j)*6.28, rr=q2*R*1.7;
+              pxRect(ctx,sx,S,x+Math.cos(a)*rr,y+Math.sin(a)*rr*0.72,1.3,1.3,C(Math.max(0,0.75-0.75*q2),255,158,58)); } }
+          if(E.tool===25||E.tool===26){
+            for(let j=0;j<6;j++){ const st=0.3+j*0.07; if(E.t<st) continue;
+              const bq=(E.t-st)/0.3; if(bq>1) continue;
+              const bx=x+(fxR(E,j+10)-0.5)*R*2.4, by=y+(fxR(E,j+20)-0.5)*R*2.4;
+              if(fxR(E,j+3)<0.55||bq<0.4) continue;
+              pxRect(ctx,sx,S,bx,by,1.5+bq*2.5,1.5+bq*2.5,C((1-bq)*0.9,255,240,200));
+              pxRing(ctx,sx,S,bx,by,bq*R*0.8,C((1-bq)*0.7,255,170,60)); } }
         }
         break; }
-      case "cut":{                                        // muzzle bloom → beam column → meanders/afterglow
+      case "fallout":{                                    // canister blocks → blocky fireball → mushroom in squares → dust ring
+        if(E.t<0.16){ const p=E.t/0.16;
+          pxRect(ctx,sx,S,x,y-R*3.2+p*R*2.6,1.4,2.1,C(0.92,207,216,208));
+        }
+        if(E.t>=0.26){ const q=Math.min(1,(E.t-0.26)/0.6);
+          const ca=Math.max(0,0.85*(1-q));
+          pxDisc(ctx,sx,S,x,y-q*R*1.15,2.2+q*R*0.95,C(ca,255,150,50));
+          pxDisc(ctx,sx,S,x,y-q*R*1.15,1.2+q*R*0.5,C(ca,255,235,190));
+          const my=y-R*0.65-q*R*1.5;
+          if(q>0.35){                                     // stem + cap as blocky rects
+            pxRect(ctx,sx,S,x,y-R*0.55-q*R*1.0,1.1,R*0.55,C(ca*0.7,110,96,74));
+            pxDisc(ctx,sx,S,x,my,2.6+q*R*1.2,C(ca*0.6,146,116,86));
+            pxRing(ctx,sx,S,x,y,Math.max(2.2,(E.t-0.3)*R*2.0),C(Math.max(0,0.6-(E.t-0.28)*1.2),200,170,140));
+          }
+          if(E.t>0.45){ const q2=(E.t-0.45)/0.55;         // fallout motes: square dots snowing
+            for(let j=0;j<12;j++){
+              const mx=x+(fxR(E,j)-0.5)*R*2.2;
+              pxRect(ctx,sx,S,mx,y-R*1.1+q2*R*2.2*(0.4+fxR(E,j+7)*0.7),0.9,0.9,C(Math.max(0,0.8-0.8*q2),c[0],c[1],c[2]));
+            } }
+        }
+        break; }
+      case "deluge":{                                     // molten crack steps OR cloud + droplet curtain + crest
+        const molten=FAM_MOLTEN.has(E.tool);
+        if(molten){
+          if(E.t<0.55){ const q=E.t/0.55;
+            for(let j=0;j<5;j++){ const a=fxR(E,j)*6.28;
+              for(let m=1;m<=3;m++){ const rr=q*R*(m/3);
+                pxRect(ctx,sx,S,x+Math.cos(a)*rr,y+Math.sin(a)*rr*0.5,1.2+q,1.2+q,C(0.85-q*0.4,255,120+fxR(E,j+2)*40,40)); } }
+            pxRing(ctx,sx,S,x,y,Math.max(1.5,q*R*1.3),C(0.5*(1-E.t),255,170,60));
+          }
+          if(E.t>0.15){ const q=(E.t-0.15)/0.85;
+            for(let j=0;j<10;j++){
+              const ex=x+(fxR(E,j)-0.5)*R*1.6;
+              pxRect(ctx,sx,S,ex,y-q*R*(1.3+fxR(E,j+7)*0.9),0.8,1.1,C(Math.max(0,0.85*(1-q)),255,150+fxR(E,j+3)*60,40)); } }
+        } else {
+          if(E.t<0.4){ const q=E.t/0.4;                   // cloud: rows of dark blocks with a bright rim
+            for(let rw=0;rw<3;rw++){
+              for(let bx=-3;bx<=3;bx++){
+                pxRect(ctx,sx,S,x+bx*1.5,(y-R*4.4)+rw*0.9,1.7,1.4,C(q*0.55,26,33,26));
+              }
+              pxRing(ctx,sx,S,x,y-R*4,Math.max(1.4,R*1.4),C(q*0.4,c[0],c[1],c[2]));
+            }
+          }
+          if(E.t>=0.12&&E.t<0.55){ const q=(E.t-0.12)/0.43;  // droplet curtain
+            for(let j=0;j<14;j++){
+              const dx=(fxR(E,j)-0.5)*R*1.9;
+              pxRect(ctx,sx,S,x+dx,(y-R*4.2)+q*(y-(y-R*4.2)),0.9,1.6,C(0.85*(1-q*0.3),c[0],c[1],c[2]));
+            }
+          }
+          if(E.t>=0.5){ const q=(E.t-0.5)/0.5;            // advancing crest: stepped block wave
+            const wxx=x-R*2+q*R*2.6;
+            for(let s2=0;s2<4;s2++){
+              pxRect(ctx,sx,S,wxx+s2*1.4,y-((3-s2)%2)*0.9,1.3,2.2,C(0.85*(1-q*0.6),c[0],c[1],c[2]));
+            }
+            pxRect(ctx,sx,S,wxx-0.6,y-1.4,0.7,0.9,C(0.9*(1-q),244,255,232));
+          }
+        }
+        break; }
+      case "cut":{                                        // muzzle block → stepped beam column with white core
         const ion=E.tool===39||E.tool===67, strands=ion?3+(fxR(E,1)*2|0):1;
-        if(E.t<0.12){ const p=E.t/0.12; ctx.globalAlpha=p*0.8; ctx.fillStyle=C(1,c[0],c[1],c[2]);
-          ctx.beginPath(); ctx.arc(x, 4, (2+p*4)*S*0.3, 0,7); ctx.fill(); }
-        if(E.t>=0.1&&E.t<0.72){ const q=(E.t-0.1)/0.62, w=(1.4+2.2*Math.sin(Math.min(1,q*2)*Math.PI/2))*S*0.3;
-          ctx.globalAlpha=0.28; ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=w*2.6;
-          ctx.beginPath(); ctx.moveTo(x,4); ctx.lineTo(x, y+R*S*0.2); ctx.stroke();
-          ctx.globalAlpha=0.95; ctx.strokeStyle="#f2fbff"; ctx.lineWidth=w*0.7;
-          for(let j=0;j<strands;j++){ const dx0=(j-((strands-1)/2))*R*0.5*S*0.2;
-            ctx.beginPath(); ctx.moveTo(x+dx0, 4);
-            for(let seg=1;seg<=6;seg++) ctx.lineTo(x+dx0+Math.sin(seg*1.7+E.s)*R*0.16*S*0.2*(ion?2.2:0.4), 4+(y-4+R*S*0.2)*seg/6);
-            ctx.stroke(); }
-          ctx.globalAlpha=0.7*(1-q*0.5); ctx.fillStyle=C(1,c[0],c[1],c[2]);
-          ctx.beginPath(); ctx.ellipse(x, y+R*S*0.2, R*0.8*S*0.24, R*0.28*S*0.24, 0,0,7); ctx.fill(); }
-        if(E.t>=0.72){ const q=(E.t-0.72)/0.28; ctx.globalAlpha=Math.max(0,0.5*(1-q));
-          ctx.fillStyle=C(1,c[0],c[1],c[2]); ctx.beginPath(); ctx.arc(x,y,R*0.5*S*0.24,0,7); ctx.fill(); }
+        if(E.t<0.12){ const p=E.t/0.12;
+          pxRect(ctx,sx,S,x,0.8,2+p*3,2+p*3,C(p*0.8,c[0],c[1],c[2]));
+        }
+        if(E.t>=0.1&&E.t<0.72){ const q=(E.t-0.1)/0.62;
+          for(let j=0;j<strands;j++){
+            const dx0=(j-((strands-1)/2))*R*0.55;
+            pxRect(ctx,sx,S,x+dx0,0.35,0.9+q*1.4,y+R*0.3,C(0.32,c[0],c[1],c[2]));
+            pxRect(ctx,sx,S,x+dx0,0.35,0.34+q*0.5,y+R*0.3,C(0.95,242,251,255));
+            for(let m=1;m<=6;m++){                        // meander pixel steps
+              const myy=0.35+(y+R*0.3-0.35)*m/6;
+              pxRect(ctx,sx,S,x+dx0+Math.sin(m*1.7+E.s)*R*0.14*(ion?2.4:0.5),myy,0.5+q*0.8,0.8,C(0.85,232,250,255));
+            }
+          }
+          if(E.t>0.3){ const flash=Math.max(0,1-(E.t-0.3)/0.5);
+            pxRect(ctx,sx,S,x,y+R*0.4,R*0.8*flash+1,R*0.3*flash+0.6,C(flash*0.7,c[0],c[1],c[2]));
+          }
+        }
+        if(E.t>=0.72){ const q=(E.t-0.72)/0.28;
+          pxDisc(ctx,sx,S,x,y,3-q*2,C(0.55*(1-q),c[0],c[1],c[2]));
+        }
         break; }
-      case "cataclysm":{                                  // sky charge → converging rays → coronas + petals
-        if(E.t<0.42){ const q=E.t/0.42; ctx.globalAlpha=0.14*q; ctx.fillStyle=C(1,255,210,74); ctx.fillRect(0,0,cv.width,cv.height);
-          ctx.globalAlpha=0.9*q;
-          for(let j=0;j<12;j++){ const a=Math.PI*2*j/12+fxR(E,j)*0.4, rr=(1-q)*34*S*0.3;
-            ctx.strokeStyle=C(1,255,214,110); ctx.lineWidth=1.6;
-            ctx.beginPath(); ctx.moveTo(x+Math.cos(a)*rr, y+Math.sin(a)*rr); ctx.lineTo(x+Math.cos(a)*rr*0.3, y+Math.sin(a)*rr*0.3); ctx.stroke(); } }
-        { const q=Math.max(0,(E.t-0.4)/0.6); ctx.globalAlpha=Math.max(0,1-q);
-          for(let ring=1;ring<=2;ring++){ ctx.strokeStyle=C(1,255,210,74,ring>1?0.5:0.8); ctx.lineWidth=2.2-ring*0.5;
-            ctx.beginPath(); ctx.arc(x,y,(3+q*ring*R*1.1)*S*0.3,0,7); ctx.stroke(); }
-          ctx.fillStyle="#fff3d0"; ctx.beginPath(); ctx.arc(x,y,(2+q*R*0.42)*S*0.3,0,7); ctx.fill();
-          for(let j=0;j<12;j++){ const a=Math.PI*2*j/12, l=(2+q*R*0.5)*S*0.3;
-            ctx.strokeStyle=C(1,255,170,60); ctx.beginPath();
-            ctx.moveTo(x+Math.cos(a)*R*0.42*S*0.3*q, y+Math.sin(a)*R*0.42*S*0.3*q);
-            ctx.lineTo(x+Math.cos(a)*(R*0.42*q+l), y+Math.sin(a)*(R*0.42*q+l)); ctx.stroke(); } }
+      case "cataclysm":{                                  // sky dither brightens, rays converge as block steps
+        if(E.t<0.42){ const q=E.t/0.42;
+          for(let j=0;j<12;j++){ const a=6.28*j/12+fxR(E,j)*0.4, rr=(1-q)*R*5.2;
+            pxRect(ctx,sx,S,x+Math.cos(a)*rr,y+Math.sin(a)*rr*0.62,1.5,1.5,C(0.85*q,255,214,110)); }
+          for(let by2=0;by2<cv.height;by2+=Math.max(3,sy*1.4))   // dithered sky band (checker rows)
+            ctx.fillStyle=C(0.1*q,255,210,74), ctx.fillRect(0,by2,cv.width,Math.max(2,sy*0.7));
+        }
+        { const q=Math.max(0,(E.t-0.4)/0.6);
+          pxRing(ctx,sx,S,x,y,Math.max(2,(2+q*R*1.3)),C(Math.max(0,0.8*(1-q)),255,210,74));
+          pxRing(ctx,sx,S,x,y,Math.max(1,(2+q*R*0.8)),C(Math.max(0,0.55*(1-q)),255,236,150));
+          if(q>0.15) pxDisc(ctx,sx,S,x,y,1.4+q*R*0.5,C(Math.max(0,0.9*(1-q)),255,246,210));
+          if(q>0.25&&q<0.85){ for(let j=0;j<14;j++){ const a=6.28*j/12, l=q*R*0.5;
+            pxRect(ctx,sx,S,x+Math.cos(a)*R*0.5*q,y+Math.sin(a)*R*0.5*q,1.3,1.3,C(0.7*(1-q),255,170,60)); } }
+        }
         break; }
-      case "vanish":{                                     // motes merge → ring → light pillar wipe
-        if(E.t<0.36){ const q=E.t/0.36, ro=(1-q)*R*1.4*S*0.3+2, spin=q*9;
-          for(const sg of[-1,1]){ ctx.fillStyle=C(1,c[0],c[1],c[2]); ctx.beginPath();
-            ctx.arc(x+Math.cos(spin)*ro*sg, y+Math.sin(spin)*ro, 2.4,0,7); ctx.fill();
-            ctx.fillStyle="rgba(255,120,255,.7)"; ctx.beginPath();
-            ctx.arc(x+Math.cos(spin)*ro*sg+2, y+Math.sin(spin)*ro+1.4, 2.4,0,7); ctx.fill(); } }
-        if(E.t>=0.36&&E.t<0.5){ const q=(E.t-0.36)/0.14; ctx.globalAlpha=1-q*0.4;
-          ctx.strokeStyle=C(1,c[0]+40,c[1],c[2]+60); ctx.lineWidth=2.2;
-          ctx.beginPath(); ctx.arc(x,y,(2+(1-q)*R*0.9)*S*0.3,0,7); ctx.stroke(); }
-        if(E.t>=0.5){ const q=(E.t-0.5)/0.5; ctx.globalAlpha=Math.max(0,0.5*(1-q));
-          const g=ctx.createLinearGradient(0,y-R*2*S*0.3,0,y+R*0.6*S*0.3);
-          g.addColorStop(0,C(0,c[0],c[1],c[2])); g.addColorStop(1,C(1,c[0],c[1],c[2]));
-          ctx.fillStyle=g; ctx.fillRect(x-(2.5+q*3)*S*0.3, y-R*2*S*0.3, (5+q*6)*S*0.3, R*2.6*S*0.3);
-          ctx.globalAlpha=0.9*(1-q); ctx.fillStyle="#fff";                // downward wipe line
-          ctx.fillRect(x-9*S*0.3, y-R*2*S*0.3+q*R*2.4*S*0.3, 18*S*0.3, 1.6); }
+      case "vanish":{                                     // orbiting square motes → pixel ring → blocky pillar wipe
+        if(E.t<0.36){ const q=E.t/0.36, ro=(1-q)*R*1.4+2, spin=q*9;
+          for(const sg of[-1,1]){
+            pxRect(ctx,sx,S,x+Math.cos(spin)*ro*sg,y+Math.sin(spin)*ro*0.7,1.6,1.6,C(1,c[0],c[1],c[2]));
+            pxRect(ctx,sx,S,x+Math.cos(spin)*ro*sg+1.5,y+Math.sin(spin)*ro*0.7+1,1.6,1.6,C(0.7,255,120,255));
+          }
+        }
+        if(E.t>=0.36&&E.t<0.5){ const q=(E.t-0.36)/0.14;
+          pxRing(ctx,sx,S,x,y,Math.max(1.4,(1-q)*R*0.9),C(1-q*0.35,Math.min(255,c[0]+40),c[1],Math.min(255,c[2]+60)));
+        }
+        if(E.t>=0.5){ const q=(E.t-0.5)/0.5;              // pillar as stacked rows, wipe line marching down
+          const ph=R*2.4;
+          for(let row=0;row<ph;row+=1.1){
+            const wy=y-R*1.9+row;
+            pxRect(ctx,sx,S,x,wy,2.4+q*2.4,1,C(Math.max(0,0.55*(1-q)),c[0],c[1],c[2]));
+          }
+          pxRect(ctx,sx,S,x,y-R*1.9+q*ph,R*2.2,0.9,C(0.95*(1-q*0.6),255,255,255));
+        }
         break; }
-      case "pull":{                                       // lens creep → inward spiral → horizon disc
+      case "pull":{                                       // dark pixel lens grows, streak steps sucked in, event horizon
         const q=Math.min(1,E.t/0.45);
-        ctx.globalAlpha=0.55*q; ctx.fillStyle="rgba(8,5,14,1)";
-        ctx.beginPath(); ctx.arc(x,y,(3+q*R*0.9)*S*0.3,0,7); ctx.fill();
-        ctx.globalAlpha=Math.max(0,(1-Math.abs(E.t-0.45)*2)); ctx.strokeStyle=C(1,c[0],c[1],c[2]);
-        for(let j=0;j<11;j++){ const a=j*1.31+E.t*4.4, r1=(12-E.t*22)*S*0.3+R*0.4*S*0.3, r2=r1-(3+q*9)*S*0.3;
-          ctx.beginPath(); ctx.moveTo(x+Math.cos(a)*r1, y+Math.sin(a)*r1);
-          ctx.lineTo(x+Math.cos(a+0.5)*Math.max(1,r2), y+Math.sin(a+0.5)*Math.max(1,r2)); ctx.stroke(); }
-        const dz=Math.max(0,(E.t-0.5)/0.5); ctx.globalAlpha=0.9*dz; ctx.fillStyle="rgba(10,6,20,1)";
-        ctx.beginPath(); ctx.arc(x,y,(4+dz*R*0.55)*S*0.3,0,7); ctx.fill();
-        ctx.strokeStyle=C(1,c[0],c[1],c[2]); ctx.lineWidth=1.4; ctx.setLineDash([3,4]);
-        ctx.beginPath(); ctx.arc(x,y,(6+dz*R*0.75)*S*0.3,0,7); ctx.stroke(); ctx.setLineDash([]);
+        for(let rw=-3;rw<=3;rw++){                        // rings of dark squares collapsing inward
+          const rr=q*R*0.9+rw*1.15*(1-q);
+          if(Math.abs(rr)>R*2.2) continue;
+          pxRing(ctx,sx,S,x,y,Math.max(1,Math.abs(rr)),C(0.5*q,8,5,14));
+        }
+        pxDisc(ctx,sx,S,x,y,2.2+q*R*0.8,C(0.75*q,10,6,18));
+        { const a0=(1-Math.abs(E.t-0.45)*2); if(a0>0){ for(let j=0;j<11;j++){
+            const a=j*1.31+E.t*4.4, r1=(10-E.t*20)*S*0.02+R*0.6, r2=Math.max(1,r1-(2+q*8)*S*0.02);
+            for(let m=0;m<3;m++){ const mm=r1+(r2-r1)*m/2;
+              pxRect(ctx,sx,S,x+Math.cos(a)*mm,y+Math.sin(a+0.5)*mm,1.2,1.2,C(a0*0.75,c[0],c[1],c[2])); } } } }
+        { const dz=Math.max(0,(E.t-0.5)/0.5);
+          pxDisc(ctx,sx,S,x,y,2.6+dz*R*0.7,C(0.92*dz,10,6,20));
+          pxRing(ctx,sx,S,x,y,Math.max(1,3.6+dz*R*1.0),C(0.8*dz,c[0],c[1],c[2]));
+        }
         break; }
-      case "fracture":{                                   // scanline wrongness → fissure → crisp emptiness
+      case "fracture":{                                   // scanline strips copy-shift, jagged fissure steps open, crisp emptiness
         const full=E.tool===72;
         if(E.t<0.24||(E.tool===76&&fxR(E,(E.t*30)|0)<0.5)){
-          for(let j=0;j<(full?8:4);j++){ const yy=(fxR(E,j)*0.9+0.02)*cv.height, hh=1.5+fxR(E,j+5)*2;
+          for(let j=0;j<(full?8:4);j++){
+            const yy=(fxR(E,j)*0.9+0.02)*cv.height, hh=1.5+fxR(E,j+5)*2;
             const off=(fxR(E,j+9)-0.5)*(full?7:3);
-            ctx.globalAlpha=0.5; ctx.drawImage(cv,0,yy,cv.width,hh,off,yy,cv.width,hh); } }
-        if(E.t>=0.14&&E.t<0.55){ const q=(E.t-0.14)/0.41; ctx.globalAlpha=0.95;
-          ctx.strokeStyle=C(1,255,74,210); ctx.lineWidth=2;
-          ctx.beginPath(); ctx.moveTo(x-q*R*1.5*S*0.3, y);
-          for(let seg=1;seg<=5;seg++){ const x2=x-q*R*1.5*S*0.3+q*R*1.5*S*0.3*2*seg/5;
-            ctx.lineTo(x2, y+((seg*37+E.s)%11-5)*2.2); } ctx.stroke();
-          ctx.strokeStyle="rgba(255,255,255,.8)"; ctx.lineWidth=1; ctx.stroke(); }
-        if(E.t>=0.3){ const q=(E.t-0.3)/0.7; ctx.globalAlpha=1;
-          ctx.fillStyle="#0a0e0a"; ctx.beginPath(); ctx.arc(x,y,(2+q*R*0.95)*S*0.3,0,7); ctx.fill();
-          ctx.strokeStyle=C(1,Math.min(255,c[0]+80),c[1],c[2]); ctx.lineWidth=1.8;
-          ctx.globalAlpha=Math.max(0,0.8*(1-q)); ctx.stroke(); }
+            ctx.globalAlpha=0.5; ctx.drawImage(cv,0,yy,cv.width,hh,off,yy,cv.width,hh);
+          }
+        }
+        if(E.t>=0.14&&E.t<0.55){ const q=(E.t-0.14)/0.41;
+          for(let seg=0;seg<=6;seg++){                    // fissure as stepped pixel blocks
+            const px=x-R*1.4+(R*1.4*2)*(seg/6)*q;
+            pxRect(ctx,sx,S,px,y+(((seg*37+E.s)%11)-5)*0.5,0.9,1.2,C(0.95,255,74,210));
+            if(seg%2===0) pxRect(ctx,sx,S,px+0.5,y+(((seg*37+E.s)%11)-5)*0.5,0.6,1.2,C(0.8,255,255,255));
+          }
+        }
+        if(E.t>=0.3){ const q=(E.t-0.3)/0.7;
+          pxDisc(ctx,sx,S,x,y,2+q*R*0.95,C(1,10,14,10));   // crisp emptiness: pixel hole
+          pxRing(ctx,sx,S,x,y,Math.max(1,2+q*R*0.95),C(Math.max(0,0.8*(1-q)),Math.min(255,c[0]+80),c[1],c[2]));
+        }
         break; }
     }
     ctx.restore();
