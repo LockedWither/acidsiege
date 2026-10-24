@@ -452,7 +452,7 @@
     <div id="treeHead" style="flex:none;display:flex;align-items:center;gap:14px;padding:16px 20px 8px">
       <span style="font-family:Bungee,sans-serif;font-size:clamp(24px,4.4vw,40px);color:var(--toxic);letter-spacing:.04em;text-shadow:0 0 26px rgba(142,240,42,.35)">ARSENAL</span>
       <span style="font:800 14px/1 Outfit,sans-serif;color:var(--gold);font-variant-numeric:tabular-nums" id="treeCoins">🪙 <b id="tcN">0</b></span>
-      <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward — click to select</span>
+      <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward — click to select · double-click to buy/upgrade</span>
       <button class="btn alt" id="treeClose" style="width:auto;padding:10px 16px">✕ CLOSE</button>
     </div>
     <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:flex-start;padding:4px 10px"></div>
@@ -533,21 +533,25 @@ function patternMod(x,y,p){
   }
   return 1;
 }
-function groupTint(c,g){
+function groupTint(c,g,out){
+  const o=out||[0,0,0];
   switch(g%5){
-    case 0: return c;
-    case 1: return [c[0]*0.62,c[1]*0.62,c[2]*0.62];
-    case 2: return [Math.min(255,c[0]*1.30+30),Math.min(255,c[1]*1.30+30),Math.min(255,c[2]*1.30+30)];
-    case 3: { const a=(c[0]+c[1]+c[2])/3; return [(c[0]+a)/2,(c[1]+a)/2,(c[2]+a)/2]; }
-    case 4: return [255-c[0],255-c[1],255-c[2]];
+    case 0: o[0]=c[0]; o[1]=c[1]; o[2]=c[2]; break;
+    case 1: o[0]=c[0]*0.62; o[1]=c[1]*0.62; o[2]=c[2]*0.62; break;
+    case 2: o[0]=Math.min(255,c[0]*1.30+30); o[1]=Math.min(255,c[1]*1.30+30); o[2]=Math.min(255,c[2]*1.30+30); break;
+    case 3: { const a=(c[0]+c[1]+c[2])/3; o[0]=(c[0]+a)/2; o[1]=(c[1]+a)/2; o[2]=(c[2]+a)/2; break; }
+    case 4: o[0]=255-c[0]; o[1]=255-c[1]; o[2]=255-c[2]; break;
   }
+  return o;
 }
-function cityRGB(L,x,y){
-  const base=groupTint(TIERS[tIdx(L)].c, gIdx(L));
+const TINT3=[0,0,0];                                        // cityRGB scratch (out param keeps render() allocation-free)
+function cityRGB(L,x,y,out){
+  const base=groupTint(TIERS[tIdx(L)].c, gIdx(L), out||TINT3);
   const m=patternMod(x,y,pIdx(L));
-  return [Math.max(0,Math.min(255,base[0]*m)),
-          Math.max(0,Math.min(255,base[1]*m)),
-          Math.max(0,Math.min(255,base[2]*m))];
+  base[0]=Math.max(0,Math.min(255,base[0]*m));
+  base[1]=Math.max(0,Math.min(255,base[1]*m));
+  base[2]=Math.max(0,Math.min(255,base[2]*m));
+  return base;
 }
 
 // ---- grid ----
@@ -816,77 +820,111 @@ function stepSolid(x,y,i){
 }
 function stepLiquid(x,y,i){
   if(y+1<ROWS){const d=I(x,y+1); if(liquidPass(grid[d])){ swap(i,d); return; }}
-  const dir=Math.random()<0.5?-1:1;
-  for(const k of [dir,-dir]){const nx=x+k; if(!inB(nx,y+1))continue; const dd=I(nx,y+1); if(liquidPass(grid[dd])){ swap(i,dd); return; }}
-  for(const k of [dir,-dir]){const nx=x+k; if(!inB(nx,y))continue; const s=I(nx,y); if(liquidPass(grid[s])){ swap(i,s); return; }}
+  const dir=Math.random()<0.5?-1:1;                      // zero-alloc: [dir,-dir] loop unrolled below
+  const lo=dir<0?i-1:i+1, ro=dir<0?i+1:i-1;
+  const canLo=x+dir>=0&&x+dir<COLS, canRo=x-dir>=0&&x-dir<COLS;
+  if(y+1<ROWS){
+    if(canLo && liquidPass(grid[lo+COLS])){ swap(i,lo+COLS); return; }
+    if(canRo && liquidPass(grid[ro+COLS])){ swap(i,ro+COLS); return; }
+  }
+  if(canLo && liquidPass(grid[lo])){ swap(i,lo); return; }
+  if(canRo && liquidPass(grid[ro])){ swap(i,ro); return; }
 }
 function stepWater(x,y,i){
-  const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-  for(const [nx,ny] of ns){
-    if(!inB(nx,ny)) continue;
-    const j=I(nx,ny), tj=grid[j];
-    if(tj===FIRE){ grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; }                     // water + fire = steam
-    else if(tj===LAVA){ grid[j]=STONE; origin[j]=origin[i]; moved[j]=1; grid[i]=STEAM; moved[i]=1; return; }
-  }
+  if(y>0){ const j=i-COLS, tj=grid[j];
+    if(tj===FIRE){ grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===LAVA){ grid[j]=STONE; origin[j]=origin[i]; moved[j]=1; grid[i]=STEAM; moved[i]=1; return; } }
+  if(x>0){ const j=i-1, tj=grid[j];
+    if(tj===FIRE){ grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===LAVA){ grid[j]=STONE; origin[j]=origin[i]; moved[j]=1; grid[i]=STEAM; moved[i]=1; return; } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j];
+    if(tj===FIRE){ grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===LAVA){ grid[j]=STONE; origin[j]=origin[i]; moved[j]=1; grid[i]=STEAM; moved[i]=1; return; } }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j];
+    if(tj===FIRE){ grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===LAVA){ grid[j]=STONE; origin[j]=origin[i]; moved[j]=1; grid[i]=STEAM; moved[i]=1; return; } }
   stepLiquid(x,y,i);
 }
 function stepOil(x,y,i){
-  const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-  for(const [nx,ny] of ns){
-    if(!inB(nx,ny)) continue;
-    const tj=grid[I(nx,ny)];
-    if((tj===FIRE||tj===LAVA||tj===PLASMA) && Math.random()<0.35){ grid[i]=FIRE; moved[i]=1; return; }
-  }
+  /* ignition set unchanged: FIRE/LAVA/PLASMA (not the wider isHeat) */
+  if(x>0 && (grid[i-1]===FIRE||grid[i-1]===LAVA||grid[i-1]===PLASMA) && Math.random()<0.35){ grid[i]=FIRE; moved[i]=1; return; }
+  if(x<COLS-1 && (grid[i+1]===FIRE||grid[i+1]===LAVA||grid[i+1]===PLASMA) && Math.random()<0.35){ grid[i]=FIRE; moved[i]=1; return; }
+  if(y>0 && (grid[i-COLS]===FIRE||grid[i-COLS]===LAVA||grid[i-COLS]===PLASMA) && Math.random()<0.35){ grid[i]=FIRE; moved[i]=1; return; }
+  if(y+1<ROWS && (grid[i+COLS]===FIRE||grid[i+COLS]===LAVA||grid[i+COLS]===PLASMA) && Math.random()<0.35){ grid[i]=FIRE; moved[i]=1; return; }
   stepLiquid(x,y,i);
 }
 function stepAcid(x,y,i){
-  const targets=[];
-  if(y+1<ROWS) targets.push([x,y+1]);
-  if(x>0) targets.push([x-1,y]);
-  if(x<COLS-1) targets.push([x+1,y]);
-  if(y>0) targets.push([x,y-1]);
-  for(const [nx,ny] of targets){
-    const j=I(nx,ny), tj=grid[j];
-    if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(nx,ny,tj); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }
-    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ACID]*pm(i,ACID)); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }  // acid spent on contact
-  }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j];
+    if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x,y+1,tj); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ACID]*pm(i,ACID)); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; } }
+  if(x>0){ const j=i-1, tj=grid[j];
+    if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x-1,y,tj); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ACID]*pm(i,ACID)); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j];
+    if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x+1,y,tj); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ACID]*pm(i,ACID)); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; } }
+  if(y>0){ const j=i-COLS, tj=grid[j];
+    if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x,y-1,tj); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[ACID]*pm(i,ACID)); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; } }
   stepLiquid(x,y,i);
 }
 function stepLava(x,y,i){
-  const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-  for(const [nx,ny] of ns){
-    if(!inB(nx,ny)) continue;
-    const j=I(nx,ny), tj=grid[j];
+  if(y>0){ const j=i-COLS, tj=grid[j];
     if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
     else if(tj===CITY||tj===PCITY||tj===GLASS){ applyDamage(j,DMG[LAVA]*pm(i,LAVA)); }
     else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
-    else if(tj===TNT){ explode(nx,ny); }
-  }
+    else if(tj===TNT){ explode(x,y-1); } }
+  if(x>0){ const j=i-1, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY||tj===GLASS){ applyDamage(j,DMG[LAVA]*pm(i,LAVA)); }
+    else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
+    else if(tj===TNT){ explode(x-1,y); } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY||tj===GLASS){ applyDamage(j,DMG[LAVA]*pm(i,LAVA)); }
+    else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
+    else if(tj===TNT){ explode(x+1,y); } }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY||tj===GLASS){ applyDamage(j,DMG[LAVA]*pm(i,LAVA)); }
+    else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
+    else if(tj===TNT){ explode(x,y+1); } }
   stepLiquid(x,y,i);
 }
 function stepPlasma(x,y,i){
-  const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-  for(const [nx,ny] of ns){
-    if(!inB(nx,ny)) continue;
-    const j=I(nx,ny), tj=grid[j];
-    if(BASE_HP[tj]!==undefined){ applyDamage(j,DMG[PLASMA]*pm(i,PLASMA)); }
-    else if(tj===TNT){ explode(nx,ny); }
-  }
+  const dmg=DMG[PLASMA]*pm(i,PLASMA);
+  if(y>0){ const j=i-COLS, tj=grid[j]; if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); } else if(tj===TNT){ explode(x,y-1); } }
+  if(x>0){ const j=i-1, tj=grid[j]; if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); } else if(tj===TNT){ explode(x-1,y); } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j]; if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); } else if(tj===TNT){ explode(x+1,y); } }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j]; if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); } else if(tj===TNT){ explode(x,y+1); } }
   if(Math.random()<0.18){ grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }    // plasma dissipates fast
   if(y>0){ const u=I(x,y-1); if(grid[u]===EMPTY||isGas(grid[u])){ swap(i,u); return; } }
   const dir=Math.random()<0.5?-1:1;
   for(const k of [dir,-dir]){const nx=x+k; if(!inB(nx,y))continue; const s=I(nx,y); if(grid[s]===EMPTY){ swap(i,s); return; }}
 }
 function stepFire(x,y,i){
-  const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-  for(const [nx,ny] of ns){
-    if(!inB(nx,ny)) continue;
-    const j=I(nx,ny), tj=grid[j];
+  /* zero-alloc: neighbors unrolled — a big blast seeds thousands of fire cells and every one
+     would otherwise build 4-5 fresh arrays per tick, right after the FX play (GC freeze) */
+  if(x>0){ const j=i-1, tj=grid[j];
     if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
-    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.4) applyDamage(j,DMG[FIRE]*pm(i,FIRE)); }   // fire is slow, intermittent
-    else if(tj===SAND && Math.random()<0.06){ grid[j]=GLASS; origin[j]=origin[i]; moved[j]=1; }    // sand + fire = glass
-    else if(tj===TNT){ explode(nx,ny); }
-  }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.4) applyDamage(j,DMG[FIRE]*pm(i,FIRE)); }
+    else if(tj===SAND && Math.random()<0.06){ grid[j]=GLASS; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===TNT){ explode(x-1,y); } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.4) applyDamage(j,DMG[FIRE]*pm(i,FIRE)); }
+    else if(tj===SAND && Math.random()<0.06){ grid[j]=GLASS; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===TNT){ explode(x+1,y); } }
+  if(y>0){ const j=i-COLS, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.4) applyDamage(j,DMG[FIRE]*pm(i,FIRE)); }
+    else if(tj===SAND && Math.random()<0.06){ grid[j]=GLASS; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===TNT){ explode(x,y-1); } }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.30){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.4) applyDamage(j,DMG[FIRE]*pm(i,FIRE)); }
+    else if(tj===SAND && Math.random()<0.06){ grid[j]=GLASS; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===TNT){ explode(x,y+1); } }
   if(Math.random()<0.12){ if(Math.random()<0.5){ grid[i]=SMOKE; } else { grid[i]=EMPTY; origin[i]=ORIGIN_NONE; } moved[i]=1; return; }
   if(y>0){ const u=I(x,y-1); if(grid[u]===EMPTY && Math.random()<0.5){ swap(i,u); } }
 }
@@ -906,28 +944,48 @@ function stepHbomb(x,y,i){
 function stepMagma(x,y,i){
   // hotter, thicker lava: spits fire, melts structure, devours cities
   if(y>0 && Math.random()<0.05){ const u=I(x,y-1); if(grid[u]===EMPTY){ grid[u]=FIRE; origin[u]=origin[i]; moved[u]=1; } }
-  const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-  for(const [nx,ny] of ns){
-    if(!inB(nx,ny)) continue;
-    const j=I(nx,ny), tj=grid[j];
+  if(x>0){ const j=i-1, tj=grid[j];
     if((tj===WOOD||tj===OIL||tj===NAPALM) && Math.random()<0.5){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
     else if(tj===CITY||tj===PCITY){ applyDamage(j,DMG[MAGMA]*pm(i,MAGMA)); }
-    else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }   // quenches to rock
-    else if((tj===SAND||tj===GLASS||tj===STONE) && Math.random()<0.06){ grid[j]=MAGMA; origin[j]=origin[i]; moved[j]=1; }  // melts & grows
-  }
+    else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
+    else if((tj===SAND||tj===GLASS||tj===STONE) && Math.random()<0.06){ grid[j]=MAGMA; origin[j]=origin[i]; moved[j]=1; } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j];
+    if((tj===WOOD||tj===OIL||tj===NAPALM) && Math.random()<0.5){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ applyDamage(j,DMG[MAGMA]*pm(i,MAGMA)); }
+    else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
+    else if((tj===SAND||tj===GLASS||tj===STONE) && Math.random()<0.06){ grid[j]=MAGMA; origin[j]=origin[i]; moved[j]=1; } }
+  if(y>0){ const j=i-COLS, tj=grid[j];
+    if((tj===WOOD||tj===OIL||tj===NAPALM) && Math.random()<0.5){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ applyDamage(j,DMG[MAGMA]*pm(i,MAGMA)); }
+    else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
+    else if((tj===SAND||tj===GLASS||tj===STONE) && Math.random()<0.06){ grid[j]=MAGMA; origin[j]=origin[i]; moved[j]=1; } }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j];
+    if((tj===WOOD||tj===OIL||tj===NAPALM) && Math.random()<0.5){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ applyDamage(j,DMG[MAGMA]*pm(i,MAGMA)); }
+    else if(tj===WATER){ grid[i]=STONE; moved[i]=1; grid[j]=STEAM; origin[j]=origin[i]; moved[j]=1; return; }
+    else if((tj===SAND||tj===GLASS||tj===STONE) && Math.random()<0.06){ grid[j]=MAGMA; origin[j]=origin[i]; moved[j]=1; } }
   if(Math.random()<0.008){ grid[i]=STONE; moved[i]=1; return; }   // slowly crusts over
   if(Math.random()<0.6) stepLiquid(x,y,i);                        // thick: flows lazily
 }
 function stepNapalm(x,y,i){
   // self-burning incendiary liquid — clings and spreads fire, no ignition needed
-  const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-  for(const [nx,ny] of ns){
-    if(!inB(nx,ny)) continue;
-    const j=I(nx,ny), tj=grid[j];
+  const dmg=DMG[NAPALM]*pm(i,NAPALM);
+  if(x>0){ const j=i-1, tj=grid[j];
     if((tj===WOOD||tj===OIL) && Math.random()<0.45){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
-    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,DMG[NAPALM]*pm(i,NAPALM)); }
-    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(nx,ny,tj); }
-  }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,dmg); }
+    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x-1,y,tj); } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.45){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,dmg); }
+    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x+1,y,tj); } }
+  if(y>0){ const j=i-COLS, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.45){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,dmg); }
+    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x,y-1,tj); } }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j];
+    if((tj===WOOD||tj===OIL) && Math.random()<0.45){ grid[j]=FIRE; origin[j]=origin[i]; moved[j]=1; }
+    else if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,dmg); }
+    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x,y+1,tj); } }
   if(y>0 && Math.random()<0.07){ const u=I(x,y-1); if(grid[u]===EMPTY){ grid[u]=FIRE; origin[u]=origin[i]; moved[u]=1; } }
   if(Math.random()<0.012){ if(Math.random()<0.5){ grid[i]=SMOKE; } else { grid[i]=EMPTY; origin[i]=ORIGIN_NONE; } moved[i]=1; return; }   // burns out
   stepLiquid(x,y,i);
@@ -950,38 +1008,59 @@ function stepAnti(x,y,i){
 }
 function stepVirus(x,y,i){
   // corruption: converts whatever it sits against into more virus, then decays
-  const ns=[[x-1,y],[x+1,y],[x,y-1],[x,y+1]];
-  for(const [nx,ny] of ns){
-    if(!inB(nx,ny)) continue;
-    const j=I(nx,ny), tj=grid[j];
-    if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,DMG[VIRUS]*pm(i,VIRUS),VIRUS); }   // corrupts to VIRUS on kill
-    else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS) && Math.random()<0.04){ applyDamage(j,DMG[VIRUS]*pm(i,VIRUS),VIRUS); }
-  }
+  const dmg=DMG[VIRUS]*pm(i,VIRUS);
+  if(x>0){ const j=i-1, tj=grid[j];
+    if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,dmg,VIRUS); }
+    else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS) && Math.random()<0.04){ applyDamage(j,dmg,VIRUS); } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j];
+    if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,dmg,VIRUS); }
+    else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS) && Math.random()<0.04){ applyDamage(j,dmg,VIRUS); } }
+  if(y>0){ const j=i-COLS, tj=grid[j];
+    if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,dmg,VIRUS); }
+    else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS) && Math.random()<0.04){ applyDamage(j,dmg,VIRUS); } }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j];
+    if(tj===CITY||tj===PCITY){ if(Math.random()<0.5) applyDamage(j,dmg,VIRUS); }
+    else if((tj===WOOD||tj===SAND||tj===STONE||tj===GLASS) && Math.random()<0.04){ applyDamage(j,dmg,VIRUS); } }
   if(Math.random()<0.04){ grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }   // decays
   stepSolid(x,y,i);                                               // falls until it lands on something to infect
 }
 function stepGas(x,y,i){
   if(Math.random()<0.05){ grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }
-  if(y>0){ const u=I(x,y-1); if(grid[u]===EMPTY){ swap(i,u); return; } }
-  const dir=Math.random()<0.5?-1:1;
-  for(const k of [dir,-dir]){const nx=x+k; if(!inB(nx,y-1))continue; const uu=I(nx,y-1); if(grid[uu]===EMPTY){ swap(i,uu); return; }}
+  if(y>0){
+    const u=I(x,y-1); if(grid[u]===EMPTY){ swap(i,u); return; }
+    const dir=Math.random()<0.5?-1:1;
+    const u1=dir<0?i-1-COLS:i+1-COLS, u2=dir<0?i+1-COLS:i-1-COLS;   // up-diagonals (was: [dir,-dir] loop)
+    if(x+dir>=0&&x+dir<COLS&&grid[u1]===EMPTY){ swap(i,u1); return; }
+    if(x-dir>=0&&x-dir<COLS&&grid[u2]===EMPTY){ swap(i,u2); return; }
+  }
 }
 
 function stepNew(x,y,i){   // generic driver for the data-defined super-weapon tiers (ids NEW_BASE+)
   const d=DEFBYID[grid[i]];
   if(d.kind==="blast"){ if(y+1<ROWS){ const dd=I(x,y+1); if(solidPass(grid[dd])){ swap(i,dd); return; } } explodeR(x,y,d.r,d.fp,d.dmg*pm(i,d.id),d.id); grid[i]=EMPTY; origin[i]=ORIGIN_NONE; moved[i]=1; return; }   // explode on impact, then consumed
-  for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){
-    if(!inB(nx,ny)) continue; const j=I(nx,ny), tj=grid[j];
-    if(BASE_HP[tj]!==undefined){ applyDamage(j,d.dmg*pm(i,d.id)); }
-    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(nx,ny,tj); }
-    else if(d.kind==="anti" && tj!==EMPTY && tj!==WALL && tj!==grid[i] && !isGas(tj)){ grid[j]=EMPTY; origin[j]=ORIGIN_NONE; health[j]=0; moved[j]=1; }
-  }
+  const dmg=d.dmg*pm(i,d.id), anti=d.kind==="anti";
+  if(y>0){ const j=i-COLS, tj=grid[j];
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); }
+    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x,y-1,tj); }
+    else if(anti && tj!==EMPTY && tj!==WALL && tj!==grid[i] && !isGas(tj)){ grid[j]=EMPTY; origin[j]=ORIGIN_NONE; health[j]=0; moved[j]=1; } }
+  if(x>0){ const j=i-1, tj=grid[j];
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); }
+    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x-1,y,tj); }
+    else if(anti && tj!==EMPTY && tj!==WALL && tj!==grid[i] && !isGas(tj)){ grid[j]=EMPTY; origin[j]=ORIGIN_NONE; health[j]=0; moved[j]=1; } }
+  if(x<COLS-1){ const j=i+1, tj=grid[j];
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); }
+    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x+1,y,tj); }
+    else if(anti && tj!==EMPTY && tj!==WALL && tj!==grid[i] && !isGas(tj)){ grid[j]=EMPTY; origin[j]=ORIGIN_NONE; health[j]=0; moved[j]=1; } }
+  if(y+1<ROWS){ const j=i+COLS, tj=grid[j];
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); }
+    else if(tj===TNT||tj===NUKE||tj===HBOMB){ detonate(x,y+1,tj); }
+    else if(anti && tj!==EMPTY && tj!==WALL && tj!==grid[i] && !isGas(tj)){ grid[j]=EMPTY; origin[j]=ORIGIN_NONE; health[j]=0; moved[j]=1; } }
   if(d.kind==="beam"){
     if(Math.random()<0.14){ grid[i]=EMPTY; origin[i]=ORIGIN_NONE; health[i]=0; moved[i]=1; return; }   // fades
     if(y>0){ const u=I(x,y-1); if(grid[u]===EMPTY||isGas(grid[u])){ swap(i,u); return; } }
     return;
   }
-  if(d.kind==="anti" && Math.random()<0.35){ const flash=Math.random()<0.3; grid[i]=flash?PLASMA:EMPTY; if(!flash){ origin[i]=ORIGIN_NONE; health[i]=0; } moved[i]=1; return; }
+  if(anti && Math.random()<0.35){ const flash=Math.random()<0.3; grid[i]=flash?PLASMA:EMPTY; if(!flash){ origin[i]=ORIGIN_NONE; health[i]=0; } moved[i]=1; return; }
   stepLiquid(x,y,i);   // goo + anti flow
 }
 function step(){
@@ -1126,46 +1205,52 @@ const buf=img.data;
 const BG=[8,22,28];
 const skin={};                                              // swappable material themes + per-weapon custom colours
 try{ const s=JSON.parse(localStorage.getItem("as_skins")); if(s) Object.assign(skin, s); }catch{}
+/* render() consumes baseColor() immediately and never retains the result — the shared COL3
+   scratch keeps the whole per-frame cell pass allocation-free (a post-blast crater otherwise
+   allocates one [r,g,b] triple per rendered cell every frame, and GC froze the frame AFTER
+   the cast animations finished). Keep the caller single-site if you change that contract. */
+const COL3=[8,22,28];
 function baseColor(t,i){
-  const j=noise[i]-16;
+  const j=noise[i]-16, O=COL3;
   if(t===CITY){
     const x=i%COLS, y=(i/COLS)|0;
-    const c=cityRGB(enemyLevel,x,y);
-    return [c[0]+j*0.3,c[1]+j*0.3,c[2]+j*0.3];
+    const c=cityRGB(enemyLevel,x,y,O);
+    O[0]=c[0]+j*0.3; O[1]=c[1]+j*0.3; O[2]=c[2]+j*0.3; return O;
   }
   if(t===PCITY){
     const x=i%COLS, y=(i/COLS)|0;
-    const c=cityRGB(playerLevel,x,y);
-    return [c[0]+j*0.3,c[1]+j*0.3,c[2]+j*0.3];
+    const c=cityRGB(playerLevel,x,y,O);
+    O[0]=c[0]+j*0.3; O[1]=c[1]+j*0.3; O[2]=c[2]+j*0.3; return O;
   }
   const o=skin[t];
   if(o){
-    if(t===FIRE) return [o[0],o[1]+((Math.random()*60)|0),o[2]+((Math.random()*30)|0)];
-    return [o[0]+j*0.4,o[1]+j*0.4,o[2]+j*0.4];
+    if(t===FIRE){ O[0]=o[0]; O[1]=o[1]+((Math.random()*60)|0); O[2]=o[2]+((Math.random()*30)|0); return O; }
+    O[0]=o[0]+j*0.4; O[1]=o[1]+j*0.4; O[2]=o[2]+j*0.4; return O;
   }
   switch(t){
-    case SAND:  return [217+j*0.3,193+j*0.4,122+j*0.4];
-    case WATER: return [54,123,212+j*0.5];
-    case ACID:  return [120+j,240,42+j*0.6];
-    case FIRE:  return [255,90+((Math.random()*120)|0),20+((Math.random()*60)|0)];
-    case WOOD:  return [122+j*0.4,74+j*0.3,35];
-    case TNT:   return [212+j*0.2,52,52];
-    case WALL:  return [62+j*0.3,72,82];
-    case SMOKE: return [70+j,72+j,80+j];
-    case STEAM: return [200+j*0.3,214+j*0.3,220];
-    case OIL:   return [55+j*0.3,40+j*0.2,30+j*0.2];
-    case STONE: return [110+j*0.5,108+j*0.5,104+j*0.5];
-    case GLASS: return [180+j*0.3,220+j*0.3,235+j*0.2];
-    case LAVA:  return [255,80+((Math.random()*120)|0),18+((Math.random()*40)|0)];
-    case PLASMA:return [200+((Math.random()*55)|0),80+((Math.random()*80)|0),255-((Math.random()*40)|0)];
-    case MAGMA: return [255,130+((Math.random()*100)|0),40+((Math.random()*50)|0)];
-    case NAPALM:return [255,150+((Math.random()*70)|0),30+((Math.random()*30)|0)];
-    case NUKE:  return [108+j*0.3,128,46];
-    case HBOMB: return [70+j*0.3,78,92];
-    case ANTIMATTER:return [70+((Math.random()*90)|0),0,90+((Math.random()*110)|0)];
-    case VIRUS: return [150+j,40,150+((Math.random()*40)|0)];
-    default:    { const c=NEWCOL[t]; if(c) return [c[0]+j*0.4,c[1]+j*0.4,c[2]+j*0.4]; return BG; }
+    case SAND:  O[0]=217+j*0.3; O[1]=193+j*0.4; O[2]=122+j*0.4; return O;
+    case WATER: O[0]=54; O[1]=123; O[2]=212+j*0.5; return O;
+    case ACID:  O[0]=120+j; O[1]=240; O[2]=42+j*0.6; return O;
+    case FIRE:  O[0]=255; O[1]=90+((Math.random()*120)|0); O[2]=20+((Math.random()*60)|0); return O;
+    case WOOD:  O[0]=122+j*0.4; O[1]=74+j*0.3; O[2]=35; return O;
+    case TNT:   O[0]=212+j*0.2; O[1]=52; O[2]=52; return O;
+    case WALL:  O[0]=62+j*0.3; O[1]=72; O[2]=82; return O;
+    case SMOKE: O[0]=70+j; O[1]=72+j; O[2]=80+j; return O;
+    case STEAM: O[0]=200+j*0.3; O[1]=214+j*0.3; O[2]=220; return O;
+    case OIL:   O[0]=55+j*0.3; O[1]=40+j*0.2; O[2]=30+j*0.2; return O;
+    case STONE: O[0]=110+j*0.5; O[1]=108+j*0.5; O[2]=104+j*0.5; return O;
+    case GLASS: O[0]=180+j*0.3; O[1]=220+j*0.3; O[2]=235+j*0.2; return O;
+    case LAVA:  O[0]=255; O[1]=80+((Math.random()*120)|0); O[2]=18+((Math.random()*40)|0); return O;
+    case PLASMA:O[0]=200+((Math.random()*55)|0); O[1]=80+((Math.random()*80)|0); O[2]=255-((Math.random()*40)|0); return O;
+    case MAGMA: O[0]=255; O[1]=130+((Math.random()*100)|0); O[2]=40+((Math.random()*50)|0); return O;
+    case NAPALM:O[0]=255; O[1]=150+((Math.random()*70)|0); O[2]=30+((Math.random()*30)|0); return O;
+    case NUKE:  O[0]=108+j*0.3; O[1]=128; O[2]=46; return O;
+    case HBOMB: O[0]=70+j*0.3; O[1]=78; O[2]=92; return O;
+    case ANTIMATTER:O[0]=70+((Math.random()*90)|0); O[1]=0; O[2]=90+((Math.random()*110)|0); return O;
+    case VIRUS: O[0]=150+j; O[1]=40; O[2]=150+((Math.random()*40)|0); return O;
+    default:    { const c=NEWCOL[t]; if(c){ O[0]=c[0]+j*0.4; O[1]=c[1]+j*0.4; O[2]=c[2]+j*0.4; return O; } }
   }
+  return BG;
 }
 /* ============================================================
    SUPER-WEAPON FX — 8 signature families (canvas 2D, no sprites)
@@ -1766,8 +1851,8 @@ function renderSheet(){
   document.getElementById("tcN").textContent=fmtCoin(coins);   // tree header wallet
   if(!ownedNow){ const pos=BRANCH_OF[t];
     tsMsg.textContent=pos&&pos.i>0&&!gateOK(t)?`Gated — unlock ${PAL_BYT[ARSENAL[pos.b].tiers[pos.i-1]].nm} first`
-      :`UNLOCK for ${fmtCoin(p.cost)}c below — painting is free after`;
-  } else tsMsg.textContent=t===tool?"Painting is free once unlocked":"Owned — tap EQUIP";
+      :`UNLOCK for ${fmtCoin(p.cost)}c below — double-tap the hex to buy instantly`;
+  } else tsMsg.textContent=t===tool?"Painting is free once unlocked":"Owned — tap EQUIP, double-tap the hex to upgrade";
   curToolChip();
 }
 function curToolChip(){                                     // sidebar: the tool you have selected right now
@@ -1788,17 +1873,29 @@ function tapTool(t,select){
   /* locked hexes: the wheel click only SELECTS (white glow); buying happens on the sheet's UNLOCK */
   sheetTool=t; renderTools();
 }
-function sheetAction(){                                      // the sheet's UNLOCK/EQUIP button performs the purchase
-  const t=sheetTool, p=PAL_BYT[t]; if(!p) return;
+function sheetAction(t2){                                    // the sheet's UNLOCK/EQUIP button — or a double-click buy
+  const t=t2===undefined?sheetTool:t2, p=PAL_BYT[t]; if(!p) return;
   if(isOwned(t)){ tool=t; renderTools(); return; }           // equip an owned tool
   if(!gateOK(t)){ sfx("lose"); return; }
   if(coins>=p.cost){ coins-=p.cost; unlocked.add(t); everUnlocked.add(t); tool=t; sfx("unlock"); renderTools(); }
+}
+function upgradeTool(t){                                     // pay for the next tier — damage weapons only
+  const p=PAL_BYT[t]; if(!p||!isOwned(t)||(upg[t]||0)>=MAX_TIER) return false;
+  if(!(powerOf(t)>1&&t!==EMPTY)) return false;
+  const uc=upgCost(p); if(coins<uc) return false;
+  coins-=uc; upg[t]=(upg[t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); return true;
+}
+function quickAction(t){                                     // 2nd tap on the same hex inside the window: buy or upgrade
+  const p=PAL_BYT[t]; if(!p||sellMode) return;
+  if(isOwned(t)) upgradeTool(t);                             // owned → straight to the next tier
+  else sheetAction(t);                                       // locked → straight purchase (gated still refuses)
 }
 /* ---- wheel geometry: every hex is snapped onto a true pointy-top honeycomb lattice (occupancy-dodged),
        so tiers touch side-to-side and never overlap — chains may wobble a hair as they step outward ---- */
 const HXQ={};                                     // occupied lattice cells for the current build
 let hexEls=[];                                    // [{t,g,poly,title}] for in-place state refresh (no rebuild churn)
 let wheelTouchT=0;                                // last touch-start time on the wheel (touch taps preview, not buy)
+let dblHexTt=-1, dblHexT=0;                       // last hex clicked + when — powers the double-click buy⇄upgrade
 function hexState(t){
   const p=PAL_BYT[t], b=ARSENAL[BRANCH_OF[t].b], price=p.cost||0;
   const ownedNow=isOwned(t);
@@ -1868,7 +1965,12 @@ function buildWheel(){
       const y0=(-(lines.length-1)*0.62)*HX*0.66+HX*0.18;
       lines.forEach((ln2,k2)=>{ const tx=mk("text",{x:0,y:(y0+k2*HX*0.82).toFixed(1),"text-anchor":"middle","font-size":fs.toFixed(1)}); tx.textContent=ln2; g.appendChild(tx); });
       g.addEventListener("pointerenter",()=>{ if(sheetTool!==t){ sheetTool=t; renderTools(); } });
-      g.addEventListener("click",()=>tapTool(t, performance.now()-wheelTouchT<600));
+      g.addEventListener("click",()=>{
+        const now=performance.now(), dbl=dblHexTt===t&&now-dblHexT<450;   // same hex twice inside the window
+        dblHexTt=dbl?-1:t; dblHexT=now;                       // a fired double-click resets — no triple-click double-spend
+        tapTool(t, now-wheelTouchT<600);
+        if(dbl) quickAction(t);
+      });
       svg.appendChild(g);
       hexEls.push({t,g,poly,title});
     });
@@ -1949,12 +2051,10 @@ document.getElementById("treeClose").onclick=closeTree;
 addEventListener("keydown",e=>{ if(e.key==="Escape"&&treeOpen) closeTree(); });
 document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap an owned hex to refund 100%)":"OFF"); renderTools(); };
 tsCol.oninput=e=>{ skin[sheetTool]=hexToRgb(e.target.value); curPack="Custom"; saveSkins(); renderTools(); };
-tsUp.onclick=()=>{ const t=sheetTool, p=PAL_BYT[t]; if(!p||!isOwned(t)||(upg[t]||0)>=MAX_TIER) return;
-  const uc=upgCost(p); if(coins>=uc){ coins-=uc; upg[t]=(upg[t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
+tsUp.onclick=()=>upgradeTool(sheetTool);
 tsSell.onclick=()=>{ if(!sellMode) return; tapTool(sheetTool); };
 tsBuy.onclick=()=>sheetAction();
-ctUp.onclick=()=>{ if(classicMode) return; const t=tool, p=PAL_BYT[t]; if(!p||!isOwned(t)||(upg[t]||0)>=MAX_TIER) return;
-  const uc=upgCost(p); if(coins>=uc){ coins-=uc; upg[t]=(upg[t]||0)+1; saveUpg(); sfx("unlock"); renderTools(); } };
+ctUp.onclick=()=>{ if(classicMode) return; upgradeTool(tool); };
 setModeUI();
 renderTools();
 
