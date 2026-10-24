@@ -70,23 +70,29 @@
   .row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-top:6px}
   .row b{font-weight:800}
 
-  #tools{display:block}
+#tools{display:block}
   .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
-  #treeWheel svg.svgwheel{width:max(96%,720px);height:auto;margin:0 auto}
-  .svgwheel .hexC.sel polygon{stroke:#ffffff;stroke-width:2.8;filter:drop-shadow(0 0 7px rgba(255,255,255,.85))}
-  .svgwheel .hexC text{font-weight:800;fill:#cfe6c4}
-  .svgwheel .hexC.dimGold text,.svgwheel .hexC.canBuy text{fill:var(--gold, #ffb627)}
-  .svgwheel .hexC.gated text{fill:#7d9179}
-  .svgwheel text{pointer-events:none}
+  #treeWheel svg.svgwheel{flex:none;width:max(96%,720px);height:auto;margin:0 auto}
   .svgwheel .ring{fill:none;stroke:var(--line);stroke-dasharray:2 7;stroke-width:1}
   .svgwheel .hexC{cursor:pointer}
   .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
+  .svgwheel .hexC.sel polygon{stroke:#ffffff;stroke-width:2.8;filter:drop-shadow(0 0 7px rgba(255,255,255,.85))}
   .svgwheel .hexC.prev polygon{stroke:#eafff0;stroke-width:1.7}
   .svgwheel .hexC.owned text{fill:#cfe6c4}
-  .svgwheel .hexC.canBuy text,.svgwheel .hexC.dimGold text{fill:var(--gold)}
-  .svgwheel .hexC.gated text{fill:#4e5e4a}
+  .svgwheel .hexC.canBuy text,.svgwheel .hexC.dimGold text{fill:var(--gold, #ffb627)}
+  .svgwheel .hexC.gated text{fill:#9cb4a6}
   .svgwheel text{font-family:Outfit,system-ui,sans-serif;pointer-events:none}
   @keyframes hexpulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.35}}
+  /* phones: the wheel keeps ~2x scale and pans; the sheet wraps */
+  @media (max-width:700px){
+    #treeWheel{align-items:flex-start}
+    #treeWheel svg.svgwheel{flex:none;width:1160px}
+    .tsrow2{flex-wrap:wrap}
+    .tsbtn{flex:1;min-width:96px}
+    .tscol{margin-left:0;width:100%;justify-content:flex-end}
+    #treeHead{padding:12px 12px 4px;gap:10px}
+    #treeHead>span:nth-child(3){display:none}
+  }
   .curTool{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:8px 10px}
   #lbList.lblist{list-style:none;margin:8px 0 0;padding:0}
   #lbList li{list-style:none}
@@ -682,18 +688,21 @@ function enemyRazed(){  return cityCells/cityCellsMax   <= RAZE_RATIO; }
 function playerRazed(){ return pcityCells/pcityCellsMax <= RAZE_RATIO; }
 const CASH_BUFF=2.2;                                         // cash compensation for the level-per-raze ramp (one tuning knob)
 let razeRain=null;                                           // pixel coin rain, spun up with each raze cinematic
+let phaseEarned=0;                                           // coins earned destroying THIS city (since the last rebuild)
+let razeBonus=0;                                             // the wave-advance reward: proportional to demolition take, 2.5×
 function advanceRaze(){                                      // a city hit 90% — cue the cinematic, then advance once
   if(!classicMode && !CAMPAIGN && !razeCine){
     razeCine=2.2; botHoldUntil=performance.now()+2900; botNextMs=botHoldUntil; sfx("raze");
-    razeRain=[]; for(let i=0;i<64;i++) razeRain.push({x:Math.random()*0.9+0.05, v:0.5+Math.random()*0.9,
-      ph:Math.random()*6.28, s:0.2+Math.random()*0.18, drift:(Math.random()-0.5)*0.05, land:Math.random()*0.3+0.7});
+    razeBonus=Math.round(phaseEarned*2.5);                   // much bigger raze reward: 2-3× what the destruction paid
+    razeRain=[]; for(let i=0;i<72;i++) razeRain.push({x:Math.random()*0.9+0.05, v:0.5+Math.random()*0.9,
+      ph:Math.random()*6.28, s:0.2+Math.random()*0.2, drift:(Math.random()-0.5)*0.05});
   } else if(!razeCine) nextWave();                           // classic/campaign: advance immediately
 }
 function damageCity(n,gx,gy){
   const wStep=classicMode?Math.floor((wave-1)/5)*5+1:wave;   // classic: reward steps every 5 waves; new pacing: step every raze
   let gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel)*CASH_BUFF;
   if(CAMPAIGN) gain*=CAMPAIGN.rmul;                                // World Conquest: empire-size coin bonus
-  coins+=gain; cityCells-=n; coinFlash=1;
+  coins+=gain; phaseEarned+=gain; cityCells-=n; coinFlash=1;
   if(gx!==undefined) popBucketAdd(gx,gy,gain);
   if(!gameOver && enemyRazed()) advanceRaze();              // enemy 90% gone → next wave
 }
@@ -706,10 +715,11 @@ function nextWave(){
   if(CAMPAIGN){
     if(wave>maxWaves){ campaignEnd(true); return; }          // survived all 5 waves → city destroyed, you win
     enemyLevel = CAMPAIGN.enemyStart + (wave-1);             // campaign: enemy levels up EVERY wave
-    coins += 200*wave; clearLoose(); buildEnemyCity(); sfx("coin"); return;
+    coins += 200*wave; phaseEarned=0; razeBonus=0; razeRain=null; clearLoose(); buildEnemyCity(); sfx("coin"); return;
   }
   enemyLevel=classicMode?Math.floor((wave-1)/5)+1:wave;      // new pacing: enemy levels up EVERY raze (classic: every 5 waves)
-  coins += 200*wave;                                          // linear raze bonus (was quadratic)
+  coins += CAMPAIGN?200*wave:(razeBonus||Math.round(phaseEarned*2.5));   // raze reward follows the demolition take (2.5x)
+  razeBonus=0; phaseEarned=0; razeRain=null;
   clearLoose();             // keep the player's (damaged) city — it does NOT regenerate
   buildEnemyCity();         // only the enemy city is rebuilt fresh
   saveGame(); submitScore();   // checkpoint + update leaderboards
@@ -748,17 +758,39 @@ const solidPass  = t => t===EMPTY||isGas(t)||isLiquid(t);
 function setCell(i,t,o){ grid[i]=t; origin[i]=o; moved[i]=1; }
 function swap(i,j){const t=grid[i], o=origin[i], h=health[i]; grid[i]=grid[j]; origin[i]=origin[j]; health[i]=health[j]; grid[j]=t; origin[j]=o; health[j]=h; moved[i]=1; moved[j]=1; }
 
+const CELL_DMG={[TNT]:25,[NUKE]:120,[HBOMB]:350};           // bomb-cell yields for the same-tick flood
+const CELL_R={[TNT]:20,[NUKE]:42,[HBOMB]:46}, CELL_FP={[TNT]:0.30,[NUKE]:0.40,[HBOMB]:0.45};
 function explodeR(cx,cy,R,fireProb,dmg,wid){
-  boomFX(R);                                                // sound + screen shake (throttled)
   const efam=wid!==undefined?FAM[wid]:null;
-  if(efam==="run"||efam==="fallout") castFX(efam,wid,cx,cy,R);
+  if(efam==="run"||efam==="fallout"){                       // one cast visual for the whole chain; boom thump scales
+    castFX(efam,wid,cx,cy,R); boomFX(Math.min(60,R*1.4));
+  } else boomFX(R);                                         // sound + screen shake (throttled)
   const oc=origin[I(cx,cy)];                                // explosion debris inherits the bomb's origin
+  if(wid===undefined){ blastPass(cx,cy,R,fireProb,dmg,oc); return; }
+  /* ---- same-tick flood: bombs caught in a blast detonate in THIS tick (spread preserved, freeze gone) ---- */
+  const Q=[[cx,cy,R,fireProb,dmg]], seen=new Set([I(cx,cy)]);
+  let ops=0;
+  while(Q.length && ops<3e6){
+    const [bx,by,bR,bF,bD]=Q.shift();
+    blastPass(bx,by,bR,bF,bD,oc,(j,tj)=>{                   // enqueue bombs found inside the blast instead of chaining via fire
+      if(seen.has(j)) return;
+      seen.add(j);
+      const d2=DEFBYID[tj], m2=origin[j]===ORIGIN_PLAYER?umul(tj):1;
+      const rr=d2&&d2.r?d2.r:(CELL_R[tj]||20), dm=(d2?d2.dmg:CELL_DMG[tj]||0)*m2, fp=(d2&&d2.fp)||CELL_FP[tj]||0.3;
+      grid[j]=EMPTY; origin[j]=ORIGIN_NONE; health[j]=0; moved[j]=1;
+      Q.push([j%COLS,(j/COLS)|0,rr,fp,dm]);
+    });
+    ops+=bR*bR*4;
+  }
+}
+function blastPass(cx,cy,R,fireProb,dmg,oc,onBomb){
   for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){
     if(dx*dx+dy*dy>R*R) continue;
     const x=cx+dx,y=cy+dy; if(!inB(x,y)||y===FLOOR_Y) continue;
     const j=I(x,y), tj=grid[j];
-    if(tj===WALL||tj===TNT||tj===NUKE||tj===HBOMB) continue;          // bombs chain via the fire we scatter
-    if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); continue; }      // city/solids take blast damage (+ overkill spill)
+    if(tj===EMPTY||tj===WALL) continue;
+    if(onBomb&&(tj===TNT||tj===NUKE||tj===HBOMB||BOMB_PAT[tj])){ onBomb(j,tj); continue; }
+    if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); continue; }      // city/solids take the blast (+ overkill spill)
     if(Math.random()<fireProb){ grid[j]=FIRE; origin[j]=oc; } else { grid[j]=EMPTY; origin[j]=ORIGIN_NONE; }
     moved[j]=1;
   }
@@ -1175,34 +1207,71 @@ function pxRing(g,sx,sy,gx,gy,r,col,gap){               // pixelated ring: alter
     g.fillRect(Math.round(cx-half*sx), y, Math.max(1,Math.round(2*half*sx)), Math.max(1,Math.round(sy*0.6)));
   }
 }
-/* ---- bomb pixel sprites: chunky casing/shadow/warning-band per cell, keyed by tool id ---- */
+/* ---- bomb pixel sprites: pre-rendered TEXTURE ATLAS (Minecraft-style subtextures) ----
+   one 9x9-pixel tile per bomb face is painted ONCE below, then every on-screen bomb cell is a single
+   drawImage sub-texture blit — richer art than per-frame fillRects, at a fraction of the cost. ---- */
 const BOMB_PAT={
-  [6]:  {dark:[128,28,24],  base:[226,58,58],  stripe:[242,222,198]},   // TNT
-  [19]: {dark:[46,54,62],   base:[74,84,96],   stripe:[232,192,44]},    // Nuke
-  [20]: {dark:[34,40,48],   base:[64,74,86],   stripe:[255,124,32]},    // H-Bomb
-  [25]: {dark:[52,58,26],   base:[200,210,74], stripe:[242,242,190]},   // Cluster Bomb
-  [26]: {dark:[72,60,20],   base:[224,168,50], stripe:[250,220,140]},   // Daisy Cutter
-  [27]: {dark:[58,46,22],   base:[154,122,58], stripe:[212,182,122]},   // Bunker Buster
-  [28]: {dark:[72,34,16],   base:[255,126,58], stripe:[255,202,142]},   // Fuel-Air Bomb
-  [34]: {dark:[66,22,10],   base:[255,90,42],  stripe:[255,232,162]},   // Tsar Bomba
-  [36]: {dark:[30,48,72],   base:[143,191,255],stripe:[232,246,255]},   // Rail Mortar
-  [38]: {dark:[30,48,72],   base:[159,216,255],stripe:[237,250,255]},   // Railgun Slug
-  [56]: {dark:[62,50,30],   base:[178,142,82], stripe:[222,82,62]},     // Bunker Nuke
+  [6]:  {dark:[128,28,24],  base:[226,58,58],  stripe:[242,222,198], tip:[255,240,200]},   // TNT
+  [19]: {dark:[46,54,62],   base:[74,84,96],   stripe:[232,192,44],  tip:[122,132,144]},    // Nuke
+  [20]: {dark:[34,40,48],   base:[64,74,86],   stripe:[255,124,32],  tip:[150,160,172]},    // H-Bomb
+  [25]: {dark:[52,58,26],   base:[200,210,74], stripe:[242,242,190], tip:[222,228,120]},    // Bomb Cluster
+  [26]: {dark:[72,60,20],   base:[224,168,50], stripe:[250,220,140], tip:[250,238,170]},    // Sky Sweeper
+  [27]: {dark:[58,46,22],   base:[154,122,58], stripe:[212,182,122], tip:[196,168,120]},    // Drill Bomb
+  [28]: {dark:[72,34,16],   base:[255,126,58], stripe:[255,202,142], tip:[255,220,170]},    // Fire Cloud
+  [34]: {dark:[66,22,10],   base:[255,90,42],  stripe:[255,232,162], tip:[255,190,120]},    // Mega Bomb
+  [36]: {dark:[30,48,72],   base:[143,191,255],stripe:[232,246,255], tip:[200,228,255]},    // Rail Bomb
+  [38]: {dark:[30,48,72],   base:[159,216,255],stripe:[237,250,255], tip:[220,240,255]},    // Rail Shot
+  [56]: {dark:[62,50,30],   base:[178,142,82], stripe:[222,82,62],   tip:[244,160,120]},    // Drill Nuke
 };
-function drawBombCell(g,sx,sy,gx,gy,d){
-  g.fillStyle=`rgb(${d.base[0]},${d.base[1]},${d.base[2]})`;
-  g.fillRect(Math.round(gx*sx), Math.round(gy*sy)+Math.ceil(sy*0.16), Math.max(1,Math.ceil(sx)), Math.max(1,Math.ceil(sy*0.66)));
-  g.fillStyle=`rgb(${d.dark[0]},${d.dark[1]},${d.dark[2]})`;
-  g.fillRect(Math.round(gx*sx), Math.round(gy*sy)+Math.ceil(sy*0.8), Math.max(1,Math.ceil(sx)), Math.max(1,Math.ceil(sy*0.2)));
-  if((gy%3|0)===0){                                     // warning band every third row
-    g.fillStyle=`rgb(${d.stripe[0]},${d.stripe[1]},${d.stripe[2]})`;
-    g.fillRect(Math.round(gx*sx), Math.round(gy*sy)+Math.floor(sy*0.45), Math.max(1,Math.ceil(sx)), Math.max(1,Math.floor(sy*0.2)));
-  }
+const ATLAS={cnv:null, tiles:{}, TW:9, TH:9};
+function makeAtlas(){
+  const keys=Object.keys(BOMB_PAT), n=keys.length+1;      // + the coin tile
+  keys.forEach(k=>BOMB_PAT[k].__id=k);
+  const cnv=document.createElement("canvas"); cnv.width=ATLAS.TW; cnv.height=ATLAS.TH*n;
+  const g=cnv.getContext("2d");
+  keys.forEach((k,i)=>{ paintBombTile(g,i,BOMB_PAT[k]); ATLAS.tiles[k]=i; });
+  paintCoinTile(g,keys.length); ATLAS.tiles.__coin=keys.length;
+  ATLAS.cnv=cnv;
 }
-function bombSpritePass(ctx,sx,sy){                     // overlay pass in render(): chunky bomb sprites over flat cells
+function apx(g,x2,y2,col){ g.fillStyle=col; g.fillRect(x2,y2,1,1); }
+function paintBombTile(g,row,d){                          // a 9x9 bomb face: rounded casing, warning band, rivet, tip highlight
+  const y=row*ATLAS.TH, C=(rgb2)=>`rgb(${rgb2[0]},${rgb2[1]},${rgb2[2]})`;
+  for(let r=0;r<9;r++){
+    const inset=(r===0||r===8)?3:(r===1||r===7)?1:0;      // bomb silhouette: narrow cap/base, wide body
+    for(let c=inset;c<9-inset;c++){
+      apx(g,c,y+(8-r),C(d.dark));                          // dark outline everywhere
+    }
+  }
+  for(let r=2;r<7;r++){
+    const inset=(r===2||r===6)?1:0;
+    for(let c=1+inset;c<8-inset;c++){
+      apx(g,c,y+(8-r),(r>=3&&r<=5)?C(d.base):C(d.dark));
+    }
+  }
+  for(let c=2;c<7;c++) apx(g,c,y+5,C(d.stripe));           // warning band
+  apx(g,2,y+2,C(d.tip)); apx(g,3,y+2,C(d.tip));             // highlight
+  apx(g,6,y+6,"rgba(0,0,0,.35)");                          // rivet
+}
+function paintCoinTile(g,row){                            // cartoon gold coin, 9x9
+  const y=row*ATLAS.TH;
+  const rim="#8a5c00", face="#ffcf2c", shine="#ffe98e", dark="#c98a08";
+  const rows=[[4,4],[3,5],[2,6],[2,6],[2,6],[2,6],[2,6],[3,5],[4,4]];
+  rows.forEach(([a,b],r)=>{ for(let c=a;c<a+b;c++) apx(g,c,y+r,face); });
+  rows.forEach(([a,b],r)=>{ apx(g,a,y+r,rim); apx(g,a+b-1,y+r,rim); });
+  function b0(rows,r){ const [a,b]=rows[r]; return b; }
+  apx(g,4,y+1,rim); apx(g,3,y+8,rim); apx(g,5,y+8,rim);
+  for(let r=2;r<7;r++) apx(g,4,y+r,dark);                  // dollar slot: a dark line
+  apx(g,2,y+2,shine); apx(g,3,y+1,shine); apx(g,2,y+3,shine);// top-left shine
+}
+
+function bombSpritePass(ctx,sx,sy){                     // overlay pass in render(): chunky bomb sprites from the atlas
+  if(!ATLAS.cnv) makeAtlas();
+  const cnv=ATLAS.cnv, sx2=Math.ceil(sx), sy2=Math.ceil(sy);
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
-    const d=BOMB_PAT[grid[I(x,y)]];
-    if(d) drawBombCell(ctx,sx,sy,x,y,d);
+    const tj=grid[I(x,y)], d=BOMB_PAT[tj];
+    if(d===undefined) continue;
+    const row=ATLAS.tiles[tj]; const yy=row*ATLAS.TH;
+    ctx.drawImage(cnv, 0, yy, ATLAS.TW, ATLAS.TH, Math.round(x*sx), Math.round(y*sy), sx2, sy2);
   }
 }
 function fxTickDraw(ctx,sx,sy){        // called from render(); lifetimes advance in loop() (freeze on pause)
@@ -1468,11 +1537,11 @@ function render(){
     if(razeRain){                                            // gold pixel coins rain over the razed city
       for(const cn of razeRain){
         const cyy=((-0.18+prog*cn.v*1.45)*cv.height)|0, cxn=(cn.x+Math.sin(prog*4+cn.ph)*cn.drift)*cv.width;
-        const sz=cv.height*cn.s*0.05;
-        ctx.globalAlpha=Math.max(0,Math.min(1,inA*outA*(0.35+0.65*Math.sin(prog*9+cn.ph))));
-        ctx.fillStyle="#ffd23c"; ctx.fillRect(cxn, cyy, sz, sz);
-        ctx.fillStyle="#ffe98e"; ctx.fillRect(cxn+sz*0.2, cyy+sz*0.2, sz*0.42, sz*0.42);
-        ctx.fillStyle="#a97b04"; ctx.fillRect(cxn, cyy+sz*0.75, sz, Math.max(1,sz*0.15));
+        const sz=cv.height*cn.s*0.055;
+        ctx.globalAlpha=Math.max(0,Math.min(1,inA*outA*(0.55+0.45*Math.sin(prog*9+cn.ph))));
+        if(ATLAS.cnv){ const yy2=ATLAS.tiles.__coin*ATLAS.TH;
+          ctx.drawImage(ATLAS.cnv,0,yy2,ATLAS.TW,ATLAS.TH,cxn-sz/2,cyy-sz/2,sz,sz);
+        } else { ctx.fillStyle="#ffd23c"; ctx.fillRect(cxn,cyy,sz,sz); }
       }
     }
     ctx.globalAlpha=inA*outA; ctx.textAlign="center"; ctx.textBaseline="middle";
@@ -1482,7 +1551,7 @@ function render(){
     ctx.strokeText("CITY DESTROYED!", cv.width/2, cv.height/2-big*0.62);
     ctx.fillStyle="#8ef02a"; ctx.fillText("CITY DESTROYED!", cv.width/2, cv.height/2-big*0.62);
     ctx.font=`800 ${Math.round(big*0.34)}px Outfit, sans-serif`;
-    const total=200*(wave+1);
+    const total=(razeBonus||Math.round(phaseEarned*2.5));
     ctx.fillStyle="#ffe98e";
     ctx.fillText(`WAVE ${(wave+1)} INCOMING · +${fmtCoin(Math.round(total*Math.min(1,prog*1.5)))}c`, cv.width/2, cv.height/2+big*0.55);
     ctx.restore();
@@ -1738,10 +1807,10 @@ function hexState(t){
   else if(gateOK(t)) cls=coins>=price?"canBuy":"dimGold";
   const c=curColRGB(p);
   const pa={};
-  if(cls==="owned"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.4)`; pa.stroke=b.col; pa["stroke-width"]="1.3"; }
-  else if(cls==="canBuy"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.14)`; pa.stroke=b.col; pa["stroke-width"]="1.9"; }
-  else if(cls==="dimGold"){ pa.fill="rgba(255,182,39,0.07)"; pa.stroke="rgba(255,182,39,0.6)"; pa["stroke-width"]="1.2"; }
-  else { pa.fill="rgba(255,255,255,0.02)"; pa.stroke="#2a3826"; pa["stroke-width"]="1"; }
+  if(cls==="owned"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.62)`; pa.stroke=b.col; pa["stroke-width"]="1.5"; }
+  else if(cls==="canBuy"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.34)`; pa.stroke=b.col; pa["stroke-width"]="2.1"; }
+  else if(cls==="dimGold"){ pa.fill="rgba(64,52,14,0.72)"; pa.stroke="rgba(255,182,39,0.75)"; pa["stroke-width"]="1.4"; }
+  else { pa.fill="rgba(11,28,36,0.82)"; pa.stroke="#31485a"; pa["stroke-width"]="1.2"; }   // solid slate: text always has paint behind it
   return {cls,pa,title:`${p.nm} — ${price?fmtCoin(price)+"c":"free"}${cls==="gated"?" (gated)":""}`,short:price?fmtCoin(price):"free",
     lines:(()=>{ const w2=p.nm.split(" "); if(w2.length===1) return [p.nm]; const cut=Math.ceil(w2.length/2); return [w2.slice(0,cut).join(" "), w2.slice(cut).join(" ")]; })()};
 }
