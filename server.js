@@ -123,8 +123,7 @@ class Room {
   tick(){
     this.game.step();
     if(this.game.botSide>=0) this.game.botStep();
-    const picks=this.game.picks.length?this.game.picks.splice(0,this.game.picks.length):null;
-    const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta(), ...(picks?{picks}:{}) });
+    const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta() });
     for(const c of this.clients) if(c.readyState===1) c.send(msg);
     if(this.game.over) clearInterval(this.timer);   // match decided — final state already sent
   }

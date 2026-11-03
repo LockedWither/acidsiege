@@ -89,7 +89,7 @@
     repeating-linear-gradient(45deg, rgba(0,0,0,.16) 0 16px, transparent 16px 32px),
     linear-gradient(160deg,#06141b,#0a2531 60%,#0e3242)}
   .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
-  #treeWheel svg.svgwheel{flex:none;width:max(96%,720px);height:auto;margin:0 auto}
+  #treeWheel svg.svgwheel{flex:none;width:max(96%,720px);height:auto;margin:auto}
   .svgwheel .ring{fill:none;stroke:rgba(255,255,255,.12);stroke-dasharray:2 7;stroke-width:1}
   .svgwheel .hexC{cursor:pointer}
   .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
@@ -417,7 +417,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
         <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward — click to select · double-click to buy/upgrade</span>
         <button class="btn alt" id="treeClose" style="width:auto;padding:10px 16px">✕ CLOSE</button>
       </div>
-      <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:flex-start;padding:4px 10px"></div>
+      <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:flex-start;padding:4px 10px"></div>
       <div id="treeFoot" style="flex:none;padding:6px 16px calc(14px + env(safe-area-inset-bottom));max-width:860px;width:100%;margin:0 auto">
         <div class="tsheet" id="toolSheet">
           <div class="tsrow">
@@ -444,7 +444,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
 
   let branches=null, BRANCH_OF={}, PAL_BYT={};
   let everSet=new Set(), meCoins=0;
-  const FREE0T=new Set([0,1,2,3,80,81]);
+  const FREE0T=new Set([0,1,2,3,80,81,86]);
   let treeOpen=false, sheetTool=3, dblTt=-1, dblT=0;
 
   function mpOwned(t){ return unlocked.has(t); }
@@ -620,21 +620,14 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
     ap(m2,1,7,"#ffe98e"); ap(m2,0,8,"#c98a08"); ap(m2,1,8,"#8a5c00"); ap(m2,2,8,"#c98a08");
     MOB.cnv=mob;
   }
-  const mpops=[];
-  window.__spritePass=function(){
-    if(!ATLAS.cnv) makeAtlas();
-    if(!window.__LUT83){ LUT[82]=[196,16,30]; LUT[83]=[150,148,148]; LUT[84]=[212,220,224]; LUT[85]=[226,42,44]; LUT[86]=[8,22,28]; LUT[87]=[255,207,44]; window.__LUT83=true; }
-    const at=ATLAS.cnv, mob=MOB.cnv;
+  window.__spritePass=function(){                     // walkers only at 1 art-px = 1 cell
+    if(!MOB.cnv) makeAtlas();
+    if(!window.__LUT83){ LUT[82]=[196,16,30]; LUT[83]=[150,148,148]; LUT[86]=[8,22,28]; window.__LUT83=true; }
     for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
-      const tj=grid[y*COLS+x];
-      if(tj>=NEW_B||tj===0) continue;
-      if(BOMB_PAT[tj]){ const r2=ATLAS.tiles[tj]*9;
-        sctx.drawImage(at,0,r2,9,9, Math.max(0,x-4), Math.max(0,y-4), 9, 9); }
-      else if(tj===86) sctx.drawImage(mob,0,0,3,6, x-1, Math.max(0,y-5), 3, 6);
-      else if(tj===87) sctx.drawImage(mob,0,6,3,3, x-1, Math.max(0,y-1), 3, 3);
+      if(grid[y*COLS+x]!==86) continue;
+      sctx.drawImage(MOB.cnv,0,0,3,6, x-1, Math.max(0,y-5), 3, 6);
     }
   };
-  window.__setTreeCoins=()=>{};
   const prevHud=hud;
   hud=function(meta){ const me=meta.players[mySide]; everSet=new Set(me.ever||[]); meCoins=Math.floor(me.coins); window.__mecoins=meCoins;
     if(!Object.keys(PAL_BYT).length&&palette.length){ PAL_BYT={}; palette.forEach(p2=>{ PAL_BYT[p2.t]=p2; }); }
@@ -644,20 +637,17 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
   handle=function(m){ if(m.t==="start"&&m.branches){ branches=m.branches; BRANCH_OF={};
       m.branches.forEach((b,bi)=>b.tiers.forEach((t2,ti)=>{ if(BRANCH_OF[t2]===undefined) BRANCH_OF[t2]={b:bi,i:ti}; }));
       branches=m.branches; }
-    if(m.t==="picks"&&m.picks){ for(const pk of m.picks){ if(pk.s===mySide) mpops.push({x:pk.x,y:pk.y,t:1,a:pk.v}); } }
     prevHandle(m); };
   const prevRender=render;
-  render=function(){ prevRender(); if(started&&grid){ window.__spritePass();
-    let px2=0; const sc=cv.width/COLS;
-    for(let k=mpops.length-1;k>=0;k--){ const pq=mpops[k]; pq.t-=0.05; pq.y-=0.5;
-      if(pq.t<=0){ mpops.splice(k,1); continue; }
-      const tx=(mirror?COLS-1-pq.x:pq.x)*sc, ty=pq.y*sc-10-pq.t*18;
-      ctx.font="800 "+Math.round(sc*2.2)+"px Outfit, sans-serif";
-      ctx.globalAlpha=Math.max(0,Math.min(1,pq.t<0.3?pq.t/0.3:1));
-      ctx.textAlign="center"; ctx.lineWidth=Math.max(2,sc*0.7); ctx.lineJoin="round";
-      ctx.strokeStyle="rgba(16,22,12,0.85)"; const txt="+"+fmtCoin(Math.round(pq.a));
-      ctx.strokeText(txt,tx,ty); ctx.fillStyle="#ffdf8a"; ctx.fillText(txt,tx,ty); }
-    ctx.globalAlpha=1; } };
+  render=function(){ if(started&&grid){ window.__spritePass(); } prevRender();
+    if(started&&grid){ const sc=cv.width/COLS, scy=cv.height/ROWS;
+      const at2=ATLAS.cnv;
+      for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+        const tj=grid[y*COLS+x], d2=BOMB_PAT[tj];
+        if(d2===undefined) continue;
+        const mx2=mirror?(COLS-1-x):x;
+        ctx.drawImage(at2, 0, ATLAS.tiles[tj]*9, 9, 9, Math.round(mx2*sc), Math.round(y*scy), Math.ceil(sc), Math.ceil(scy));
+      } } };
 })();
 
 </script>

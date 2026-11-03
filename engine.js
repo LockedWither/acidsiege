@@ -9,9 +9,9 @@ const EMPTY=0, SAND=1, WATER=2, ACID=3, FIRE=4, WOOD=5, TNT=6, WALL=7,
       CITY=8, SMOKE=9, STEAM=10, OIL=11, STONE=12, GLASS=13, LAVA=14,
       PLASMA=15, PCITY=16, MAGMA=17, NAPALM=18, NUKE=19, HBOMB=20,
       ANTIMATTER=21, VIRUS=22, NEW_BASE=23,
+      PB=80, PLANT=81,                                      // life add-ons shared ids
       BLOOD=82, ASH=83,                                     // gore: walkers bleed red or burn to ash
-      HOSPITAL=84, HOSPITAL_RED=85, HUMAN=86, COIN=87,      // the living city: hospital (+cross), walkers, reward coins
-      PB=80, PLANT=81;          // life add-ons shared ids (sim support lives in the single-player page)
+      HUMAN=86;                                             // paintable walker (for fun) — sims mirror single-player
 
 const COLS=180, ROWS=112;
 const FLOOR_Y=ROWS-1, CITY_THICK=18, GAP=10;
@@ -37,7 +37,8 @@ function genSkyline(arr,x0,x1){   // arr[x] = top row of building (lower = talle
 const PALETTE=[
   {t:ACID,nm:"Acid",col:"#8ef02a",cost:0},   {t:WATER,nm:"Water",col:"#367bd4",cost:0},
   {t:SAND,nm:"Sand",col:"#d9c17a",cost:0},   {t:WOOD,nm:"Wood",col:"#7a4a23",cost:40},
-  {t:PB,nm:"Peanut Butter",col:"#c98a4a",cost:0}, {t:PLANT,nm:"Plant",col:"#2fbf4a",cost:0},   // life add-ons (sim support is single-player-side)
+  {t:PB,nm:"Peanut Butter",col:"#c98a4a",cost:0}, {t:PLANT,nm:"Plant",col:"#2fbf4a",cost:0},
+  {t:HUMAN,nm:"Human",col:"#e5b08c",cost:0},
   {t:OIL,nm:"Oil",col:"#3a2820",cost:60},    {t:GLASS,nm:"Glass",col:"#bce3ec",cost:70},
   {t:STONE,nm:"Stone",col:"#6e6c68",cost:80},{t:FIRE,nm:"Fire",col:"#ff6a1e",cost:100},
   {t:TNT,nm:"TNT",col:"#e23a3a",cost:100000}, {t:LAVA,nm:"Lava",col:"#ff5a14",cost:500},
@@ -124,7 +125,7 @@ PALETTE.forEach(p=>{ if(RENAMES[p.t]) p.nm=RENAMES[p.t]; });
 
 /* ---- shared ARSENAL tree (same branch layout as modes/singleplayer.html; keyed by tool id) ---- */
 const ARSENAL=[
-  {name:"Foundations", col:"#d9c08a", tiers:[80,81,0,1,2,5,13,12,16]},
+  {name:"Foundations", col:"#d9c08a", tiers:[80,81,86,0,1,2,5,13,12,16]},
   {name:"Chemical",    col:"#9cff5a", tiers:[3,22,24,30,31,37,42,47,55]},
   {name:"Inferno",     col:"#ff7e3a", tiers:[11,4,14,17,18,23,61]},
   {name:"Demolition",  col:"#ff4a5a", tiers:[6,25,26,19,20,27,28,34,36,38,56]},
@@ -135,7 +136,7 @@ const ARSENAL=[
   {name:"Reality",     col:"#ff4ad2", tiers:[52,72,73,74,75,76,77,78]},
 ];
 const BRANCH_OF={}; ARSENAL.forEach((b,bi)=>b.tiers.forEach((t2,ti)=>{ if(BRANCH_OF[t2]===undefined) BRANCH_OF[t2]={b:bi,i:ti}; }));
-const FREE0=new Set([ACID,WATER,SAND,EMPTY,PB,PLANT]);
+const FREE0=new Set([ACID,WATER,SAND,EMPTY,PB,PLANT,HUMAN]);
 function gateOKT(t,ever){ const pos=BRANCH_OF[t]; if(!pos||FREE0.has(t)||pos.i===0) return true;
   const prev=ARSENAL[pos.b].tiers[pos.i-1]; return ever.has(prev); }
 
@@ -156,9 +157,6 @@ class Game {
     this.grid=new Uint8Array(COLS*ROWS);
     this.health=new Float32Array(COLS*ROWS);
     this.moved=new Uint8Array(COLS*ROWS);
-    this.coinVal=new Float32Array(COLS*ROWS);   // value of each physical coin cell (0 = none)
-    this.hosp=[null,null];
-    this.picks=[];                              // walker coin pickups, drained by the server broadcast
     this.skyP=new Int16Array(COLS); this.skyE=new Int16Array(COLS);
     this.round=1; this.wave=1; this.scores=[0,0];
     // players: 0 = left (PCITY), 1 = right (CITY)
@@ -191,14 +189,13 @@ class Game {
       const nx=best+dx, ny=surf+dy; if(!this.inB(nx,ny))continue; const j=this.I(nx,ny);
       if(this.grid[j]===EMPTY||isGas(this.grid[j])) this.grid[j]=el; }
   }
-  newPlayer(){ return { coins:300, level:1, brush:2, unlocked:new Set([ACID,WATER,SAND,EMPTY,PB,PLANT]), ever:new Set([ACID,WATER,SAND,EMPTY,PB,PLANT]), upg:{} }; }
+  newPlayer(){ return { coins:300, level:1, brush:2, unlocked:new Set([ACID,WATER,SAND,EMPTY,PB,PLANT,HUMAN]), ever:new Set([ACID,WATER,SAND,EMPTY,PB,PLANT,HUMAN]), upg:{} }; }
   I(x,y){ return y*COLS+x; }
   inB(x,y){ return x>=0&&x<COLS&&y>=0&&y<ROWS; }
 
   buildCities(){
     const g=this.grid,h=this.health;
     for(let i=0;i<g.length;i++){ g[i]=EMPTY; h[i]=0; }
-    this.coinVal.fill(0);
     for(let x=0;x<COLS;x++) g[this.I(x,FLOOR_Y)]=WALL;
     genSkyline(this.skyP,0,P_END); genSkyline(this.skyE,E_START,COLS);
     const php=BASE_HP[PCITY]+cityProt(this.players[0].level);
@@ -206,28 +203,7 @@ class Game {
     let pc=0,ec=0;
     for(let x=0;x<P_END;x++)for(let y=this.skyP[x];y<FLOOR_Y;y++){ const i=this.I(x,y); g[i]=PCITY; h[i]=php; pc++; }
     for(let x=E_START;x<COLS;x++)for(let y=this.skyE[x];y<FLOOR_Y;y++){ const i=this.I(x,y); g[i]=CITY; h[i]=ehp; ec++; }
-    const cH0=this.carveHosp((P_END>>1)-6,0), cH1=this.carveHosp((E_START+COLS)>>1,1);   // a hospital district in every city (spots self-record)
-    this.cells=[pc-cH0,ec-cH1]; this.max=[pc-cH0,ec-cH1];
-    this.humanTimer=0;
-  }
-  carveHosp(x0,side){                                         // indestructible city-toned block + red cross; returns cells replaced
-    const skyA=side===0?this.skyP:this.skyE, ciT=side===0?PCITY:CITY, x1=x0+HOSP_W-1;
-    if(x0<0||x1>=COLS) return 0;
-    let top=0;
-    for(let x2=x0;x2<=x1;x2++) top=Math.max(top,skyA[x2]);
-    const y0=Math.min(top,FLOOR_Y-HOSP_H);
-    let conv=0;
-    for(let x2=x0;x2<=x1;x2++) for(let y2=y0;y2<y0+HOSP_H;y2++){
-      const i=this.I(x2,y2);
-      if(this.grid[i]===ciT) conv++;
-      const lx=x2-x0, ly=y2-y0;
-      this.grid[i]=((lx===5||lx===6)&&(ly>=1&&ly<=HOSP_H-2))||((ly===2||ly===3)&&(lx>=2&&lx<=HOSP_W-3))?HOSPITAL_RED:HOSPITAL;
-      this.health[i]=0; this.moved[i]=1;
-    }
-    for(let x2=x0;x2<=x1;x2++){ const j=this.I(x2,y0-1);       // open the walkway above the roof
-      if(this.grid[j]===ciT){ this.grid[j]=EMPTY; this.health[j]=0; this.moved[j]=1; conv++; } }
-    this.hosp[side]={x0,y0};
-    return conv;
+    this.cells=[pc,ec]; this.max=[pc,ec];
   }
 
   // ---- economy / rounds ----
@@ -275,7 +251,7 @@ class Game {
   explodeR(cx,cy,R,fp,dmg,wid){ const g=this.grid;
     for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){ if(dx*dx+dy*dy>R*R)continue;
       const x=cx+dx,y=cy+dy; if(!this.inB(x,y)||y===FLOOR_Y)continue; const j=this.I(x,y),tj=g[j];
-      if(tj===WALL||tj===HOSPITAL||tj===HOSPITAL_RED||tj===COIN)continue;
+      if(tj===WALL)continue;
       if(tj===HUMAN){ this.dieHuman(j,rnd()<0.5); continue; }
       if(tj===TNT||tj===NUKE||tj===HBOMB)continue;
       if(BASE_HP[tj]!==undefined){ this.applyDamage(j,dmg*this.tmul(tj,wid)); continue; }
@@ -298,7 +274,6 @@ class Game {
 
   step(){
     const g=this.grid; this.moved.fill(0);
-    if(++this.humanTimer>=90){ this.humanTimer=0; this.spawnHumans(); }   // the cities keep a living population (~every 3s)
     for(let y=ROWS-1;y>=0;y--){ const ltr=(y&1)===0;
       for(let xi=0;xi<COLS;xi++){ const x=ltr?xi:COLS-1-xi; const i=this.I(x,y); if(this.moved[i])continue;
         const t=g[i];
@@ -323,8 +298,6 @@ class Game {
           case PLANT: this.mPlant(x,y,i); break;
           case BLOOD: case ASH: this.mBloodAsh(x,y,i); break;
           case HUMAN: this.mHuman(x,y,i); break;
-          case COIN:  this.mCoin(x,y,i); break;
-          case HOSPITAL: case HOSPITAL_RED: break;
           default: if(t>=NEW_BASE) this.sNew(x,y,i); break;
         }
       }
@@ -362,11 +335,7 @@ class Game {
       if(x-dir2>=0&&x-dir2<COLS&&powderPass(g[l2+COLS])){ this.swap(i,l2+COLS); return; }
       if(x+dir2>=0&&x+dir2<COLS&&powderPass(g[l1])&&g[l1]!==ASH){ this.swap(i,l1); return; }
       if(x-dir2>=0&&x-dir2<COLS&&powderPass(g[l2])&&g[l2]!==ASH){ this.swap(i,l2); return; } } }
-  dieHuman(i,burned,side){ this.grid[i]=burned&&rnd()<0.7?ASH:BLOOD; this.health[i]=0; this.moved[i]=1; }
-  collectCoin(i,side){ if(this.grid[i]!==COIN) return;
-    const v=Math.max(1,Math.round(this.coinVal[i]||50)); this.coinVal[i]=0; this.grid[i]=EMPTY;
-    this.players[side].coins+=v;
-    this.picks.push({s:side,x:i%COLS,y:((i/COLS)|0),v}); }
+  dieHuman(i,burned){ this.grid[i]=burned&&rnd()<0.7?ASH:BLOOD; this.health[i]=0; this.moved[i]=1; }
   mHuman(x,y,i){ const g=this.grid;
     /* hazards: fire-class burns → ash, acid/goo-class → blood */
     const burn=t2=>t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER;
@@ -375,53 +344,15 @@ class Game {
     if(i%COLS<COLS-1){ const t2=g[i+1]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
     if(i>=COLS){ const t2=g[i-COLS]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
     if(i+COLS<g.length){ const t2=g[i+COLS]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
-    if(y+1<ROWS){ const d=i+COLS, dj=g[d];
-      if(dj===EMPTY||isGas(dj)){ this.swap(i,d); return; }
-      if(dj===COIN){ this.collectCoin(d,x<E_START?0:1); return; } }
-    /* walk toward gold within sight; else wander — clamped to their own city's bounds */
+    /* fall */
+    if(y+1<ROWS){ const d=i+COLS, dj=g[d]; if(dj===EMPTY||isGas(dj)){ this.swap(i,d); return; } }
+    /* wander — clamped to their own city's bounds */
     const side=x<E_START?0:1;
-    let dir=rnd()<0.5?-1:1, eager=0.30;
-    for(let k=1;k<=10;k++){ const lx=x-k, rx=x+k;
-      if(lx>=0&&lx<COLS&&g[y*COLS+lx]===COIN){ dir=-1; eager=0.9; break; }
-      if(rx>=0&&rx<COLS&&g[y*COLS+rx]===COIN){ dir=1; eager=0.9; break; } }
-    const nx=x+dir;
+    const dir=rnd()<0.5?-1:1, nx=x+dir;
     const inside=side===0?(nx>=1&&nx<=P_END-1):(nx>=E_START+1&&nx<=COLS-2);
-    if(inside&&rnd()<eager){ const j2=nx+y*COLS, tj=g[j2];
-      if(tj===COIN) this.collectCoin(j2,side);
-      else if(tj===EMPTY||isGas(tj)) this.swap(i,j2); }
-    else if(rnd()<0.05&&y>0&&g[i-COLS]===EMPTY){ this.swap(i,i-COLS); return; }   // hop
-    if(y>0&&g[i-COLS]===COIN) this.collectCoin(i-COLS,side);
-    if(i%COLS>0&&g[i-1]===COIN) this.collectCoin(i-1,side);
-    if(i%COLS<COLS-1&&g[i+1]===COIN) this.collectCoin(i+1,side);
-    if(i+COLS<g.length&&g[i+COLS]===COIN) this.collectCoin(i+COLS,side); }
-  mCoin(x,y,i){ const g=this.grid;                               // reward coins: dense, fall and pile up where they land
-    if(y+1<ROWS&&powderPass(g[i+COLS])){ this.swap(i,i+COLS); return; }
-    const dir2=rnd()<0.5?-1:1;
-    if(y+1<ROWS&&x+dir2>=0&&x+dir2<COLS&&powderPass(g[(dir2<0?i-1:i+1)+COLS])){ this.swap(i,(dir2<0?i-1:i+1)+COLS); return; }
-    if(y+1<ROWS&&x-dir2>=0&&x-dir2<COLS&&powderPass(g[(dir2<0?i+1:i-1)+COLS])){ this.swap(i,(dir2<0?i+1:i-1)+COLS); return; } }
-  spawnHumans(){ const g=this.grid;
-    let pc=0, ec=0;
-    for(let i=0;i<g.length;i++){ if(g[i]===HUMAN){ if((i%COLS)<E_START) pc++; else ec++; } }
-    if(pc<HUMAN_CAP) this.spawnHuman(this.hosp[0],0);
-    if(ec<HUMAN_CAP) this.spawnHuman(this.hosp[1],1); }
-  spawnHuman(h,side){ if(!h) return;
-    for(let k=0;k<16;k++){
-      const x2=h.x0+2+((rnd()*(HOSP_W-4))|0), y2=h.y0-1;
-      if(!this.inB(x2,y2)) continue; const j=this.I(x2,y2);
-      if(this.grid[j]===EMPTY){ this.grid[j]=HUMAN; this.health[j]=0; this.moved[j]=1; return; } } }
-  dropCoins(side,total){                                         // the round winner gets a celebratory pile, walkers haul it in
-    if(total<=0) return;
-    const lim0=side===0?3:E_START+3, lim1=side===0?P_END-3:COLS-3;
-    const n=Math.max(10,Math.min(50,Math.round(total/800)));
-    const base=Math.max(1,Math.floor(total/n));
-    let lastI=-1;
-    for(let k=0;k<n;k++){
-      const x2=lim0+((rnd()*(lim1-lim0))|0), y2=Math.max(2,10+((rnd()*12)|0));
-      const j=this.I(x2,y2);
-      if(this.grid[j]!==EMPTY) continue;
-      this.grid[j]=COIN; this.health[j]=0; this.moved[j]=1; this.coinVal[j]+=base; lastI=j;
-    }
-    if(lastI>=0) this.coinVal[lastI]+=Math.max(0,total-base*n);
+    if(inside&&rnd()<0.30){ const j2=nx+y*COLS, tj=g[j2];
+      if(tj===EMPTY||isGas(tj)) this.swap(i,j2); }
+    else if(rnd()<0.06&&y>0&&g[i-COLS]===EMPTY){ this.swap(i,i-COLS); }   // hop
   }
 
   ns4(x,y){ return [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]; }
