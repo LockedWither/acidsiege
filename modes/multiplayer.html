@@ -89,7 +89,7 @@
     repeating-linear-gradient(45deg, rgba(0,0,0,.16) 0 16px, transparent 16px 32px),
     linear-gradient(160deg,#06141b,#0a2531 60%,#0e3242)}
   .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
-  #treeWheel svg.svgwheel{flex:none;width:max(96%,720px);height:auto;margin:auto}
+  #treeWheel svg.svgwheel{flex:none;height:100%;width:auto;max-width:max(97%,720px);margin:auto}
   .svgwheel .ring{fill:none;stroke:rgba(255,255,255,.12);stroke-dasharray:2 7;stroke-width:1}
   .svgwheel .hexC{cursor:pointer}
   .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
@@ -110,7 +110,7 @@
   .tscol{margin-left:auto;font-size:11px;color:var(--muted);display:flex;gap:5px;align-items:center}
   .tscol input{width:22px;height:22px;border:none;background:none;padding:0;cursor:pointer}
   .tsmsg{font-size:11px;color:var(--muted);margin-top:6px;min-height:14px}
-  @media (max-width:700px){ #treeWheel{align-items:flex-start} #treeWheel svg.svgwheel{flex:none;width:1160px}
+  @media (max-width:700px){ #treeWheel{align-items:flex-start} #treeWheel svg.svgwheel{flex:none;width:1160px;height:auto;max-width:none}
     .tsrow2{flex-wrap:wrap} .tsbtn{flex:1;min-width:96px} .tscol{margin-left:0;width:100%;justify-content:flex-end}
     #treeHead>span:nth-child(2){display:none} }
 </style>

@@ -72,7 +72,7 @@
 
 #tools{display:block}
   .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
-  #treeWheel svg.svgwheel{flex:none;width:max(96%,720px);height:auto;margin:auto}
+  #treeWheel svg.svgwheel{flex:none;height:100%;width:auto;max-width:max(97%,720px);margin:auto}
   .svgwheel .ring{fill:none;stroke:var(--line);stroke-dasharray:2 7;stroke-width:1}
   .svgwheel .hexC{cursor:pointer}
   .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
@@ -86,7 +86,7 @@
   /* phones: the wheel keeps ~2x scale and pans; the sheet wraps */
   @media (max-width:700px){
     #treeWheel{align-items:flex-start}
-    #treeWheel svg.svgwheel{flex:none;width:1160px}
+    #treeWheel svg.svgwheel{flex:none;width:1160px;height:auto;max-width:none}
     .tsrow2{flex-wrap:wrap}
     .tsbtn{flex:1;min-width:96px}
     .tscol{margin-left:0;width:100%;justify-content:flex-end}
