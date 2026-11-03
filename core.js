@@ -8,9 +8,10 @@
   // ---- element ids (mirror of singleplayer) ----
   const ids = { EMPTY:0, SAND:1, WATER:2, ACID:3, FIRE:4, WOOD:5, TNT:6, WALL:7,
     CITY:8, SMOKE:9, STEAM:10, OIL:11, STONE:12, GLASS:13, LAVA:14, PLASMA:15, PCITY:16,
-    MAGMA:17, NAPALM:18, NUKE:19, HBOMB:20, ANTIMATTER:21, VIRUS:22, NEW_BASE:23 };
+    MAGMA:17, NAPALM:18, NUKE:19, HBOMB:20, ANTIMATTER:21, VIRUS:22, NEW_BASE:23,
+    PB:80, PLANT:81 };
   const { ACID,FIRE,NAPALM,VIRUS,LAVA,MAGMA,PLASMA,ANTIMATTER,SAND,GLASS,WOOD,STONE,
-          CITY,PCITY,WATER,OIL,TNT,NUKE,HBOMB,EMPTY,NEW_BASE } = ids;
+          CITY,PCITY,WATER,OIL,TNT,NUKE,HBOMB,EMPTY,NEW_BASE,PB,PLANT } = ids;
 
   // ---- combat tunables (identical to the main game) ----
   const BASE_HP = { [SAND]:2,[GLASS]:4,[WOOD]:6,[STONE]:12,[CITY]:8,[PCITY]:8 };
@@ -30,6 +31,8 @@
     {t:ACID,  nm:"Acid",   col:"#8ef02a", cost:0},
     {t:WATER, nm:"Water",  col:"#367bd4", cost:0},
     {t:SAND,  nm:"Sand",   col:"#d9c17a", cost:0},
+    {t:PB,    nm:"Peanut Butter", col:"#c98a4a", cost:0},
+    {t:PLANT, nm:"Plant",  col:"#2fbf4a", cost:0},
     {t:WOOD,  nm:"Wood",   col:"#7a4a23", cost:40},
     {t:OIL,   nm:"Oil",    col:"#3a2820", cost:60},
     {t:GLASS, nm:"Glass",  col:"#bce3ec", cost:70},

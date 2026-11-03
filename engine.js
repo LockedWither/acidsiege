@@ -8,7 +8,8 @@
 const EMPTY=0, SAND=1, WATER=2, ACID=3, FIRE=4, WOOD=5, TNT=6, WALL=7,
       CITY=8, SMOKE=9, STEAM=10, OIL=11, STONE=12, GLASS=13, LAVA=14,
       PLASMA=15, PCITY=16, MAGMA=17, NAPALM=18, NUKE=19, HBOMB=20,
-      ANTIMATTER=21, VIRUS=22, NEW_BASE=23;
+      ANTIMATTER=21, VIRUS=22, NEW_BASE=23,
+      PB=80, PLANT=81;          // life add-ons shared ids (sim support lives in the single-player page)
 
 const COLS=180, ROWS=112;
 const FLOOR_Y=ROWS-1, CITY_THICK=18, GAP=10;
@@ -33,6 +34,7 @@ function genSkyline(arr,x0,x1){   // arr[x] = top row of building (lower = talle
 const PALETTE=[
   {t:ACID,nm:"Acid",col:"#8ef02a",cost:0},   {t:WATER,nm:"Water",col:"#367bd4",cost:0},
   {t:SAND,nm:"Sand",col:"#d9c17a",cost:0},   {t:WOOD,nm:"Wood",col:"#7a4a23",cost:40},
+  {t:PB,nm:"Peanut Butter",col:"#c98a4a",cost:0}, {t:PLANT,nm:"Plant",col:"#2fbf4a",cost:0},   // life add-ons (sim support is single-player-side)
   {t:OIL,nm:"Oil",col:"#3a2820",cost:60},    {t:GLASS,nm:"Glass",col:"#bce3ec",cost:70},
   {t:STONE,nm:"Stone",col:"#6e6c68",cost:80},{t:FIRE,nm:"Fire",col:"#ff6a1e",cost:100},
   {t:TNT,nm:"TNT",col:"#e23a3a",cost:100000}, {t:LAVA,nm:"Lava",col:"#ff5a14",cost:500},

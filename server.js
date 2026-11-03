@@ -116,7 +116,7 @@ class Room {
     this.game.maxWaves = (waves===0||waves==="inf") ? Infinity : (+waves||6);   // 6/20/50/100/∞
     this.clients = clients;
     clients.forEach((c,i)=>{ c.room=this; c.side=cfg.sides[i];
-      c.send(JSON.stringify({ t:"start", side:c.side, mode, waves:(this.game.maxWaves===Infinity?0:this.game.maxWaves), cols:COLS, rows:ROWS, palette:PALETTE })); });
+      c.send(JSON.stringify({ t:"start", side:c.side, mode, waves:(this.game.maxWaves===Infinity?0:this.game.maxWaves), cols:COLS, rows:ROWS, palette:PALETTE.filter(p=>p.t<80) })); });
     this.timer = setInterval(()=>this.tick(), TICK_MS);
   }
   tick(){
