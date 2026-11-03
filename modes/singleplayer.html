@@ -215,6 +215,7 @@
   .mbtn.play{color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic-dim));box-shadow:0 8px 26px rgba(126,252,74,.3)}
   .mbtn.ghost{color:var(--ink);background:rgba(255,255,255,.05);border:1px solid var(--panel-edge);font-size:14px}
   .diff.sel{color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic-dim));border-color:var(--toxic)}
+  #modSel .mode.sel{color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic-dim));border-color:var(--toxic);box-shadow:0 0 20px rgba(126,252,74,.55)}
   #howto{max-width:min(560px,90vw);text-align:left;background:var(--panel);border:1px solid var(--panel-edge);
     border-radius:14px;padding:15px 18px;font-size:13.5px;line-height:1.65;color:var(--muted)}
   #howto.hidden{display:none}
@@ -502,7 +503,7 @@ const EMPTY=0, SAND=1, WATER=2, ACID=3, FIRE=4, WOOD=5, TNT=6, WALL=7,
       MAGMA=17, NAPALM=18, NUKE=19, HBOMB=20, ANTIMATTER=21, VIRUS=22,
       NEW_BASE=23;   // procedurally-defined super-weapon tiers occupy ids 23+
 const PB=80, PLANT=81, BLOOD=82, ASH=83,             // life stuff: peanut butter, growing plants, gore
-      HOSPITAL=84, HUMAN=85, COIN=86;                // the living city: indestructible hospital, walkers, reward coins
+      HOSPITAL=84, HOSPITAL_RED=85, HUMAN=86, COIN=87;   // the living city: indestructible hospital (+cross), walkers, reward coins
 
 // ---- city tier colors (8 base colors that cycle forever) ----
 const TIERS=[
@@ -644,7 +645,7 @@ function clearArena(){ for(let i=0;i<grid.length;i++){ if(grid[i]!==WALL){ grid[
 function clearLoose(){   // between waves: wipe loose particles + old enemy city, but KEEP the player's city
   for(let i=0;i<grid.length;i++){
     const t=grid[i];
-    if(t===WALL||t===PCITY||t===HOSPITAL||t===HUMAN||t===COIN||t===PLANT) continue;   // the living city endures between waves; coins wait for a pickup
+    if(t===WALL||t===PCITY||t===HOSPITAL||t===HOSPITAL_RED||t===HUMAN||t===COIN||t===PLANT) continue;   // the living city endures between waves; coins wait for a pickup
     grid[i]=EMPTY; origin[i]=0; health[i]=0;
   }
 }
@@ -670,7 +671,9 @@ function carveHosp(x0,side){                                  // notch an indest
   for(let x2=x0;x2<=x1;x2++) for(let y2=y0;y2<y0+HOSP_H;y2++){
     const i=I(x2,y2);
     if(grid[i]===ciT) converted++;
-    grid[i]=HOSPITAL; origin[i]=0; health[i]=0; moved[i]=1;
+    const lx=x2-x0, ly=y2-y0;
+    grid[i]=((lx===5||lx===6)&&(ly>=1&&ly<=HOSP_H-2)) || ((ly===2||ly===3)&&(lx>=2&&lx<=HOSP_W-3)) ? HOSPITAL_RED : HOSPITAL;
+    origin[i]=0; health[i]=0; moved[i]=1;
   }
   for(let x2=x0;x2<=x1;x2++){                                 // open spawn strip on the roof (walkers appear here)
     const j=I(x2,y0-1);
@@ -852,7 +855,7 @@ function blastPass(cx,cy,R,fireProb,dmg,oc,onBomb){
     if(dx*dx+dy*dy>R*R) continue;
     const x=cx+dx,y=cy+dy; if(!inB(x,y)||y===FLOOR_Y) continue;
     const j=I(x,y), tj=grid[j];
-    if(tj===EMPTY||tj===WALL||tj===HOSPITAL||tj===COIN) continue;      // walls + hospital are indestructible; coins always collectable
+    if(tj===EMPTY||tj===WALL||tj===HOSPITAL||tj===HOSPITAL_RED||tj===COIN) continue;   // walls + hospital indestructible; coins collectable
     if(onBomb&&(tj===TNT||tj===NUKE||tj===HBOMB||BOMB_PAT[tj])){ onBomb(j,tj); continue; }
     if(tj===HUMAN){ dieHuman(j,Math.random()<0.5); continue; }         // caught in a blast → gore
     if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); continue; }      // city/solids take the blast (+ overkill spill)
@@ -1202,15 +1205,22 @@ function stepHuman(x,y,i){                                    // walkers: fall, 
     if(dj===EMPTY||isGas(dj)){ swap(i,d); return; }
     if(dj===COIN){ collectCoin(d); return; }
   }
-  /* wander sideways — but only inside their own city's borders */
+  /* wander sideways — but only inside their own city's borders; walkers run toward gold */
   const side=origin[i]===ORIGIN_PLAYER?1:2;
-  const dir=Math.random()<0.5?-1:1, nx=x+dir;
+  let dir=Math.random()<0.5?-1:1, eager=0.30;
+  for(let k=1;k<=10;k++){                                     // look for gold along the street strip
+    const lx=x-k, rx=x+k;
+    if(lx>=0 && lx<COLS && grid[y*COLS+lx]===COIN){ dir=-1; eager=0.9; break; }
+    if(rx>=0 && rx<COLS && grid[y*COLS+rx]===COIN){ dir=1;  eager=0.9; break; }
+  }
+  const nx=x+dir;
   const inside=side===1?(nx>=1&&nx<=P_END-1):(nx>=E_START+1&&nx<=COLS-2);
-  if(inside && Math.random()<0.30){
+  if(inside && Math.random()<eager){
     const j2=nx+y*COLS, tj=grid[j2];
     if(tj===COIN) collectCoin(j2);
     else if(tj===EMPTY||isGas(tj)) swap(i,j2);
   }
+  else if(Math.random()<0.05 && y>0 && grid[i-COLS]===EMPTY){ swap(i,i-COLS); return; }   // happy little hop (and climbs 1-high ledges)
   /* standing next to money? grab it */
   if(y>0&&grid[i-COLS]===COIN) collectCoin(i-COLS);
   if(grid[i-1]===COIN) collectCoin(i-1);
@@ -1247,7 +1257,7 @@ function step(){
         case BLOOD: case ASH: stepBloodOrAsh(x,y,i); break;
         case HUMAN: stepHuman(x,y,i); break;
         case COIN:  stepCoin(x,y,i); break;
-        case HOSPITAL: break;
+        case HOSPITAL: case HOSPITAL_RED: break;
         default: if(grid[i]>=NEW_BASE) stepNew(x,y,i); break;   // super-weapon tiers
         // WALL, CITY, PCITY are static structure
       }
@@ -1412,20 +1422,15 @@ function baseColor(t,i){
     case PLANT: O[0]=36+(j&7)*3; O[1]=168+((j&7)*7); O[2]=72+(j*0.4|0); return O;           // leafy green
     case BLOOD: O[0]=205+((Math.random()*28)|0); O[1]=16; O[2]=24; return O;                // red blood
     case ASH:   O[0]=156+j; O[1]=152+j; O[2]=148+j; return O;                               // light ash
-    case HOSPITAL: {                                        // city-toned building, iconic red cross
+    case HOSPITAL: {                                        // city-toned white building (the red plus = HOSPITAL_RED cells)
       const x2=i%COLS, y2=(i/COLS)|0;
-      const side=(hospP&&x2>=hospP.x0&&x2<hospP.x0+HOSP_W&&y2>=hospP.y0&&y2<hospP.y0+HOSP_H)?hospP:(hospE||hospP);
       const c=cityRGB(x2<P_END?playerLevel:enemyLevel,x2,y2,O);
-      if(side){ const lx=x2-side.x0, ly=y2-side.y0;
-        if((lx===5||lx===6)&&(ly>=1&&ly<=HOSP_H-2) || (ly===2||ly===3)&&(lx>=2&&lx<=HOSP_W-3)){
-          O[0]=226; O[1]=42; O[2]=44; return O;             // the red plus
-        }
-        O[0]=c[0]+(255-c[0])*0.78+j*0.3; O[1]=c[1]+(255-c[1])*0.78+j*0.3;
-        if(ly===0){ O[0]*=0.88; O[1]*=0.88; }               // roof line
-        O[2]=c[2]+(255-c[2])*0.78+j*0.3; return O;
-      }
+      O[0]=c[0]+(255-c[0])*0.78+j*0.3;
+      O[1]=c[1]+(255-c[1])*0.78+j*0.3;
+      O[2]=c[2]+(255-c[2])*0.78+j*0.3;
       return O;
     }
+    case HOSPITAL_RED: O[0]=226; O[1]=42; O[2]=44; return O;   // the red plus
     default:    { const c=NEWCOL[t]; if(c){ O[0]=c[0]+j*0.4; O[1]=c[1]+j*0.4; O[2]=c[2]+j*0.4; return O; } }
   }
   return BG;
@@ -1480,16 +1485,18 @@ const BOMB_PAT={
   [38]: {dark:[30,48,72],   base:[159,216,255],stripe:[237,250,255], tip:[220,240,255]},    // Rail Shot
   [56]: {dark:[62,50,30],   base:[178,142,82], stripe:[222,82,62],   tip:[244,160,120]},    // Drill Nuke
 };
-const ATLAS={cnv:null, tiles:{}, TW:9, TH:9};
+const ATLAS={cnv:null, tiles:{}, TW:9, TH:9};            // bomb faces (one per tool), drawn CELL-SCALE (1 art-px = 1 cell)
+const MOB={cnv:null, W:3, H:9};                          // walker (3x6) + coin (3x3)
 function makeAtlas(){
-  const keys=Object.keys(BOMB_PAT), n=keys.length+3;      // + the coin tile + a 9x9x2 human walker
+  const keys=Object.keys(BOMB_PAT);
   keys.forEach(k=>BOMB_PAT[k].__id=k);
-  const cnv=document.createElement("canvas"); cnv.width=ATLAS.TW; cnv.height=ATLAS.TH*n;
+  const cnv=document.createElement("canvas"); cnv.width=ATLAS.TW; cnv.height=ATLAS.TH*keys.length;
   const g=cnv.getContext("2d");
   keys.forEach((k,i)=>{ paintBombTile(g,i,BOMB_PAT[k]); ATLAS.tiles[k]=i; });
-  paintCoinTile(g,keys.length); ATLAS.tiles.__coin=keys.length;
-  paintHumanTile(g,keys.length+1); ATLAS.tiles.__human=keys.length+1;
   ATLAS.cnv=cnv;
+  const mob=document.createElement("canvas"); mob.width=MOB.W; mob.height=MOB.H;
+  paintWalkerTile(mob.getContext("2d"),0); paintCoin3(mob.getContext("2d"),6);
+  MOB.cnv=mob;
 }
 function apx(g,x2,y2,col){ g.fillStyle=col; g.fillRect(x2,y2,1,1); }
 function paintBombTile(g,row,d){                          // a 9x9 bomb face: rounded casing, warning band, rivet, tip highlight
@@ -1510,52 +1517,31 @@ function paintBombTile(g,row,d){                          // a 9x9 bomb face: ro
   apx(g,2,y+2,C(d.tip)); apx(g,3,y+2,C(d.tip));             // highlight
   apx(g,6,y+6,"rgba(0,0,0,.35)");                          // rivet
 }
-function paintCoinTile(g,row){                            // cartoon gold coin, 9x9
-  const y=row*ATLAS.TH;
-  const rim="#8a5c00", face="#ffcf2c", shine="#ffe98e", dark="#c98a08";
-  const rows=[[4,4],[3,5],[2,6],[2,6],[2,6],[2,6],[2,6],[3,5],[4,4]];
-  rows.forEach(([a,b],r)=>{ for(let c=a;c<a+b;c++) apx(g,c,y+r,face); });
-  rows.forEach(([a,b],r)=>{ apx(g,a,y+r,rim); apx(g,a+b-1,y+r,rim); });
-  function b0(rows,r){ const [a,b]=rows[r]; return b; }
-  apx(g,4,y+1,rim); apx(g,3,y+8,rim); apx(g,5,y+8,rim);
-  for(let r=2;r<7;r++) apx(g,4,y+r,dark);                  // dollar slot: a dark line
-  apx(g,2,y+2,shine); apx(g,3,y+1,shine); apx(g,2,y+3,shine);// top-left shine
-}
-
-function paintHumanTile(g,row){                           // a 9x18 tiny walker: head, torso, swinging arms, legs
-  const y=row*ATLAS.TH;
+function paintWalkerTile(g,y){                            // 3x6 walker, one art-pixel = one city cell
   const SK="#e5b08c", HA="#4a3020", SH="#4a86d0", PA="#34404e";
-  apx(g,2,y+0,HA); apx(g,3,y+0,HA); apx(g,4,y+0,HA); apx(g,5,y+0,HA); apx(g,6,y+0,HA);   // hair cap
-  apx(g,3,y+1,SK); apx(g,4,y+1,SK); apx(g,5,y+1,SK);                                      // face
-  apx(g,3,y+2,SK); apx(g,5,y+2,SK); apx(g,4,y+2,SK);
-  apx(g,3,y+3,SK); apx(g,4,y+3,SK); apx(g,5,y+3,SK);                                      // jaw
-  for(let r=4;r<=8;r++){ apx(g,3,y+r,SH); apx(g,4,y+r,SH); apx(g,5,y+r,SH); }             // torso
-  apx(g,1,y+5,SK); apx(g,7,y+5,SK); apx(g,1,y+6,SK); apx(g,7,y+6,SK);                     // upper arms
-  apx(g,0,y+7,SK); apx(g,8,y+7,SK); apx(g,1,y+8,SK); apx(g,7,y+8,SK);                     // forearms hang
-  for(let r=10;r<=13;r++){ apx(g,3,y+r,PA); apx(g,5,y+r,PA); }                            // legs
-  apx(g,2,y+14,PA); apx(g,6,y+14,PA); apx(g,2,y+15,PA); apx(g,6,y+15,PA);                 // feet
+  apx(g,1,y+0,HA); apx(g,2,y+0,HA);
+  apx(g,0,y+1,SK); apx(g,1,y+1,SK); apx(g,2,y+1,SK);
+  apx(g,0,y+2,SH); apx(g,1,y+2,SH); apx(g,2,y+2,SH);
+  apx(g,0,y+3,SK); apx(g,2,y+3,SK);                       // swinging arms
+  apx(g,1,y+3,SH);
+  apx(g,0,y+4,PA); apx(g,1,y+4,PA); apx(g,2,y+4,PA);
+  apx(g,0,y+5,PA); apx(g,2,y+5,PA);
 }
-function mobSpritePass(ctx,sx,sy){                      // humans (one blit, 1x2 cells tall) + physical coin cells
+function paintCoin3(g,y){                                 // 3x3 cartoon coin, chunky
+  apx(g,1,y+0,"#ffcf2c"); apx(g,0,y+1,"#ffcf2c"); apx(g,2,y+1,"#ffcf2c");
+  apx(g,1,y+1,"#ffe98e");
+  apx(g,0,y+2,"#c98a08"); apx(g,1,y+2,"#8a5c00"); apx(g,2,y+2,"#c98a08");
+}
+function spritePass(){                                    // sprite layer on the SIM canvas: 1 art-pixel = 1 grid cell
   if(!ATLAS.cnv) makeAtlas();
-  const cnv=ATLAS.cnv, sx2=Math.ceil(sx), sy2=Math.ceil(sy);
+  const at=ATLAS.cnv, mob=MOB.cnv, T=ATLAS.TH;
   for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
     const tj=grid[I(x,y)];
-    if(tj!==HUMAN&&tj!==COIN) continue;
-    if(tj===HUMAN){ const yy=ATLAS.tiles.__human*ATLAS.TH;
-      ctx.drawImage(cnv,0,yy,ATLAS.TW,ATLAS.TH*2, Math.round(x*sx), Math.round((y-1)*sy), sx2, sy2*2);
-    } else { const yy=ATLAS.tiles.__coin*ATLAS.TH;
-      ctx.drawImage(cnv,0,yy,ATLAS.TW,ATLAS.TH, Math.round(x*sx), Math.round(y*sy), sx2, sy2);
-    }
-  }
-}
-function bombSpritePass(ctx,sx,sy){                     // overlay pass in render(): chunky bomb sprites from the atlas
-  if(!ATLAS.cnv) makeAtlas();
-  const cnv=ATLAS.cnv, sx2=Math.ceil(sx), sy2=Math.ceil(sy);
-  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
-    const tj=grid[I(x,y)], d=BOMB_PAT[tj];
-    if(d===undefined) continue;
-    const row=ATLAS.tiles[tj]; const yy=row*ATLAS.TH;
-    ctx.drawImage(cnv, 0, yy, ATLAS.TW, ATLAS.TH, Math.round(x*sx), Math.round(y*sy), sx2, sy2);
+    if(tj>=NEW_BASE||tj===EMPTY) continue;
+    if(BOMB_PAT[tj]){ const r2=ATLAS.tiles[tj]*T;
+      sctx.drawImage(at,0,r2,T,T, Math.max(0,x-4), Math.max(0,y-4), T, T); }
+    else if(tj===HUMAN) sctx.drawImage(mob,0,0,3,6, x-1, Math.max(0,y-5), 3, 6);
+    else if(tj===COIN) sctx.drawImage(mob,0,6,3,3, x-1, Math.max(0,y-1), 3, 3);
   }
 }
 function fxTickDraw(ctx,sx,sy){        // called from render(); lifetimes advance in loop() (freeze on pause)
@@ -1758,13 +1744,12 @@ function render(){
     buf[p++]=c[0]; buf[p++]=c[1]; buf[p++]=c[2]; buf[p++]=255;
   }
   sctx.putImageData(img,0,0);
+  spritePass();                // bomb faces + walker/coin sprites at 1 art-pixel = 1 cell
   ctx.imageSmoothingEnabled=false;
   ctx.clearRect(0,0,cv.width,cv.height);
   ctx.drawImage(sim,0,0,cv.width,cv.height);
 
   const sx=cv.width/COLS, sy=cv.height/ROWS;
-  bombSpritePass(ctx,sx,sy);   // chunky pixel bomb sprites over the flat cells
-  mobSpritePass(ctx,sx,sy);    // walkers + physical coins
   // CITY labels over each city
   ctx.save();
   ctx.font=`800 ${Math.round(sy*CITY_THICK*0.6)}px Bungee, sans-serif`;

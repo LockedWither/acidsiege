@@ -9,7 +9,7 @@ const http = require("http");
 const fs   = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
-const { Game, PALETTE, COLS, ROWS } = require("./engine");
+const { Game, PALETTE, ARSENAL, COLS, ROWS } = require("./engine");
 
 const PORT = process.env.PORT || 8080;
 const TICK_MS = 33;   // sim + broadcast rate (~30Hz)
@@ -116,13 +116,15 @@ class Room {
     this.game.maxWaves = (waves===0||waves==="inf") ? Infinity : (+waves||6);   // 6/20/50/100/∞
     this.clients = clients;
     clients.forEach((c,i)=>{ c.room=this; c.side=cfg.sides[i];
-      c.send(JSON.stringify({ t:"start", side:c.side, mode, waves:(this.game.maxWaves===Infinity?0:this.game.maxWaves), cols:COLS, rows:ROWS, palette:PALETTE.filter(p=>p.t<80) })); });
+      c.send(JSON.stringify({ t:"start", side:c.side, mode, waves:(this.game.maxWaves===Infinity?0:this.game.maxWaves), cols:COLS, rows:ROWS,
+        palette:PALETTE, branches:ARSENAL.map(b=>({ name:b.name, col:b.col, tiers:b.tiers.slice() })) })); });
     this.timer = setInterval(()=>this.tick(), TICK_MS);
   }
   tick(){
     this.game.step();
     if(this.game.botSide>=0) this.game.botStep();
-    const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta() });
+    const picks=this.game.picks.length?this.game.picks.splice(0,this.game.picks.length):null;
+    const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta(), ...(picks?{picks}:{}) });
     for(const c of this.clients) if(c.readyState===1) c.send(msg);
     if(this.game.over) clearInterval(this.timer);   // match decided — final state already sent
   }

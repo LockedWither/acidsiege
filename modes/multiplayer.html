@@ -83,6 +83,36 @@
 #lbList .lbwho small{color:var(--muted);font-size:10.5px;font-variant-numeric:tabular-nums}
 #lbList .lbval{font-weight:700;font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums}
 #lbList .you{background:rgba(142,240,42,.09);border-radius:8px}
+  /* ---- ARSENAL tree (full screen; parity with single-player) ---- */
+  #tree{position:fixed;inset:0;z-index:120;display:flex;flex-direction:column;background:
+    radial-gradient(1000px 620px at 50% -10%, rgba(21,65,74,.85), transparent 60%),
+    repeating-linear-gradient(45deg, rgba(0,0,0,.16) 0 16px, transparent 16px 32px),
+    linear-gradient(160deg,#06141b,#0a2531 60%,#0e3242)}
+  .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
+  #treeWheel svg.svgwheel{flex:none;width:max(96%,720px);height:auto;margin:0 auto}
+  .svgwheel .ring{fill:none;stroke:rgba(255,255,255,.12);stroke-dasharray:2 7;stroke-width:1}
+  .svgwheel .hexC{cursor:pointer}
+  .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
+  .svgwheel .hexC.sel polygon{stroke:#ffffff;stroke-width:2.8;filter:drop-shadow(0 0 7px rgba(255,255,255,.85))}
+  .svgwheel .hexC.owned text{fill:#cfe6c4}
+  .svgwheel .hexC.canBuy text,.svgwheel .hexC.dimGold text{fill:var(--amber)}
+  .svgwheel .hexC.gated text{fill:#9cb4a6}
+  .svgwheel text{font-family:Outfit,system-ui,sans-serif;pointer-events:none}
+  @keyframes hexpulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.35}}
+  .tsheet{background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:9px 10px;margin-top:10px}
+  .tsrow{display:flex;align-items:center;gap:8px}
+  .tdot{width:12px;height:12px;border-radius:4px;flex:none}
+  .tname{font-weight:800;font-size:13.5px}
+  .ttier{color:var(--toxic);font-weight:800;font-size:11px}
+  .tprice{margin-left:auto;font-weight:700;font-size:11.5px;color:var(--amber);font-variant-numeric:tabular-nums}
+  .tsrow2{display:flex;gap:6px;align-items:center;margin-top:8px}
+  .tsbtn{width:auto;padding:8px 10px;font-size:12px}
+  .tscol{margin-left:auto;font-size:11px;color:var(--muted);display:flex;gap:5px;align-items:center}
+  .tscol input{width:22px;height:22px;border:none;background:none;padding:0;cursor:pointer}
+  .tsmsg{font-size:11px;color:var(--muted);margin-top:6px;min-height:14px}
+  @media (max-width:700px){ #treeWheel{align-items:flex-start} #treeWheel svg.svgwheel{flex:none;width:1160px}
+    .tsrow2{flex-wrap:wrap} .tsbtn{flex:1;min-width:96px} .tscol{margin-left:0;width:100%;justify-content:flex-end}
+    #treeHead>span:nth-child(2){display:none} }
 </style>
 </head>
 <body>
@@ -145,7 +175,7 @@
       <button class="btn" id="upBtn">LEVEL UP — <span id="upCost">400</span></button>
       <button class="btn alt" id="brBtn">BRUSH — <span id="brCost">200</span></button>
     </div>
-    <div class="card"><h2>Chemicals</h2><button class="btn alt" id="sellBtn" style="width:100%;border:none;border-radius:9px;padding:8px;font-weight:800;font-size:12px;color:#dff3ee;background:rgba(255,255,255,.06);border:1px solid var(--edge);margin-bottom:8px;cursor:pointer">SELL MODE: OFF</button><div class="tools" id="tools"></div></div>
+    <div class="card"><h2>Chemicals</h2><button class="btn" id="treeBtn" style="border-radius:9px;padding:8px;font-weight:800;font-size:12px;color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic2));margin-bottom:8px;cursor:pointer">ARSENAL TREE</button><button class="btn alt" id="sellBtn" style="width:100%;border:none;border-radius:9px;padding:8px;font-weight:800;font-size:12px;color:#dff3ee;background:rgba(255,255,255,.06);border:1px solid var(--edge);margin-bottom:8px;cursor:pointer">SELL MODE: OFF</button><div class="tools" id="tools"></div></div>
     <div class="card"><h2>Chat</h2><div class="chatlog" id="chatlog"></div>
       <div class="chatin"><input id="chatbox" maxlength="140" placeholder="Say something…"><button id="chatsend">Send</button></div></div>
   </aside>
@@ -371,6 +401,265 @@ function addChat(from,text){ const d=document.createElement("div"); const me=fro
 function sendChat(){ const v=chatbox.value.trim(); if(!v)return; send({t:"chat",text:v}); chatbox.value=""; }
 document.getElementById("chatsend").onclick=sendChat;
 chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
+
+/* ============================================================
+   ARSENAL TREE + living-city sprites (parity with single-player)
+   ============================================================ */
+(function(){
+  /* ---- full-screen tree overlay (created here so the lobby is untouched) ---- */
+  if(!document.getElementById("tree")){
+    const tree=document.createElement("div");
+    tree.id="tree"; tree.className="hidden";
+    tree.innerHTML=`
+      <div id="treeHead" style="flex:none;display:flex;align-items:center;gap:14px;padding:16px 20px 8px">
+        <span style="font-family:Bungee,sans-serif;font-size:clamp(24px,4.4vw,40px);color:var(--toxic);letter-spacing:.04em;text-shadow:0 0 26px rgba(142,240,42,.35)">ARSENAL</span>
+        <span style="font:800 14px/1 Outfit,sans-serif;color:var(--amber);font-variant-numeric:tabular-nums">C <b id="tcN">0</b></span>
+        <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward — click to select · double-click to buy/upgrade</span>
+        <button class="btn alt" id="treeClose" style="width:auto;padding:10px 16px">✕ CLOSE</button>
+      </div>
+      <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:flex-start;padding:4px 10px"></div>
+      <div id="treeFoot" style="flex:none;padding:6px 16px calc(14px + env(safe-area-inset-bottom));max-width:860px;width:100%;margin:0 auto">
+        <div class="tsheet" id="toolSheet">
+          <div class="tsrow">
+            <span class="tdot" id="tsDot"></span>
+            <b class="tname" id="tsName">Acid</b>
+            <span class="ttier" id="tsTier"></span>
+            <span class="tprice" id="tsPrice">FREE</span>
+          </div>
+          <div class="tsrow2">
+            <button class="btn alt tsbtn" id="tsBuy">UNLOCK</button>
+            <button class="btn alt tsbtn" id="tsUp">⬆</button>
+            <button class="btn alt tsbtn" id="tsSell">SELL</button>
+            <label class="tscol">colour <input type="color" id="tsCol" title="Custom colour"></label>
+          </div>
+          <div class="tsmsg" id="tsMsg"></div>
+        </div>
+      </div>`;
+    document.body.appendChild(tree);
+  }
+  const $=(id)=>document.getElementById(id);
+  const treeWheel=$("treeWheel"), tcN=$("tcN"),
+        tsDot=$("tsDot"), tsName=$("tsName"), tsTier=$("tsTier"), tsPrice=$("tsPrice"),
+        tsUp=$("tsUp"), tsSell=$("tsSell"), tsCol=$("tsCol"), tsMsg=$("tsMsg"), tsBuy=$("tsBuy");
+
+  let branches=null, BRANCH_OF={}, PAL_BYT={};
+  let everSet=new Set(), meCoins=0;
+  const FREE0T=new Set([0,1,2,3,80,81]);
+  let treeOpen=false, sheetTool=3, dblTt=-1, dblT=0;
+
+  function mpOwned(t){ return unlocked.has(t); }
+  function mpGateOK(t){ const pos=BRANCH_OF[t]; if(!pos||FREE0T.has(t)||pos.i===0) return true;
+    const prev=branches[pos.b].tiers[pos.i-1]; return everSet.has(prev); }
+
+  function hexState(t){
+    const p=PAL_BYT[t], b=branches[BRANCH_OF[t].b], price=p.cost||0;
+    const ownedNow=mpOwned(t);
+    let cls="gated";
+    if(ownedNow) cls="owned";
+    else if(mpGateOK(t)) cls=meCoins>=price?"canBuy":"dimGold";
+    const c=curColRGB(p);
+    const pa={};
+    if(cls==="owned"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.62)`; pa.stroke=b.col; pa["stroke-width"]="1.5"; }
+    else if(cls==="canBuy"){ pa.fill=`rgba(${c[0]},${c[1]},${c[2]},0.34)`; pa.stroke=b.col; pa["stroke-width"]="2.1"; }
+    else if(cls==="dimGold"){ pa.fill="rgba(64,52,14,0.72)"; pa.stroke="rgba(255,182,39,0.75)"; pa["stroke-width"]="1.4"; }
+    else { pa.fill="rgba(11,28,36,0.82)"; pa.stroke="#31485a"; pa["stroke-width"]="1.2"; }
+    return {cls,pa,title:`${p.nm} — ${price?fmtCoin(price)+"c":"free"}${cls==="gated"?" (gated)":""}`,
+      lines:(()=>{ const w2=p.nm.split(" "); if(w2.length===1) return [p.nm]; const cut=Math.ceil(w2.length/2); return [w2.slice(0,cut).join(" "), w2.slice(cut).join(" ")]; })()};
+  }
+  let hexEls=[];
+  function buildTree(){
+    if(!branches) return;
+    const SVGNS="http://www.w3.org/2000/svg";
+    treeWheel.innerHTML="";
+    hexEls=[];
+    const svg=document.createElementNS(SVGNS,"svg");
+    svg.setAttribute("viewBox","0 0 1400 1400"); svg.setAttribute("class","svgwheel");
+    const mk=(tag,at)=>{ const el=document.createElementNS(SVGNS,tag); for(const k in at) el.setAttribute(k,at[k]); return el; };
+    const cx=700, cy=700, HX=26, rad=d=>d*Math.PI/180;
+    branches.forEach((b,bi)=>{
+      /* branch spokes: tiers walk outward; hub sits at the centre */
+      const base=-90+bi*(360/branches.length);
+      b.tiers.forEach((t,ti)=>{
+        if(!PAL_BYT[t]) return;
+        const rr=67.6+ti*1.5*HX;
+        const wig2=(bi+ti)%2===0?-0.35:0.35;
+        const a=rad(base+(ti===0?0:wig2));
+        const x=cx+Math.cos(a)*rr, y=cy+Math.sin(a)*rr, s=hexState(t);
+        const g=mk("g",{class:`hexC ${s.cls}`,transform:`translate(${x.toFixed(1)},${y.toFixed(1)})`, "data-t":String(t)});
+        let pts=""; for(let k=0;k<6;k++){ const aa=rad(60*k+30); pts+=(HX*Math.cos(aa)).toFixed(1)+","+(HX*Math.sin(aa)).toFixed(1)+" "; }
+        const poly=mk("polygon",{points:pts.trim(),class:"hex",...s.pa});
+        g.appendChild(poly);
+        const title=mk("title",{}); title.textContent=s.title; g.appendChild(title);
+        const lines=s.lines, long=Math.max(...lines.map(L=>L.length));
+        const fs=Math.max(9.5,Math.min(HX*0.66,(HX*1.55)/Math.max(1,long)*1.25));
+        const y0=(-(lines.length-1)*0.62)*HX*0.66+HX*0.18;
+        lines.forEach((ln2,k2)=>{ const tx=mk("text",{x:0,y:(y0+k2*HX*0.82).toFixed(1),"text-anchor":"middle","font-size":fs.toFixed(1)}); tx.textContent=ln2; g.appendChild(tx); });
+        g.addEventListener("click",()=>{
+          const now=performance.now(), dbl=dblTt===t&&now-dblT<450;
+          dblTt=dbl?-1:t; dblT=now;
+          tapTool(t);
+          if(dbl) quickAction(t);
+        });
+        g.addEventListener("pointerenter",()=>{ if(sheetTool!==t){ sheetTool=t; renderSheet(); } });
+        svg.appendChild(g);
+        hexEls.push({t,g,poly,title});
+      });
+      const li=Math.min(b.tiers.length-1,11), lr=67.6+li*1.5*HX+HX*2.2;
+      const lx=cx+Math.cos(rad(base))*lr, ly=cy+Math.sin(rad(base))*lr;
+      const rot=((base%360)+360)%360, flip=(rot>90&&rot<270)?rot+180:rot;
+      const label=mk("text",{x:lx.toFixed(1),y:ly.toFixed(1),"text-anchor":"middle","font-size":HX*0.72,"font-weight":"800",fill:b.col,transform:`rotate(${flip} ${lx.toFixed(1)} ${ly.toFixed(1)})`,"letter-spacing":".12em"});
+      label.textContent=b.name.toUpperCase(); svg.appendChild(label);
+    });
+    let hpts=""; for(let k=0;k<6;k++){ const a=rad(60*k+30); hpts+=(23*Math.cos(a)).toFixed(1)+","+(23*Math.sin(a)).toFixed(1)+" "; }
+    svg.appendChild(mk("polygon",{points:hpts.trim(),fill:"rgba(142,240,42,0.22)",stroke:"rgba(142,240,42,0.65)","stroke-width":"2",transform:`translate(${cx},${cy})`}));
+    treeWheel.appendChild(svg);
+    requestAnimationFrame(()=>{ treeWheel.scrollTop=(treeWheel.scrollHeight-treeWheel.clientHeight)/2; treeWheel.scrollLeft=(treeWheel.scrollWidth-treeWheel.clientWidth)/2; });
+  }
+  function refreshWheel(){
+    for(const h of hexEls){
+      const s=hexState(h.t);
+      h.g.setAttribute("class",`hexC ${s.cls}`+(sheetTool===h.t?" sel":""));
+      for(const k of ["fill","stroke","stroke-width"]) h.poly.setAttribute(k,s.pa[k]);
+      h.title.textContent=s.title;
+    }
+  }
+  function renderSheet(){
+    const t=sheetTool, p=PAL_BYT[t]; if(!p) return;
+    const c=curColRGB(p), ownedNow=mpOwned(t), tier=meUpg[t]||0;
+    tsDot.style.background=`rgb(${c[0]},${c[1]},${c[2]})`;
+    tsName.textContent=p.nm; tsTier.textContent=TIER_NAME[tier]||"";
+    tsPrice.textContent=!ownedNow?fmtCoin(p.cost)+"c":(t===tool?"EQUIPPED":"OWNED");
+    tsPrice.style.color=ownedNow?"var(--toxic)":"var(--amber)";
+    tsUp.style.display=ownedNow?"":"none";
+    if(ownedNow){ const uc=upgCostMP(p);
+      tsUp.textContent=tier>=3?"MAX TIER":`⬆ ${TIER_NAME[tier+1]||"II"} — ${fmtCoin(uc)}`;
+      tsUp.disabled=tier>=3||meCoins<uc; }
+    tsBuy.textContent=ownedNow?(t===tool?"EQUIPPED":"EQUIP"):(mpGateOK(t)?`UNLOCK — ${fmtCoin(p.cost)}c`:"GATED");
+    tsBuy.disabled=ownedNow?(t===tool):(!mpGateOK(t)||meCoins<p.cost);
+    tsSell.style.display=(sellMode&&p.cost>0&&unlocked.has(t))?"":"none";
+    if(tsSell.style.display==="") tsSell.textContent=`SELL +${fmtCoin(Math.round(p.cost))}c`;
+    tsCol.value=rgbToHex(c);
+    tcN.textContent=fmtCoin(meCoins);
+    if(!ownedNow){ const pos=BRANCH_OF[t];
+      tsMsg.textContent=pos&&pos.i>0&&!mpGateOK(t)?`Gated — unlock ${PAL_BYT[branches[pos.b].tiers[pos.i-1]].nm} first`
+        :`UNLOCK for ${fmtCoin(p.cost)}c below — double-tap the hex to buy instantly`;
+    } else tsMsg.textContent=t===tool?"Painting is free once unlocked":"Owned — tap EQUIP, double-tap the hex to upgrade";
+  }
+  function tapTool(t){
+    const p=PAL_BYT[t]; if(!p) return;
+    if(sellMode&&p.cost>0&&unlocked.has(t)){ send({t:"sell",tool:t}); }
+    else if(mpOwned(t)){ tool=t; markSel(); }
+    sheetTool=t; renderSheet();
+  }
+  function sheetAction(t2){
+    const t=t2===undefined?sheetTool:t2, p=PAL_BYT[t]; if(!p) return;
+    if(mpOwned(t)){ tool=t; markSel(); renderSheet(); return; }
+    if(!mpGateOK(t)){ tsMsg.textContent="Gated — unlock the previous tier first"; return; }
+    send({t:"unlock",tool:t});
+  }
+  function upgradeTool(t){ const p=PAL_BYT[t]; if(!p||!mpOwned(t)||(meUpg[t]||0)>=3) return; 
+    const uc=upgCostMP(p); if(meCoins<uc) return;
+    send({t:"upgrade",what:"weapon",tool:t}); }
+  function quickAction(t){ const p=PAL_BYT[t]; if(!p||sellMode) return;
+    if(mpOwned(t)) upgradeTool(t); else sheetAction(t); }
+  function openTree(){ if(!branches) return; treeOpen=true; $("tree").classList.remove("hidden"); sheetTool=tool; renderSheet(); refreshWheel();
+    requestAnimationFrame(()=>{ treeWheel.scrollTop=(treeWheel.scrollHeight-treeWheel.clientHeight)/2; treeWheel.scrollLeft=(treeWheel.scrollWidth-treeWheel.clientWidth)/2; }); }
+  function closeTree(){ treeOpen=false; $("tree").classList.add("hidden"); }
+  $("treeClose").onclick=closeTree;
+  addEventListener("keydown",e=>{ if(e.key==="Escape"&&treeOpen) closeTree(); });
+  tsBuy.onclick=()=>sheetAction();
+  tsUp.onclick=()=>upgradeTool(sheetTool);
+  tsSell.onclick=()=>{ if(!sellMode) return; tapTool(sheetTool); };
+  tsCol.oninput=e=>{ skin[sheetTool]=hexToRgb(e.target.value); try{localStorage.setItem("as_skins",JSON.stringify(skin));}catch{} applyColors(); renderSheet(); };
+  document.getElementById("treeBtn").addEventListener("click",openTree);
+  window.__mecoins=0;
+  window.__treeAPI={ get branches(){return branches;}, get open(){return treeOpen;}, buildTree, refreshWheel, openTree, closeTree,
+    setSheet:(t2)=>{ sheetTool=t2; renderSheet(); }, sheetAction, mpGateOK };
+
+  const NEW_B=23;
+  const BOMB_PAT={
+    [6]:  {dark:[128,28,24],  base:[226,58,58],  stripe:[242,222,198], tip:[255,240,200]},
+    [19]: {dark:[46,54,62],   base:[74,84,96],   stripe:[232,192,44],  tip:[122,132,144]},
+    [20]: {dark:[34,40,48],   base:[64,74,86],   stripe:[255,124,32],  tip:[150,160,172]},
+    [25]: {dark:[52,58,26],   base:[200,210,74], stripe:[242,242,190], tip:[222,228,120]},
+    [26]: {dark:[72,60,20],   base:[224,168,50], stripe:[250,220,140], tip:[250,238,170]},
+    [27]: {dark:[58,46,22],   base:[154,122,58], stripe:[212,182,122], tip:[196,168,120]},
+    [28]: {dark:[72,34,16],   base:[255,126,58], stripe:[255,202,142], tip:[255,220,170]},
+    [34]: {dark:[66,22,10],   base:[255,90,42],  stripe:[255,232,162], tip:[255,190,120]},
+    [36]: {dark:[30,48,72],   base:[143,191,255],stripe:[232,246,255], tip:[200,228,255]},
+    [38]: {dark:[30,48,72],   base:[159,216,255],stripe:[237,250,255], tip:[220,240,255]},
+    [56]: {dark:[62,50,30],   base:[178,142,82], stripe:[222,82,62],   tip:[244,160,120]},
+  };
+  const ATLAS={cnv:null, tiles:{}};
+  const MOB={cnv:null};
+  const ap=(g,x2,y2,col)=>{ g.fillStyle=col; g.fillRect(x2,y2,1,1); };
+  function makeAtlas(){
+    const keys=Object.keys(BOMB_PAT);
+    const cnv=document.createElement("canvas"); cnv.width=9; cnv.height=9*keys.length;
+    const g=cnv.getContext("2d");
+    keys.forEach((k,i)=>{ const y=i*9, d=BOMB_PAT[k];
+      for(let r=0;r<9;r++){ const inset=(r===0||r===8)?3:(r===1||r===7)?1:0;
+        for(let c=inset;c<9-inset;c++) ap(g,c,y+(8-r),`rgb(${d.dark[0]},${d.dark[1]},${d.dark[2]})`); }
+      for(let r=2;r<7;r++){ const inset=(r===2||r===6)?1:0;
+        for(let c=1+inset;c<8-inset;c++) ap(g,c,y+(8-r),(r>=3&&r<=5)?`rgb(${d.base[0]},${d.base[1]},${d.base[2]})`:`rgb(${d.dark[0]},${d.dark[1]},${d.dark[2]})`); }
+      for(let c=2;c<7;c++) ap(g,c,y+5,`rgb(${d.stripe[0]},${d.stripe[1]},${d.stripe[2]})`);
+      ap(g,2,y+2,`rgb(${d.tip[0]},${d.tip[1]},${d.tip[2]})`); ap(g,3,y+2,`rgb(${d.tip[0]},${d.tip[1]},${d.tip[2]})`);
+      ap(g,6,y+6,"rgba(0,0,0,.35)");
+      ATLAS.tiles[k]=i; });
+    ATLAS.cnv=cnv;
+    const mob=document.createElement("canvas"); mob.width=3; mob.height=9;
+    const m2=mob.getContext("2d");
+    const SK="#e5b08c", HA="#4a3020", SH="#4a86d0", PA="#34404e";
+    ap(m2,1,0,HA); ap(m2,2,0,HA);
+    ap(m2,0,1,SK); ap(m2,1,1,SK); ap(m2,2,1,SK);
+    for(let c=0;c<3;c++) ap(m2,c,2,SH);
+    ap(m2,0,3,SK); ap(m2,1,3,SH); ap(m2,2,3,SK);
+    for(let c=0;c<3;c++) ap(m2,c,4,PA);
+    ap(m2,0,5,PA); ap(m2,2,5,PA);
+    ap(m2,1,6,"#ffcf2c"); ap(m2,0,7,"#ffcf2c"); ap(m2,2,7,"#ffcf2c");
+    ap(m2,1,7,"#ffe98e"); ap(m2,0,8,"#c98a08"); ap(m2,1,8,"#8a5c00"); ap(m2,2,8,"#c98a08");
+    MOB.cnv=mob;
+  }
+  const mpops=[];
+  window.__spritePass=function(){
+    if(!ATLAS.cnv) makeAtlas();
+    if(!window.__LUT83){ LUT[82]=[196,16,30]; LUT[83]=[150,148,148]; LUT[84]=[212,220,224]; LUT[85]=[226,42,44]; LUT[86]=[8,22,28]; LUT[87]=[255,207,44]; window.__LUT83=true; }
+    const at=ATLAS.cnv, mob=MOB.cnv;
+    for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+      const tj=grid[y*COLS+x];
+      if(tj>=NEW_B||tj===0) continue;
+      if(BOMB_PAT[tj]){ const r2=ATLAS.tiles[tj]*9;
+        sctx.drawImage(at,0,r2,9,9, Math.max(0,x-4), Math.max(0,y-4), 9, 9); }
+      else if(tj===86) sctx.drawImage(mob,0,0,3,6, x-1, Math.max(0,y-5), 3, 6);
+      else if(tj===87) sctx.drawImage(mob,0,6,3,3, x-1, Math.max(0,y-1), 3, 3);
+    }
+  };
+  window.__setTreeCoins=()=>{};
+  const prevHud=hud;
+  hud=function(meta){ const me=meta.players[mySide]; everSet=new Set(me.ever||[]); meCoins=Math.floor(me.coins); window.__mecoins=meCoins;
+    if(!Object.keys(PAL_BYT).length&&palette.length){ PAL_BYT={}; palette.forEach(p2=>{ PAL_BYT[p2.t]=p2; }); }
+    prevHud(meta);
+    if(treeOpen){ if(!hexEls.length) buildTree(); refreshWheel(); renderSheet(); } };
+  const prevHandle=handle;
+  handle=function(m){ if(m.t==="start"&&m.branches){ branches=m.branches; BRANCH_OF={};
+      m.branches.forEach((b,bi)=>b.tiers.forEach((t2,ti)=>{ if(BRANCH_OF[t2]===undefined) BRANCH_OF[t2]={b:bi,i:ti}; }));
+      branches=m.branches; }
+    if(m.t==="picks"&&m.picks){ for(const pk of m.picks){ if(pk.s===mySide) mpops.push({x:pk.x,y:pk.y,t:1,a:pk.v}); } }
+    prevHandle(m); };
+  const prevRender=render;
+  render=function(){ prevRender(); if(started&&grid){ window.__spritePass();
+    let px2=0; const sc=cv.width/COLS;
+    for(let k=mpops.length-1;k>=0;k--){ const pq=mpops[k]; pq.t-=0.05; pq.y-=0.5;
+      if(pq.t<=0){ mpops.splice(k,1); continue; }
+      const tx=(mirror?COLS-1-pq.x:pq.x)*sc, ty=pq.y*sc-10-pq.t*18;
+      ctx.font="800 "+Math.round(sc*2.2)+"px Outfit, sans-serif";
+      ctx.globalAlpha=Math.max(0,Math.min(1,pq.t<0.3?pq.t/0.3:1));
+      ctx.textAlign="center"; ctx.lineWidth=Math.max(2,sc*0.7); ctx.lineJoin="round";
+      ctx.strokeStyle="rgba(16,22,12,0.85)"; const txt="+"+fmtCoin(Math.round(pq.a));
+      ctx.strokeText(txt,tx,ty); ctx.fillStyle="#ffdf8a"; ctx.fillText(txt,tx,ty); }
+    ctx.globalAlpha=1; } };
+})();
+
 </script>
 </body>
 </html>
