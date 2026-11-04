@@ -72,7 +72,7 @@
 
 #tools{display:block}
   .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
-  #treeWheel svg.svgwheel{flex:none;height:100%;width:auto;max-width:max(97%,720px);margin:auto}
+  #treeWheel svg.svgwheel{flex:none;width:max(96%,720px);height:auto;margin:0 auto}
   .svgwheel .ring{fill:none;stroke:var(--line);stroke-dasharray:2 7;stroke-width:1}
   .svgwheel .hexC{cursor:pointer}
   .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
@@ -453,10 +453,11 @@
     <div id="treeHead" style="flex:none;display:flex;align-items:center;gap:14px;padding:16px 20px 8px">
       <span style="font-family:Bungee,sans-serif;font-size:clamp(24px,4.4vw,40px);color:var(--toxic);letter-spacing:.04em;text-shadow:0 0 26px rgba(142,240,42,.35)">ARSENAL</span>
       <span style="font:800 14px/1 Outfit,sans-serif;color:var(--gold);font-variant-numeric:tabular-nums" id="treeCoins">🪙 <b id="tcN">0</b></span>
+      <span id="treePause" style="font:800 12px/1 Outfit,sans-serif;color:var(--gold);display:none">⏸ GAME PAUSED</span>
       <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward — click to select · double-click to buy/upgrade</span>
       <button class="btn alt" id="treeClose" style="width:auto;padding:10px 16px">✕ CLOSE</button>
     </div>
-    <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:flex-start;padding:4px 10px"></div>
+    <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:flex-start;padding:96px 10px 24px"></div>
     <div id="treeFoot" style="flex:none;padding:6px 16px calc(14px + env(safe-area-inset-bottom));max-width:860px;width:100%;margin:0 auto">
       <div class="tsheet" id="toolSheet">
         <div class="tsrow">
@@ -503,7 +504,7 @@ const EMPTY=0, SAND=1, WATER=2, ACID=3, FIRE=4, WOOD=5, TNT=6, WALL=7,
       MAGMA=17, NAPALM=18, NUKE=19, HBOMB=20, ANTIMATTER=21, VIRUS=22,
       NEW_BASE=23;   // procedurally-defined super-weapon tiers occupy ids 23+
 const PB=80, PLANT=81, BLOOD=82, ASH=83,             // life stuff: peanut butter, growing plants, gore
-      HUMAN=86;                                      // paintable walker (for fun) — sprite is drawn 1 art-px per cell
+      HUMAN=86, HUMAN_BODY=88;                        // paintable walker; invisible 3x6 hitbox filler (renders as bg)
 
 // ---- city tier colors (8 base colors that cycle forever) ----
 const TIERS=[
@@ -627,6 +628,7 @@ function applyDamage(i,dmg,deathType,scaled){
   const leftover=eff-hp;
   if(t===CITY) damageCity(1,i%COLS,(i/COLS)|0);
   else if(t===PCITY) damagePCity(1);
+  else if(t===HUMAN_BODY) killHumanNear(i%COLS,((i/COLS)|0),false);   // a shot on the body downed the person
   else if(t===PLANT) plantCount--;                             // plants cap their own spread (dying leaves the budget)
   if(deathType===undefined||deathType===EMPTY){ grid[i]=EMPTY; origin[i]=ORIGIN_NONE; health[i]=0; }
   else { grid[i]=deathType; health[i]=BASE_HP[deathType]||0; }     // e.g. virus converts on kill
@@ -645,7 +647,7 @@ function clearArena(){ for(let i=0;i<grid.length;i++){ if(grid[i]!==WALL){ grid[
 function clearLoose(){   // between waves: wipe loose particles + old enemy city, but KEEP the player's city
   for(let i=0;i<grid.length;i++){
     const t=grid[i];
-    if(t===WALL||t===PCITY||t===HUMAN||t===PLANT) continue;         // the living city endures between waves
+    if(t===WALL||t===PCITY||t===HUMAN||t===HUMAN_BODY||t===PLANT) continue;   // the living city endures between waves
     grid[i]=EMPTY; origin[i]=0; health[i]=0;
   }
 }
@@ -795,7 +797,7 @@ function blastPass(cx,cy,R,fireProb,dmg,oc,onBomb){
     const j=I(x,y), tj=grid[j];
     if(tj===EMPTY||tj===WALL) continue;
     if(onBomb&&(tj===TNT||tj===NUKE||tj===HBOMB||BOMB_PAT[tj])){ onBomb(j,tj); continue; }
-    if(tj===HUMAN){ dieHuman(j,Math.random()<0.5); continue; }         // caught in a blast → gore
+    if(tj===HUMAN||tj===HUMAN_BODY){ killHumanNear(x,y,Math.random()<0.5); continue; }   // a blast on the body → splat
     if(BASE_HP[tj]!==undefined){ applyDamage(j,dmg); continue; }      // city/solids take the blast (+ overkill spill)
     if(Math.random()<fireProb){ grid[j]=FIRE; origin[j]=oc; } else { grid[j]=EMPTY; origin[j]=ORIGIN_NONE; }
     moved[j]=1;
@@ -1111,42 +1113,115 @@ function dieHuman(i,burned){                                  // gore: red blood
   grid[i]=burned && Math.random()<0.7 ? ASH : BLOOD;
   health[i]=0; moved[i]=1;
 }
-function stepHuman(x,y,i){                                    // walkers: real falling-sand physics
-  /* anything lethal touching the walker ends it: fire-class burns → ash, acid/goo-class → blood */
-  if(i%COLS>0){ const t2=grid[i-1];
-    if(t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER){ dieHuman(i,true); return; }
-    if(t2===ACID||(t2>=NEW_BASE&&DEFBYID[t2])){ dieHuman(i,false); return; } }
-  if(i%COLS<COLS-1){ const t2=grid[i+1];
-    if(t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER){ dieHuman(i,true); return; }
-    if(t2===ACID||(t2>=NEW_BASE&&DEFBYID[t2])){ dieHuman(i,false); return; } }
-  { const t2=grid[i-COLS];
-    if(t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER){ dieHuman(i,true); return; }
-    if(t2===ACID||(t2>=NEW_BASE&&DEFBYID[t2])){ dieHuman(i,false); return; } }
-  { const t2=grid[i+COLS];
-    if(t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER){ dieHuman(i,true); return; }
-    if(t2===ACID||(t2>=NEW_BASE&&DEFBYID[t2])){ dieHuman(i,false); return; } }
-  /* burial: pinned under dense rubble (sand/glass/wood/stone/city) → crushed to blood */
-  if(y>0){ const t3=grid[i-COLS];
-    if(t3===SAND||t3===GLASS||t3===WOOD||t3===STONE||t3===CITY||t3===PCITY){ dieHuman(i,false); return; } }
-  /* fall */
-  if(y+1<ROWS){ const d=i+COLS, dj=grid[d];
-    if(dj===EMPTY||isGas(dj)){ swap(i,d); return; }
+/* ---- walker hitbox: the sprite's 3x6 cells are REAL — the anchor is the feet, HUMAN_BODY cells
+   fill the rest of the body; the body blocks the world (sand piles on the head), and any wound
+   anywhere on it splatters the whole person ---- */
+const BODY_DXY=[];
+for(let dy=-5;dy<=0;dy++)for(let dx=-1;dx<=1;dx++){ if(dx===0&&dy===0) continue; BODY_DXY.push([dx,dy]); }
+function bodyFit(x,y){
+  for(const [dx,dy] of BODY_DXY){ const bx=x+dx, by=y+dy;
+    if(!inB(bx,by) || by===FLOOR_Y) return false;
+    const t=grid[I(bx,by)];
+    if(t!==EMPTY && !isGas(t)) return false;
   }
-  /* slope slide: solid underfoot but an open lower diagonal → tumble down the slope */
-  if(y+1<ROWS){
-    const ds=Math.random()<0.5?-1:1, dl=ds<0?i-1:i+1, dr2=ds<0?i+1:i-1;
-    if(x+ds>=0&&x+ds<COLS && grid[dl+COLS]===EMPTY){ swap(i,dl+COLS); return; }
-    if(x-ds>=0&&x-ds<COLS && grid[dr2+COLS]===EMPTY){ swap(i,dr2+COLS); return; }
+  return true;
+}
+function bodyStamp(x,y,s){                                    // fill the hitbox around the anchor (free cells only)
+  for(const [dx,dy] of BODY_DXY){ const bx=x+dx, by=y+dy;
+    if(!inB(bx,by)) continue;
+    const i2=I(bx,by);
+    if(grid[i2]===EMPTY||isGas(grid[i2])){ grid[i2]=HUMAN_BODY; origin[i2]=s; health[i2]=0; moved[i2]=0; }
   }
-  /* wander sideways — but only inside their own city's borders */
+}
+function bodyClear(x,y){                                      // un-fill those cells (only its own body cells)
+  for(const [dx,dy] of BODY_DXY){ const bx=x+dx, by=y+dy;
+    if(!inB(bx,by)) continue;
+    const i2=I(bx,by);
+    if(grid[i2]===HUMAN_BODY){ grid[i2]=EMPTY; origin[i2]=ORIGIN_NONE; health[i2]=0; moved[i2]=1; }
+  }
+}
+function killHumanAt(ax,ay,burned){                           // the whole person goes down with a splat
+  const main=burned?ASH:BLOOD, alt=burned?BLOOD:ASH;
+  for(let dy2=-5;dy2<=0;dy2++)for(let dx2=-1;dx2<=1;dx2++){
+    const bx=ax+dx2, by=ay+dy2; if(!inB(bx,by)||by===FLOOR_Y) continue;
+    const i2=I(bx,by), t2=grid[i2];
+    if(t2===HUMAN||t2===HUMAN_BODY||t2===EMPTY||isGas(t2)){ grid[i2]=Math.random()<0.82?main:alt; origin[i2]=ORIGIN_NONE; health[i2]=0; moved[i2]=1; }
+  }
+}
+function killHumanNear(x,y,burned){                           // a wound anywhere on the body → find the person → splat
+  for(let dy2=0;dy2<=6;dy2++)for(let dx2=-2;dx2<=2;dx2++){
+    const ax=x+dx2, ay=y+dy2; if(!inB(ax,ay)) continue;
+    if(grid[I(ax,ay)]===HUMAN){ killHumanAt(ax,ay,burned); return; }
+  }
+  killHumanAt(x,y,burned);
+}
+function stepHumanBody(x,y,i){                                // hitbox cells: scan for fire/acid around the body, else static
+  for(let k=0;k<4;k++){
+    const dx=k===0?-1:k===1?1:0, dy=k===0||k===1?0:(k===2?-1:1);
+    const nx=x+dx, ny=y+dy; if(!inB(nx,ny)) continue;
+    const t2=grid[I(nx,ny)];
+    const lethal=(t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER);
+    if(lethal || t2===ACID || (t2>=NEW_BASE&&DEFBYID[t2])){ killHumanNear(nx,ny,lethal); return; }
+  }
+}
+function stepHuman(x,y,i){                                    // walkers: rigid 3x6 physics on the grid
+  tryWound(x,y,i,grid[i]===HUMAN);                            // hazards around the feet (lava/floor class)
+  /* keep the hitbox whole: the eraser can't dismember; damage kills instead */
+  bodyPatch(x,y);
+  /* burial: dense rubble resting on the head row → crushed */
+  const hy=y-6;
+  if(hy>=0){ for(let dx=-1;dx<=1;dx++){ const t4=grid[I(x+dx,hy)];
+    if(t4===SAND||t4===GLASS||t4===WOOD||t4===STONE||t4===CITY||t4===PCITY){ killHumanAt(x,y,false); return; } } }
+  /* rigid fall: the whole 3x6 block drops a cell, all three feet open */
+  if(y+1<ROWS && fitShift(x,y,0,1)) { shiftBox(x,y,0,1); return; }
+  /* slope slide: solid underfoot but an open lower diagonal on a shifted side */
+  if(fitShift(x,y,1,1)){ shiftBox(x,y,1,1); return; }
+  if(fitShift(x,y,-1,1)){ shiftBox(x,y,-1,1); return; }
+  /* wander / hop */
   const side=origin[i]===ORIGIN_PLAYER?1:2;
   const dir=Math.random()<0.5?-1:1, nx=x+dir;
-  const inside=side===1?(nx>=1&&nx<=P_END-1):(nx>=E_START+1&&nx<=COLS-2);
-  if(inside && Math.random()<0.30){
-    const j2=nx+y*COLS, tj=grid[j2];
-    if(tj===EMPTY||isGas(tj)) swap(i,j2);
+  const inside=side===1?(nx>=1&&nx<=P_END-2):(nx>=E_START+1&&nx<=COLS-3);
+  if(inside && Math.random()<0.30 && fitShift(x,y,dir,0)){ shiftBox(x,y,dir,0); }
+  else if(Math.random()<0.05 && y>7 && fitShift(x,y,0,-2)){ shiftBox(x,y,0,-2); }   // real jump: 2 cells up, gravity gives hang-time
+}
+/* ---- rigid-body helpers (used only by stepHuman) ---- */
+function fitShift(x,y,dx,dy){                                 // can the whole 3x6 box move by (dx,dy)?
+  const nx=x+dx, ny=y+dy; if(ny<0||ny>ROWS-1) return false;
+  for(let dy2=-5;dy2<=0;dy2++)for(let dx2=-1;dx2<=1;dx2++){
+    const bx=nx+dx2, by=ny+dy2; if(!inB(bx,by)||by===FLOOR_Y) return false;
+    const t=grid[I(bx,by)];
+    if(t===EMPTY||isGas(t)) continue;                          // target free…
+    if(dx2+dx>=-1&&dx2+dx<=1 && dy2+dy>=-5&&dy2+dy<=0) continue;   // …or part of my own body (it vacates)
+    return false;                                              // blocked by real world/cells — walkers can't overlap
   }
-  else if(Math.random()<0.05 && y>0 && grid[i-COLS]===EMPTY){ swap(i,i-COLS); return; }   // happy little hop (and climbs 1-high ledges)
+  return true;
+}
+function shiftBox(x,y,dx,dy){                                 // rigid move: clear, drop the anchor in the new cell, re-fill
+  const nx=x+dx, ny=y+dy, os=origin[I(x,y)];
+  bodyClear(x,y);
+  const ia=I(x,y);
+  grid[ia]=EMPTY; health[ia]=0; moved[ia]=1;
+  const j=I(nx,ny);
+  grid[j]=HUMAN; origin[j]=os; health[j]=0; moved[j]=0;
+  bodyStamp(nx,ny,os);
+}
+function bodyPatch(x,y){                                      // refill body cells eaten between steps
+  for(const [dx,dy] of BODY_DXY){ const bx=x+dx, by=y+dy;
+    if(!inB(bx,by)) continue;
+    const i2=I(bx,by);
+    if(grid[i2]===EMPTY||isGas(grid[i2])){ grid[i2]=HUMAN_BODY; origin[i2]=ORIGIN_PLAYER; health[i2]=0; moved[i2]=0; }
+  }
+}
+function tryWound(x,y,i,anchored){                            // feet-zone hazards + wound routing
+  for(const [dx,dy] of BODY_DXY){ void dx; void dy; }         // body cells handled by stepHumanBody
+  const ns=[i-COLS,i+COLS,i-1,i+1];
+  for(const i2 of ns){
+    if(i2<0||i2>=grid.length) continue;
+    const t2=grid[i2];
+    const lethal=t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER;
+    if(lethal){ killHumanNear(x,y,true); return; }
+    if(t2===ACID||(t2>=NEW_BASE&&DEFBYID[t2])){ killHumanNear(x,y,false); return; }
+  }
 }
 function step(){
   moved.fill(0);
@@ -1177,6 +1252,7 @@ function step(){
         case PLANT: stepPlant(x,y,i); break;
         case BLOOD: case ASH: stepBloodOrAsh(x,y,i); break;
         case HUMAN: stepHuman(x,y,i); break;
+        case HUMAN_BODY: stepHumanBody(x,y,i); break;
         default: if(grid[i]>=NEW_BASE) stepNew(x,y,i); break;   // super-weapon tiers
         // WALL, CITY, PCITY are static structure
       }
@@ -1337,6 +1413,7 @@ function baseColor(t,i){
     case HBOMB: O[0]=70+j*0.3; O[1]=78; O[2]=92; return O;
     case ANTIMATTER:O[0]=70+((Math.random()*90)|0); O[1]=0; O[2]=90+((Math.random()*110)|0); return O;
     case VIRUS: O[0]=150+j; O[1]=40; O[2]=150+((Math.random()*40)|0); return O;
+    case HUMAN_BODY: O[0]=BG[0]; O[1]=BG[1]; O[2]=BG[2]; return O;
     case PB:    O[0]=196+(j*0.6|0); O[1]=142+(j*0.6|0); O[2]=78+(j*0.4|0); return O;        // thick warm peanut-brown
     case PLANT: O[0]=36+(j&7)*3; O[1]=168+((j&7)*7); O[2]=72+(j*0.4|0); return O;           // leafy green
     case BLOOD: O[0]=205+((Math.random()*28)|0); O[1]=16; O[2]=24; return O;                // red blood
@@ -1743,7 +1820,10 @@ function place(gx,gy){
     const now=performance.now();
     if(now-lastHumanT<420) return;
     const i=I(gx,gy), t=grid[i];
-    if(inB(gx,gy) && gy!==FLOOR_Y && (t===EMPTY||isGas(t))){ grid[i]=HUMAN; origin[i]=ORIGIN_PLAYER; health[i]=0; moved[i]=0; lastHumanT=now; }
+    if(inB(gx,gy) && gy>=6 && gy!==FLOOR_Y && (t===EMPTY||isGas(t)) && bodyFit(gx,gy)){
+      grid[i]=HUMAN; origin[i]=ORIGIN_PLAYER; health[i]=0; moved[i]=0;
+      bodyStamp(gx,gy,ORIGIN_PLAYER); lastHumanT=now;
+    }
     return;
   }
   for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
@@ -2138,14 +2218,20 @@ function setModeUI(){                                   // menu mode choose: hid
   document.getElementById("curTool").style.display=classicMode?"none":"";
   document.getElementById("classicTools").style.display=classicMode?"":"none";
 }
-let treeOpen=false;
+let treeOpen=false, treeOpenAt=0;
 function openTree(){
   if(classicMode) return;
   treeOpen=true; document.getElementById("tree").classList.remove("hidden");
+  treeOpenAt=performance.now(); document.getElementById("treePause").style.display="";
   hudTreeCoins=-1; sheetTool=tool; renderTools();       // fresh state + focus the current tool
   centerTree();                                          // hub in view; long spokes pan
 }
-function closeTree(){ treeOpen=false; document.getElementById("tree").classList.add("hidden"); }
+function closeTree(){                                     // the game was paused — shift bot clocks by the pause length
+  if(treeOpen){ const d=performance.now()-(treeOpenAt||performance.now());
+    botHoldUntil+=d; botNextMs+=d; treeOpenAt=0; }
+  treeOpen=false; document.getElementById("tree").classList.add("hidden");
+  document.getElementById("treePause").style.display="none";
+}
 document.getElementById("treeBtn").onclick=openTree;
 document.getElementById("treeClose").onclick=closeTree;
 addEventListener("keydown",e=>{ if(e.key==="Escape"&&treeOpen) closeTree(); });

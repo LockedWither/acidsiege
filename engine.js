@@ -11,7 +11,7 @@ const EMPTY=0, SAND=1, WATER=2, ACID=3, FIRE=4, WOOD=5, TNT=6, WALL=7,
       ANTIMATTER=21, VIRUS=22, NEW_BASE=23,
       PB=80, PLANT=81,                                      // life add-ons shared ids
       BLOOD=82, ASH=83,                                     // gore: walkers bleed red or burn to ash
-      HUMAN=86;                                             // paintable walker (for fun) — sims mirror single-player
+      HUMAN=86, HUMAN_BODY=88;                              // paintable walker + invisible hitbox filler
 
 const COLS=180, ROWS=112;
 const FLOOR_Y=ROWS-1, CITY_THICK=18, GAP=10;
@@ -21,7 +21,7 @@ const HOSP_W=11, HOSP_H=8, HUMAN_CAP=14;
 const RAZE_RATIO=0.10;
 function coinReward(w){ return 4; }   // flat base 4
 
-const BASE_HP={ [SAND]:2,[GLASS]:4,[WOOD]:6,[STONE]:12,[CITY]:8,[PCITY]:8,[PLANT]:2 };
+const BASE_HP={ [SAND]:2,[GLASS]:4,[WOOD]:6,[STONE]:12,[CITY]:8,[PCITY]:8,[PLANT]:2,[HUMAN_BODY]:4 };
 const DMG    ={ [ACID]:4,[FIRE]:2,[NAPALM]:3,[VIRUS]:2,[LAVA]:5,[MAGMA]:8,[PLASMA]:12,[ANTIMATTER]:4000 };
 function cityProt(L){ const a=0.02*(L-1)*(L-1)*(L-1); const e=L>40?L-40:0; return Math.round(a + 0.18*e*e*e); }   // faster protection growth; ramps hard past lv40
 function coinLevelMult(L){ const m=Math.min(L,200), c=1+0.045*Math.pow(m-1,1.1); return L>200 ? c+(L-200)*0.05 : c; }   // climbs to ~lv200 then nearly flat — money slows late game
@@ -238,6 +238,7 @@ class Game {
     if(hp>eff){ this.health[i]=hp-eff; return; }
     const leftover=eff-hp;
     if(t===PCITY) this.hurtCity(0); else if(t===CITY) this.hurtCity(1);
+    else if(t===HUMAN_BODY) this.killHumanNear(i%COLS,(i/COLS)|0,false);   // a shot on the body downed the person
     if(deathType===undefined||deathType===EMPTY){ this.grid[i]=EMPTY; this.health[i]=0; }
     else { this.grid[i]=deathType; this.health[i]=BASE_HP[deathType]||0; }
     this.moved[i]=1;
@@ -253,7 +254,7 @@ class Game {
     for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){ if(dx*dx+dy*dy>R*R)continue;
       const x=cx+dx,y=cy+dy; if(!this.inB(x,y)||y===FLOOR_Y)continue; const j=this.I(x,y),tj=g[j];
       if(tj===WALL)continue;
-      if(tj===HUMAN){ this.dieHuman(j,rnd()<0.5); continue; }
+      if(tj===HUMAN||tj===HUMAN_BODY){ this.killHumanNear(x,y,rnd()<0.5); continue; }
       if(tj===TNT||tj===NUKE||tj===HBOMB)continue;
       if(BASE_HP[tj]!==undefined){ this.applyDamage(j,dmg*this.tmul(tj,wid)); continue; }
       if(rnd()<fp){ g[j]=FIRE; } else { g[j]=EMPTY; } this.moved[j]=1; } }
@@ -299,6 +300,7 @@ class Game {
           case PLANT: this.mPlant(x,y,i); break;
           case BLOOD: case ASH: this.mBloodAsh(x,y,i); break;
           case HUMAN: this.mHuman(x,y,i); break;
+          case HUMAN_BODY: this.stepHumanBody(x,y,i); break;
           default: if(t>=NEW_BASE) this.sNew(x,y,i); break;
         }
       }
@@ -337,32 +339,78 @@ class Game {
       if(x+dir2>=0&&x+dir2<COLS&&powderPass(g[l1])&&g[l1]!==ASH){ this.swap(i,l1); return; }
       if(x-dir2>=0&&x-dir2<COLS&&powderPass(g[l2])&&g[l2]!==ASH){ this.swap(i,l2); return; } } }
   dieHuman(i,burned){ this.grid[i]=burned&&rnd()<0.7?ASH:BLOOD; this.health[i]=0; this.moved[i]=1; }
-  mHuman(x,y,i){ const g=this.grid;
-    /* hazards: fire-class burns → ash, acid/goo-class → blood */
-    const burn=t2=>t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER;
-    const goo=t2=>t2===ACID||(t2>=NEW_BASE&&DEFBYID[t2]!==undefined&&DEFBYID[t2]);
-    if(i%COLS>0){ const t2=g[i-1]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
-    if(i%COLS<COLS-1){ const t2=g[i+1]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
-    if(i>=COLS){ const t2=g[i-COLS]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
-    if(i+COLS<g.length){ const t2=g[i+COLS]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
-    /* burial: pinned under dense rubble (sand/glass/wood/stone/city) → crushed to blood */
-    if(i>=COLS){ const t3=g[i-COLS];
-      if(t3===SAND||t3===GLASS||t3===WOOD||t3===STONE||t3===CITY||t3===PCITY){ this.dieHuman(i,false); return; } }
-    /* fall */
-    if(y+1<ROWS){ const d=i+COLS, dj=g[d]; if(dj===EMPTY||isGas(dj)){ this.swap(i,d); return; } }
-    /* slope slide: solid underfoot but an open lower diagonal → tumble down */
-    if(y+1<ROWS){
-      const ds=rnd()<0.5?-1:1, dl=ds<0?i-1:i+1, dr2=ds<0?i+1:i-1;
-      if(x+ds>=0&&x+ds<COLS && g[dl+COLS]===EMPTY){ this.swap(i,dl+COLS); return; }
-      if(x-ds>=0&&x-ds<COLS && g[dr2+COLS]===EMPTY){ this.swap(i,dr2+COLS); return; }
-    }
-    /* wander — clamped to their own city's bounds */
+  /* ---- walker hitbox: 3x6 real cells, mirrored from modes/singleplayer.html ---- */
+  static get BODY_DXY(){ if(!Game._bd){ const a=[]; for(let dy=-5;dy<=0;dy++)for(let dx=-1;dx<=1;dx++){ if(dx===0&&dy===0) continue; a.push([dx,dy]); } Game._bd=a; } return Game._bd; }
+  get bodyDXY(){ return Game.BODY_DXY; }
+  bodyFit(x,y){ const BD=this.bodyDXY;
+    for(const [dx,dy] of BD){ const bx=x+dx, by=y+dy;
+      if(!this.inB(bx,by)||by===FLOOR_Y) return false;
+      const t=this.grid[this.I(bx,by)];
+      if(t!==EMPTY&&!isGas(t)) return false; }
+    return true; }
+  bodyStamp(x,y,s){ const BD=this.bodyDXY;
+    for(const [dx,dy] of BD){ const bx=x+dx, by=y+dy;
+      if(!this.inB(bx,by)) continue;
+      const i=this.I(bx,by);
+      if(this.grid[i]===EMPTY||isGas(this.grid[i])){ this.grid[i]=HUMAN_BODY; this.health[i]=0; this.moved[i]=0; } } }
+  bodyClear(x,y){ const BD=this.bodyDXY;
+    for(const [dx,dy] of BD){ const bx=x+dx, by=y+dy;
+      if(!this.inB(bx,by)) continue;
+      const i=this.I(bx,by);
+      if(this.grid[i]===HUMAN_BODY){ this.grid[i]=EMPTY; this.health[i]=0; this.moved[i]=1; } } }
+  killHumanAt(ax,ay,burned){ const main=burned?ASH:BLOOD, alt=burned?BLOOD:ASH;
+    for(let dy2=-5;dy2<=0;dy2++)for(let dx2=-1;dx2<=1;dx2++){
+      const bx=ax+dx2, by=ay+dy2; if(!this.inB(bx,by)||by===FLOOR_Y) continue;
+      const i=this.I(bx,by), t=this.grid[i];
+      if(t===HUMAN||t===HUMAN_BODY||t===EMPTY||isGas(t)){ this.grid[i]=rnd()<0.82?main:alt; this.health[i]=0; this.moved[i]=1; } } }
+  killHumanNear(x,y,burned){
+    for(let dy2=0;dy2<=6;dy2++)for(let dx2=-2;dx2<=2;dx2++){
+      const ax=x+dx2, ay=y+dy2; if(!this.inB(ax,ay)) continue;
+      if(this.grid[this.I(ax,ay)]===HUMAN){ this.killHumanAt(ax,ay,burned); return; } }
+    this.killHumanAt(x,y,burned); }
+  stepHumanBody(x,y,i){ const g=this.grid;                    // hitbox cells: hazard scan, else static
+    this.ns4(x,y).forEach(([nx,ny])=>{ if(!this.inB(nx,ny)) return;
+      const t=g[this.I(nx,ny)];
+      if(t===FIRE||t===LAVA||t===MAGMA||t===PLASMA||t===NAPALM||t===ANTIMATTER||t===ACID||(t>=NEW_BASE&&DEFBYID[t])) this.killHumanNear(nx,ny,(t===FIRE||t===LAVA||t===MAGMA||t===PLASMA||t===NAPALM||t===ANTIMATTER)); }); }
+  fitShift(x,y,dx,dy){ const BD=this.bodyDXY;
+    const nx=x+dx, ny=y+dy; if(ny<0||ny>ROWS-1) return false;
+    for(const [dx2,dy2] of BD){
+      const bx=nx+dx2, by=ny+dy2; if(!this.inB(bx,by)||by===FLOOR_Y) return false;
+      const t=this.grid[this.I(bx,by)];
+      if(t===EMPTY||isGas(t)) continue;
+      if(dx2+dx>=-1&&dx2+dx<=1 && dy2+dy>=-5&&dy2+dy<=0) continue;   // my own body vacates
+      return false; }
+    return true; }
+  shiftBox(x,y,dx,dy){
+    const nx=x+dx, ny=y+dy, os=x<E_START?0:1;
+    this.bodyClear(x,y);
+    const ia=this.I(x,y);
+    this.grid[ia]=EMPTY; this.health[ia]=0; this.moved[ia]=1;
+    const j=this.I(nx,ny);
+    this.grid[j]=HUMAN; this.health[j]=0; this.moved[j]=0;
+    this.bodyStamp(nx,ny,os); }
+  bodyPatch(x,y){ const BD=this.bodyDXY;
+    for(const [dx,dy] of BD){ const bx=x+dx, by=y+dy;
+      if(!this.inB(bx,by)) continue;
+      const i=this.I(bx,by);
+      if(this.grid[i]===EMPTY||isGas(this.grid[i])){ this.grid[i]=HUMAN_BODY; this.health[i]=0; this.moved[i]=0; } } }
+  mHuman(x,y,i){ const g=this.grid;                           // walkers: rigid 3x6 physics
     const side=x<E_START?0:1;
+    for(const [nx,ny] of this.ns4(x,y)){ if(!this.inB(nx,ny)) continue;
+      const t=g[this.I(nx,ny)];
+      if(t===FIRE||t===LAVA||t===MAGMA||t===PLASMA||t===NAPALM||t===ANTIMATTER){ this.killHumanNear(nx,ny,true); return; }
+      if(t===ACID||(t>=NEW_BASE&&DEFBYID[t])){ this.killHumanNear(nx,ny,false); return; } }
+    this.bodyPatch(x,y);
+    const hy=y-6;
+    if(hy>=0){ for(let dx=-1;dx<=1;dx++){ const t4=g[this.I(x+dx,hy)];
+      if(t4===SAND||t4===GLASS||t4===WOOD||t4===STONE||t4===CITY||t4===PCITY){ this.killHumanAt(x,y,false); return; } } }
+    if(y+1<ROWS && this.fitShift(x,y,0,1)){ this.shiftBox(x,y,0,1); return; }
+    if(this.fitShift(x,y,1,1)){ this.shiftBox(x,y,1,1); return; }
+    if(this.fitShift(x,y,-1,1)){ this.shiftBox(x,y,-1,1); return; }
     const dir=rnd()<0.5?-1:1, nx=x+dir;
-    const inside=side===0?(nx>=1&&nx<=P_END-1):(nx>=E_START+1&&nx<=COLS-2);
-    if(inside&&rnd()<0.30){ const j2=nx+y*COLS, tj=g[j2];
-      if(tj===EMPTY||isGas(tj)) this.swap(i,j2); }
-    else if(rnd()<0.06&&y>0&&g[i-COLS]===EMPTY){ this.swap(i,i-COLS); }   // hop
+    const inside=side===0?(nx>=1&&nx<=P_END-2):(nx>=E_START+1&&nx<=COLS-3);
+    if(inside && rnd()<0.30 && this.fitShift(x,y,dir,0)) this.shiftBox(x,y,dir,0);
+    else if(rnd()<0.05 && y>7 && this.fitShift(x,y,0,-2)) this.shiftBox(x,y,0,-2);   // real jump: 2 cells up
   }
 
   ns4(x,y){ return [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]; }
@@ -442,7 +490,10 @@ class Game {
       if(gx<0||gy<0||!this.inB(gx,gy)||gy===FLOOR_Y) return;
       const now=Date.now(); if(now - (this.humanStampAt[owner]||0) < 420) return;   // ~1 walker per stamp/drag beat
       const i=this.I(gx,gy), t=g[i];
-      if((t===EMPTY||isGas(t))){ g[i]=HUMAN; this.health[i]=0; this.moved[i]=1; this.humanStampAt[owner]=now; }
+      if((t===EMPTY||isGas(t)) && gy>=6 && this.bodyFit(gx,gy)){
+        g[i]=HUMAN; this.health[i]=0; this.moved[i]=0;
+        this.bodyStamp(gx,gy,0); this.humanStampAt[owner]=now;
+      }
       return;
     }
     for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r*r)continue;

@@ -89,7 +89,7 @@
     repeating-linear-gradient(45deg, rgba(0,0,0,.16) 0 16px, transparent 16px 32px),
     linear-gradient(160deg,#06141b,#0a2531 60%,#0e3242)}
   .svgwheel{display:block;user-select:none;-webkit-tap-highlight-color:transparent}
-  #treeWheel svg.svgwheel{flex:none;height:100%;width:auto;max-width:max(97%,720px);margin:auto}
+  #treeWheel svg.svgwheel{flex:none;width:max(96%,720px);height:auto;margin:0 auto}
   .svgwheel .ring{fill:none;stroke:rgba(255,255,255,.12);stroke-dasharray:2 7;stroke-width:1}
   .svgwheel .hexC{cursor:pointer}
   .svgwheel .hexC.canBuy polygon{animation:hexpulse 1.6s infinite}
@@ -417,7 +417,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
         <span style="color:var(--muted);font-size:12px;flex:1">cheapest tier sits at the hub; buy outward — click to select · double-click to buy/upgrade</span>
         <button class="btn alt" id="treeClose" style="width:auto;padding:10px 16px">✕ CLOSE</button>
       </div>
-      <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:flex-start;padding:4px 10px"></div>
+      <div id="treeWheel" style="flex:1;min-height:0;overflow:auto;display:flex;align-items:flex-start;justify-content:flex-start;padding:96px 10px 24px"></div>
       <div id="treeFoot" style="flex:none;padding:6px 16px calc(14px + env(safe-area-inset-bottom));max-width:860px;width:100%;margin:0 auto">
         <div class="tsheet" id="toolSheet">
           <div class="tsrow">
@@ -622,7 +622,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
   }
   window.__spritePass=function(){                     // walkers only at 1 art-px = 1 cell
     if(!MOB.cnv) makeAtlas();
-    if(!window.__LUT83){ LUT[82]=[196,16,30]; LUT[83]=[150,148,148]; LUT[86]=[8,22,28]; window.__LUT83=true; }
+    if(!window.__LUT83){ LUT[82]=[196,16,30]; LUT[83]=[150,148,148]; LUT[86]=[8,22,28]; LUT[88]=[8,22,28]; window.__LUT83=true; }
     for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
       if(grid[y*COLS+x]!==86) continue;
       sctx.drawImage(MOB.cnv,0,0,3,6, x-1, Math.max(0,y-5), 3, 6);
