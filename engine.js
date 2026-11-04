@@ -157,6 +157,7 @@ class Game {
     this.grid=new Uint8Array(COLS*ROWS);
     this.health=new Float32Array(COLS*ROWS);
     this.moved=new Uint8Array(COLS*ROWS);
+    this.humanStampAt=[0,0];                    // per-player walker spawn throttles (one at a time)
     this.skyP=new Int16Array(COLS); this.skyE=new Int16Array(COLS);
     this.round=1; this.wave=1; this.scores=[0,0];
     // players: 0 = left (PCITY), 1 = right (CITY)
@@ -344,8 +345,17 @@ class Game {
     if(i%COLS<COLS-1){ const t2=g[i+1]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
     if(i>=COLS){ const t2=g[i-COLS]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
     if(i+COLS<g.length){ const t2=g[i+COLS]; if(burn(t2)){ this.dieHuman(i,true); return; } if(goo(t2)){ this.dieHuman(i,false); return; } }
+    /* burial: pinned under dense rubble (sand/glass/wood/stone/city) → crushed to blood */
+    if(i>=COLS){ const t3=g[i-COLS];
+      if(t3===SAND||t3===GLASS||t3===WOOD||t3===STONE||t3===CITY||t3===PCITY){ this.dieHuman(i,false); return; } }
     /* fall */
     if(y+1<ROWS){ const d=i+COLS, dj=g[d]; if(dj===EMPTY||isGas(dj)){ this.swap(i,d); return; } }
+    /* slope slide: solid underfoot but an open lower diagonal → tumble down */
+    if(y+1<ROWS){
+      const ds=rnd()<0.5?-1:1, dl=ds<0?i-1:i+1, dr2=ds<0?i+1:i-1;
+      if(x+ds>=0&&x+ds<COLS && g[dl+COLS]===EMPTY){ this.swap(i,dl+COLS); return; }
+      if(x-ds>=0&&x-ds<COLS && g[dr2+COLS]===EMPTY){ this.swap(i,dr2+COLS); return; }
+    }
     /* wander — clamped to their own city's bounds */
     const side=x<E_START?0:1;
     const dir=rnd()<0.5?-1:1, nx=x+dir;
@@ -426,8 +436,15 @@ class Game {
     return owner===0 ? x<P_END : x>=E_START;
   }
   place(owner,tool,gx,gy){
-    const p=this.players[owner]; if(tool!==EMPTY && !p.unlocked.has(tool)) return;
+    const p=this.players[owner]; if(tool!==EMPTY && tool!==HUMAN && !p.unlocked.has(tool)) return;
     const r=p.brush, g=this.grid;
+    if(tool===HUMAN){                                         // walkers spawn one at a time, brush size ignored
+      if(gx<0||gy<0||!this.inB(gx,gy)||gy===FLOOR_Y) return;
+      const now=Date.now(); if(now - (this.humanStampAt[owner]||0) < 420) return;   // ~1 walker per stamp/drag beat
+      const i=this.I(gx,gy), t=g[i];
+      if((t===EMPTY||isGas(t))){ g[i]=HUMAN; this.health[i]=0; this.moved[i]=1; this.humanStampAt[owner]=now; }
+      return;
+    }
     for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){ if(dx*dx+dy*dy>r*r)continue;
       const x=gx+dx,y=gy+dy; if(!this.inB(x,y)||y===FLOOR_Y)continue; const i=this.I(x,y),t=g[i];
       if(tool===EMPTY){ if(t!==CITY&&t!==PCITY&&t!==WALL){ g[i]=EMPTY; this.health[i]=0; } }

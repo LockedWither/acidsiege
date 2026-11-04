@@ -1111,7 +1111,7 @@ function dieHuman(i,burned){                                  // gore: red blood
   grid[i]=burned && Math.random()<0.7 ? ASH : BLOOD;
   health[i]=0; moved[i]=1;
 }
-function stepHuman(x,y,i){                                    // walkers: fall, wander, die around death, haul coins
+function stepHuman(x,y,i){                                    // walkers: real falling-sand physics
   /* anything lethal touching the walker ends it: fire-class burns → ash, acid/goo-class → blood */
   if(i%COLS>0){ const t2=grid[i-1];
     if(t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER){ dieHuman(i,true); return; }
@@ -1125,9 +1125,18 @@ function stepHuman(x,y,i){                                    // walkers: fall, 
   { const t2=grid[i+COLS];
     if(t2===FIRE||t2===LAVA||t2===MAGMA||t2===PLASMA||t2===NAPALM||t2===ANTIMATTER){ dieHuman(i,true); return; }
     if(t2===ACID||(t2>=NEW_BASE&&DEFBYID[t2])){ dieHuman(i,false); return; } }
-  /* fall (or land straight onto money) */
+  /* burial: pinned under dense rubble (sand/glass/wood/stone/city) → crushed to blood */
+  if(y>0){ const t3=grid[i-COLS];
+    if(t3===SAND||t3===GLASS||t3===WOOD||t3===STONE||t3===CITY||t3===PCITY){ dieHuman(i,false); return; } }
+  /* fall */
   if(y+1<ROWS){ const d=i+COLS, dj=grid[d];
     if(dj===EMPTY||isGas(dj)){ swap(i,d); return; }
+  }
+  /* slope slide: solid underfoot but an open lower diagonal → tumble down the slope */
+  if(y+1<ROWS){
+    const ds=Math.random()<0.5?-1:1, dl=ds<0?i-1:i+1, dr2=ds<0?i+1:i-1;
+    if(x+ds>=0&&x+ds<COLS && grid[dl+COLS]===EMPTY){ swap(i,dl+COLS); return; }
+    if(x-ds>=0&&x-ds<COLS && grid[dr2+COLS]===EMPTY){ swap(i,dr2+COLS); return; }
   }
   /* wander sideways — but only inside their own city's borders */
   const side=origin[i]===ORIGIN_PLAYER?1:2;
@@ -1726,9 +1735,17 @@ function render(){
    INPUT
    ============================================================ */
 let tool=ACID, down=false, px=0, py=0;
+let lastHumanT=0;                                             // walkers spawn one at a time, brush size ignored
 function place(gx,gy){
   const r=brush;
   const cost=placementCost[tool]||0;
+  if(tool===HUMAN){                                           // exactly ONE walker per stamp — no people-wallpaper
+    const now=performance.now();
+    if(now-lastHumanT<420) return;
+    const i=I(gx,gy), t=grid[i];
+    if(inB(gx,gy) && gy!==FLOOR_Y && (t===EMPTY||isGas(t))){ grid[i]=HUMAN; origin[i]=ORIGIN_PLAYER; health[i]=0; moved[i]=0; lastHumanT=now; }
+    return;
+  }
   for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
     if(dx*dx+dy*dy>r*r) continue;
     const x=gx+dx, y=gy+dy; if(!inB(x,y)||y===FLOOR_Y) continue;
