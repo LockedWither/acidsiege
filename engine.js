@@ -250,7 +250,6 @@ class Game {
       this.collapseAt=Date.now();
     }
     this.buildCities();
-    this.dropCoins(foe,100*this.wave);                       // celebratory pile on the winner's city — walkers haul it in
   }
 
   // ---- damage model (per-cell HP + flat protection minuser, overkill spills) ----

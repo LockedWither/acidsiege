@@ -122,8 +122,8 @@ class Room {
     this.timer = setInterval(()=>this.tick(), TICK_MS);
   }
   tick(){
-    this.game.step();
-    if(this.game.botSide>=0) this.game.botStep();
+    try{ this.game.step(); if(this.game.botSide>=0) this.game.botStep(); }
+    catch(e){ console.error('[sim] stepped over an error, sim continues:', e.message); }   // a single bad cell must never kill the server
     const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta() });
     for(const c of this.clients) if(c.readyState===1) c.send(msg);
     if(this.game.collapseAt && this.game.collapseAt>Date.now()-200 && !this.game.collapseSent){
