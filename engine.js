@@ -207,7 +207,7 @@ class Game {
       const nx=best+dx, ny=surf+dy; if(!this.inB(nx,ny))continue; const j=this.I(nx,ny);
       if(this.grid[j]===EMPTY||isGas(this.grid[j])) this.grid[j]=el; }
   }
-  newPlayer(){ return { coins:300, level:1, brush:2, unlocked:new Set([ACID,WATER,SAND,EMPTY,PB,PLANT,HUMAN]), ever:new Set([ACID,WATER,SAND,EMPTY,PB,PLANT,HUMAN]), upg:{} }; }
+  newPlayer(){ return { coins:300, level:1, brush:2, unlocked:new Set([ACID,WATER,SAND,EMPTY,PB,PLANT,HUMAN]), ever:new Set([ACID,WATER,SAND,EMPTY,PB,PLANT,HUMAN]), upg:{}, buffUntil:0 }; }
   I(x,y){ return y*COLS+x; }
   inB(x,y){ return x>=0&&x<COLS&&y>=0&&y<ROWS; }
 
@@ -229,7 +229,8 @@ class Game {
   hurtCity(owner){ // a cell of `owner`'s city died → opponent earns, check raze
     this.cells[owner]--; const foe=owner^1;
     const wStep=Math.floor((this.wave-1)/5)*5+1;                  // reward steps every 5 waves
-    this.players[foe].coins += coinReward(wStep)*wStep*coinLevelMult(this.players[foe].level);   // boosted by attacker's level
+    const buff=Date.now()<this.players[foe].buffUntil?2:1;    // civil collapse: 2x earnings for the minute
+    this.players[foe].coins += buff*coinReward(wStep)*wStep*coinLevelMult(this.players[foe].level);
 
     if(this.cells[owner]/this.max[owner] <= RAZE_RATIO) this.razed(owner);
   }
@@ -243,6 +244,11 @@ class Game {
     }
     this.round++; this.wave++;
     this.players.forEach(p=>p.coins += 200*this.wave);
+    if(rnd()<0.02){                                           // CIVIL COLLAPSE: 30x cash + 2x earnings for a minute, both sides
+      const pay=30*200*this.wave;
+      this.players.forEach(pp=>{ pp.coins+=pay; pp.buffUntil=Date.now()+60000; });
+      this.collapseAt=Date.now();
+    }
     this.buildCities();
     this.dropCoins(foe,100*this.wave);                       // celebratory pile on the winner's city — walkers haul it in
   }

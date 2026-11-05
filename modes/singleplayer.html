@@ -712,7 +712,7 @@ function spawnBankFly(gx,gy){
   const g2=c.getContext("2d");
   if(MOB.cnv) g2.drawImage(MOB.cnv,0,6,3,3,0,0,3,3); else { g2.fillStyle="#ffcf2c"; g2.fillRect(0,0,3,3); }
   const cvR=cvEl.getBoundingClientRect(), bR=bank.getBoundingClientRect();
-  const sx3=Math.max(12, cvR.height/ROWS*3);
+  const sx3=Math.max(22, cvR.height/ROWS*5);
   const x0=cvR.left+gx/COLS*cvR.width, y0=cvR.top+gy/ROWS*cvR.height;
   c.style.cssText=`position:fixed;left:${x0}px;top:${y0}px;width:${sx3}px;height:${sx3}px;image-rendering:pixelated;z-index:220;pointer-events:none;transition:transform .85s cubic-bezier(.3,-.45,.65,1),opacity .85s ease`;
   document.body.appendChild(c);
@@ -732,9 +732,11 @@ function advanceRaze(){                                      // a city hit 90% �
     razeBonus=Math.round(phaseEarned*2.5);                   // much bigger raze reward: 2-3x what the destruction paid
   } else if(!razeCine) nextWave();                           // classic/campaign: advance immediately
 }
+let earnBuffUntil=0, collapseFx=0;                            // civil collapse: the 2x earnings window (+ its own banner)
 function damageCity(n,gx,gy){
   const wStep=classicMode?Math.floor((wave-1)/5)*5+1:wave;   // classic: reward steps every 5 waves; new pacing: step every raze
   let gain=n*coinReward(wStep)*wStep*coinLevelMult(playerLevel)*CASH_BUFF;
+  if(performance.now()<earnBuffUntil) gain*=2;                // civil collapse: 2x for the next minute
   if(CAMPAIGN) gain*=CAMPAIGN.rmul;                                // World Conquest: empire-size coin bonus
   coins+=gain; phaseEarned+=gain; cityCells-=n; coinFlash=1;
   if(gx!==undefined) popBucketAdd(gx,gy,gain);
@@ -775,6 +777,14 @@ function botBuy(){                                           // the bot auto-buy
 }
 function botMul(t){ const u=botUpg[t]||0; return TIER_MULT[u]; }   // the bot's own weapon-tiers buff its damage
 let razeCine=0;                                              // seconds left of the raze cinematic (0 = off)
+function civilCollapse(take){                                // 2%/wave: the enemy's city implodes — 30x cash + 2x earnings a minute
+  const pay=Math.round(30*Math.max(take, 200*wave));
+  coins+=pay; earnBuffUntil=performance.now()+60000; collapseFx=2.4;
+  sfx("raze");
+  const cx=COLS*(E_START+COLS)/2/COLS|0;
+  for(let k=0;k<45;k++) spawnBankFly(cx, Math.max(6,12+(Math.random()*18|0)));   // a big flight to the bank
+}
+
 function nextWave(){
   razings++; wave++;
   if(CAMPAIGN){
@@ -784,6 +794,7 @@ function nextWave(){
   }
   enemyLevel=classicMode?Math.floor((wave-1)/5)+1:wave;      // new pacing: enemy levels up EVERY raze (classic: every 5 waves)
   coins += CAMPAIGN?200*wave:(razeBonus||Math.round(phaseEarned*2.5));   // raze reward follows the demolition take (2.5x)
+  if(!classicMode && !CAMPAIGN && Math.random()<0.02) civilCollapse(phaseEarned);   // 2% per wave: CIVIL COLLAPSE windfall
   razeBonus=0; phaseEarned=0;
   clearLoose();             // keep the player's (damaged) city — it does NOT regenerate
   buildEnemyCity();         // only the enemy city is rebuilt fresh
@@ -1819,6 +1830,19 @@ function render(){
   ctx.beginPath(); ctx.moveTo(P_END*sx,CEIL_Y*sy); ctx.lineTo(P_END*sx,FLOOR_Y*sy); ctx.stroke();  // middle divider
   ctx.restore();
 
+  // civil collapse banner: the windfall lands
+  if(collapseFx>0 && !classicMode){
+    const inA=Math.min(1,(2.4-collapseFx)/0.22), outA=Math.min(1,collapseFx/0.45);
+    ctx.save(); ctx.globalAlpha=Math.min(1,inA*outA); ctx.textAlign="center"; ctx.textBaseline="middle";
+    const big2=Math.min(cv.height*0.13, cv.width*0.085);
+    ctx.font=`400 ${Math.round(big2)}px Bungee, sans-serif`;
+    ctx.lineJoin="round"; ctx.lineWidth=big2*0.14; ctx.strokeStyle="rgba(6,20,10,.9)";
+    ctx.strokeText("CIVIL COLLAPSE!", cv.width/2, cv.height*0.30); ctx.fillStyle="#ffe98e"; ctx.fillText("CIVIL COLLAPSE!", cv.width/2, cv.height*0.30);
+    ctx.font=`800 ${Math.round(big2*0.3)}px Outfit, sans-serif`; ctx.fillStyle="#dff3ee";
+    ctx.fillText("+30x CASH + 2x EARNINGS FOR 60s", cv.width/2, cv.height*0.30+big2*0.75);
+    ctx.restore();
+  }
+
   // super-weapon FX layer (8 signature families)
   fxTickDraw(ctx,sx,sy);
 
@@ -2343,9 +2367,21 @@ function levelUpOnce(){
   if(add>0) for(let i=0;i<grid.length;i++) if(grid[i]===PCITY) health[i]=(health[i]>0?health[i]:BASE_HP[PCITY]+before)+add;
   return true;
 }
+function levelPlusFX(n){                                     // a green "+n" pops from the LEVEL UP button
+  const btn=document.getElementById("upBtn"); if(!btn||!n) return;
+  const r=btn.getBoundingClientRect();
+  const el=document.createElement("div");
+  el.style.cssText=`position:fixed;left:calc(${(r.left+r.width/2).toFixed(0)}px - 40px);top:${r.top.toFixed(0)}px;z-index:230;pointer-events:none;
+    font:800 22px Bungee,sans-serif;color:var(--toxic);text-shadow:0 2px 10px rgba(126,252,74,.7),0 1px 0 #06141b;
+    transition:transform .8s cubic-bezier(.2,.6,.3,1),opacity .8s ease;width:80px;text-align:center`;
+  el.textContent="+"+(n===1?"1 LEVEL":n+" LEVELS");
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.transform="translateY(-64px) scale(1.25)"; el.style.opacity="0"; });
+  setTimeout(()=>el.remove(), 830);
+}
 function buyLevels(n){   // n = how many to attempt (Infinity = max affordable); buys until count hit or broke
   let got=0; while(got<n && levelUpOnce()) got++;
-  if(got>0) sfx("level");
+  if(got>0){ sfx("level"); levelPlusFX(got); }
 }
 upBtn.onclick=()=>buyLevels(1);
 document.getElementById("up5").onclick=()=>buyLevels(5);
@@ -2710,6 +2746,7 @@ function loop(now){
     acc=0;
   }
   if(razeCine>0){ razeCine-=dt/1000; if(razeCine<=0){ razeCine=0; nextWave(); } }   // cinematic clock → wave advance
+  if(collapseFx>0) collapseFx=Math.max(0,collapseFx-dt/1000);
    // cinematic clock → real wave advance
   // super-weapon FX and +N popups live on SIM time — they freeze on pause, keep pace on any refresh rate
   const fxk=simOn ? Math.min(60,dt)/800 : 0;

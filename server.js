@@ -126,6 +126,10 @@ class Room {
     if(this.game.botSide>=0) this.game.botStep();
     const msg = JSON.stringify({ t:"state", grid:this.game.rleGrid(), meta:this.game.meta() });
     for(const c of this.clients) if(c.readyState===1) c.send(msg);
+    if(this.game.collapseAt && this.game.collapseAt>Date.now()-200 && !this.game.collapseSent){
+      this.game.collapseSent=true;
+      for(const c of this.clients) if(c.readyState===1) c.send(JSON.stringify({ t:"collapse" }));
+    } else if(this.game.collapseAt && this.game.collapseAt<=Date.now()-200) this.game.collapseSent=false;
     if(this.game.over) clearInterval(this.timer);   // match decided — final state already sent
   }
   resign(side){ this.game.forfeit(side); }          // the resigning side loses; opponent wins

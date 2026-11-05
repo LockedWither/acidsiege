@@ -620,6 +620,32 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
     ap(m2,1,7,"#ffe98e"); ap(m2,0,8,"#c98a08"); ap(m2,1,8,"#8a5c00"); ap(m2,2,8,"#c98a08");
     MOB.cnv=mob; window.__mpMob=MOB;
   }
+  function collapseShow(){
+    if(!document.getElementById('mpCollapse')){
+      const t2=document.createElement('div'); t2.id='mpCollapse';
+      t2.style.cssText='position:fixed;top:14vh;left:0;right:0;z-index:230;text-align:center;pointer-events:none;opacity:0';
+      t2.innerHTML='<div style="font:400 min(13vw,86px)/1 Bungee,sans-serif;color:#ffe98e;text-shadow:0 3px 16px rgba(255,190,60,.5),0 2px 0 #06141b">CIVIL COLLAPSE!</div><div style="font:800 15px Outfit,sans-serif;color:#dff3ee;text-shadow:0 2px 8px #06141b;margin-top:6px">+30x CASH + 2x EARNINGS FOR 60s</div>';
+      document.body.appendChild(t2);
+    }
+    const t2=document.getElementById('mpCollapse');
+    t2.style.transition='none'; t2.style.opacity='1'; t2.style.transform='none';
+    requestAnimationFrame(()=>{ t2.style.transition='opacity 2.2s ease .6s, transform 2.2s ease .6s'; t2.style.opacity='0'; t2.style.transform='translateY(-12px)'; });
+    for(let k=0;k<45;k++) spawnBankFly();
+    window.__mpPrevCoins=undefined;   // the flights' = rebase (the payout's = a huge gain — no diff spam)
+  }
+  function levelPlusMP(){                                     // a green "+1 LEVEL" from the button (mirrors single-player)
+    const btn=document.getElementById("upBtn"); if(!btn) return;
+    const r=btn.getBoundingClientRect();
+    const el=document.createElement("div");
+    el.style.cssText=`position:fixed;left:calc(${(r.left+r.width/2).toFixed(0)}px - 50px);top:${r.top.toFixed(0)}px;z-index:230;pointer-events:none;
+      font:800 20px Bungee,sans-serif;color:#8ef02a;text-shadow:0 2px 10px rgba(126,252,74,.7),0 1px 0 #06141b;
+      transition:transform .8s cubic-bezier(.2,.6,.3,1),opacity .8s ease;width:100px;text-align:center`;
+    el.textContent="+1 LEVEL";
+    document.body.appendChild(el);
+    requestAnimationFrame(()=>{ el.style.transform="translateY(-58px) scale(1.25)"; el.style.opacity="0"; });
+    setTimeout(()=>el.remove(), 830);
+  }
+  document.getElementById("upBtn").addEventListener("click", levelPlusMP);
   function coinCountFor(gain, bank){
     if(bank<=0) return 0;
     const pct=gain/bank;
@@ -638,7 +664,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
     g2.fillStyle="#ffcf2c"; g2.fillRect(0,0,3,3); g2.fillStyle="#ffe98e"; g2.fillRect(1,1,1,1); g2.fillStyle="#8a5c00"; g2.fillRect(1,2,1,1);
     const cvR=cvEl.getBoundingClientRect(), bR=bank.getBoundingClientRect();
     const s2=Math.max(12, cvR.height/ROWS*3);
-    const x0=cvR.left+(COLS+E_START)/2/COLS*cvR.width, y0=cvR.top+70/ROWS*cvR.height;
+    const x0=cvR.left+0.75*cvR.width, y0=cvR.top+0.45*cvR.height;   // from the enemy city's skyline, mode-agnostic
     c.style.cssText=`position:fixed;left:${x0}px;top:${y0}px;width:${s2}px;height:${s2}px;image-rendering:pixelated;z-index:220;pointer-events:none;transition:transform .85s cubic-bezier(.3,-.45,.65,1),opacity .85s ease`;
     document.body.appendChild(c);
     requestAnimationFrame(()=>{ c.style.transform=`translate(${bR.left+bR.width/2-x0}px,${bR.top+bR.height/2-y0}px) scale(.55)`; c.style.opacity="0"; });
@@ -669,6 +695,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
   handle=function(m){ if(m.t==="start"&&m.branches){ branches=m.branches; BRANCH_OF={};
       m.branches.forEach((b,bi)=>b.tiers.forEach((t2,ti)=>{ if(BRANCH_OF[t2]===undefined) BRANCH_OF[t2]={b:bi,i:ti}; }));
       branches=m.branches; }
+    if(m.t==="collapse") collapseShow();
     prevHandle(m); };
   const prevRender=render;
   render=function(){ if(started&&grid){ window.__spritePass(); } prevRender();
