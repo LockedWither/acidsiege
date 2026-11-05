@@ -708,11 +708,11 @@ function coinCountFor(gain, bank){
 function spawnBankFly(gx,gy){
   const bank=document.getElementById("coinN"), cvEl=document.getElementById("cv");
   if(!bank||!cvEl) return;
-  const c=document.createElement("canvas"); c.width=3; c.height=3;
-  const g2=c.getContext("2d");
-  if(MOB.cnv) g2.drawImage(MOB.cnv,0,6,3,3,0,0,3,3); else { g2.fillStyle="#ffcf2c"; g2.fillRect(0,0,3,3); }
+  if(!COINART.cnv) makeCoinArt();
+  const c=document.createElement("canvas"); c.width=10; c.height=10;
+  c.getContext("2d").drawImage(COINART.cnv,0,0,10,10,0,0,10,10);
   const cvR=cvEl.getBoundingClientRect(), bR=bank.getBoundingClientRect();
-  const sx3=Math.max(22, cvR.height/ROWS*5);
+  const sx3=Math.max(30, cvR.height/ROWS*6);
   const x0=cvR.left+gx/COLS*cvR.width, y0=cvR.top+gy/ROWS*cvR.height;
   c.style.cssText=`position:fixed;left:${x0}px;top:${y0}px;width:${sx3}px;height:${sx3}px;image-rendering:pixelated;z-index:220;pointer-events:none;transition:transform .85s cubic-bezier(.3,-.45,.65,1),opacity .85s ease`;
   document.body.appendChild(c);
@@ -1553,7 +1553,8 @@ function makeAtlas(){
   keys.forEach((k,i)=>{ paintBombTile(g,i,BOMB_PAT[k]); ATLAS.tiles[k]=i; });
   ATLAS.cnv=cnv;
   const mob=document.createElement("canvas"); mob.width=MOB.W; mob.height=MOB.H;
-  paintWalkerTile(mob.getContext("2d"),0); paintCoin3(mob.getContext("2d"),6);
+  paintWalkerTile(mob.getContext("2d"),0);
+  if(!COINART.cnv) makeCoinArt();
   MOB.cnv=mob;
 }
 function apx(g,x2,y2,col){ g.fillStyle=col; g.fillRect(x2,y2,1,1); }
@@ -1585,10 +1586,24 @@ function paintWalkerTile(g,y){                            // 3x6 walker, one art
   apx(g,0,y+4,PA); apx(g,1,y+4,PA); apx(g,2,y+4,PA);
   apx(g,0,y+5,PA); apx(g,2,y+5,PA);
 }
-function paintCoin3(g,y){                                 // 3x3 cartoon coin, chunky
-  apx(g,1,y+0,"#ffcf2c"); apx(g,0,y+1,"#ffcf2c"); apx(g,2,y+1,"#ffcf2c");
-  apx(g,1,y+1,"#ffe98e");
-  apx(g,0,y+2,"#c98a08"); apx(g,1,y+2,"#8a5c00"); apx(g,2,y+2,"#c98a08");
+const COINART={cnv:null};
+function makeCoinArt(){                                   // a 10x10 cartoon coin: outline, rim band, face, shine, money mark
+  const cnv=document.createElement("canvas"); cnv.width=10; cnv.height=10;
+  const g=cnv.getContext("2d");
+  const put=(x,y,c)=>{ g.fillStyle=c; g.fillRect(x,y,1,1); };
+  for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+    const r=Math.hypot(x-4.5,y-4.5);
+    let c=null;
+    if(r<4.95) c="#6d4400";                               // dark outline
+    if(r<4.1) c="#c98a08";                                // rim band
+    if(r<3.25){ c="#ffc61a";                              // face
+      if(Math.hypot(x-6.7,y-2.5)<2.35) c="#ffe98e";       // top-right shine
+      if(Math.hypot(x-2.9,y-6.6)<1.85) c="#e8a90c"; }     // bottom-left shade
+    if(c) put(x,y,c);
+  }
+  put(4,3,"#8a5c00"); put(5,3,"#8a5c00"); put(4,4,"#8a5c00"); put(5,5,"#8a5c00");
+  put(4,5,"#8a5c00"); put(5,6,"#8a5c00"); put(4,6,"#8a5c00");            // the mark
+  COINART.cnv=cnv;
 }
 function spritePass(){                                    // WALKERS ONLY at 1 art-px = 1 cell (bombs stay small)
   if(!MOB.cnv) makeAtlas();
