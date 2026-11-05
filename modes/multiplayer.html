@@ -618,7 +618,31 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
     ap(m2,0,5,PA); ap(m2,2,5,PA);
     ap(m2,1,6,"#ffcf2c"); ap(m2,0,7,"#ffcf2c"); ap(m2,2,7,"#ffcf2c");
     ap(m2,1,7,"#ffe98e"); ap(m2,0,8,"#c98a08"); ap(m2,1,8,"#8a5c00"); ap(m2,2,8,"#c98a08");
-    MOB.cnv=mob;
+    MOB.cnv=mob; window.__mpMob=MOB;
+  }
+  function coinCountFor(gain, bank){
+    if(bank<=0) return 0;
+    const pct=gain/bank;
+    if(pct<=0.05) return 2;
+    if(pct<=0.20) return 5;
+    if(pct<=0.60) return 10;
+    if(pct<=1) return 15;
+    if(pct<=2) return 25;
+    return 45;
+  }
+  function spawnBankFly(){
+    const bank=document.getElementById("cYou"), cvEl=document.getElementById("cv");
+    if(!bank||!cvEl) return;
+    const c=document.createElement("canvas"); c.width=3; c.height=3;
+    const g2=c.getContext("2d");
+    g2.fillStyle="#ffcf2c"; g2.fillRect(0,0,3,3); g2.fillStyle="#ffe98e"; g2.fillRect(1,1,1,1); g2.fillStyle="#8a5c00"; g2.fillRect(1,2,1,1);
+    const cvR=cvEl.getBoundingClientRect(), bR=bank.getBoundingClientRect();
+    const s2=Math.max(12, cvR.height/ROWS*3);
+    const x0=cvR.left+(COLS+E_START)/2/COLS*cvR.width, y0=cvR.top+70/ROWS*cvR.height;
+    c.style.cssText=`position:fixed;left:${x0}px;top:${y0}px;width:${s2}px;height:${s2}px;image-rendering:pixelated;z-index:220;pointer-events:none;transition:transform .85s cubic-bezier(.3,-.45,.65,1),opacity .85s ease`;
+    document.body.appendChild(c);
+    requestAnimationFrame(()=>{ c.style.transform=`translate(${bR.left+bR.width/2-x0}px,${bR.top+bR.height/2-y0}px) scale(.55)`; c.style.opacity="0"; });
+    setTimeout(()=>{ bank.classList.remove("pulse"); void bank.offsetWidth; bank.classList.add("pulse"); c.remove(); }, 880);
   }
   window.__spritePass=function(){                     // walkers only at 1 art-px = 1 cell
     if(!MOB.cnv) makeAtlas();
@@ -630,6 +654,14 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
   };
   const prevHud=hud;
   hud=function(meta){ const me=meta.players[mySide]; everSet=new Set(me.ever||[]); meCoins=Math.floor(me.coins); window.__mecoins=meCoins;
+    /* coin flights: wallet went UP since the last network tick → pixel coins fly to your bank */
+    if(meCoins>window.__mpPrevCoins && meCoins>0){
+      const gain=meCoins-window.__mpPrevCoins, now2=performance.now();
+      if(now2-(window.__mpFlightT||0) >= 600 && window.__mpPrevCoins!==undefined){
+        window.__mpFlightT=now2;
+        coinCountFor(gain, meCoins-gain); spawnBankFly(); }
+    }
+    window.__mpPrevCoins=meCoins;
     if(!Object.keys(PAL_BYT).length&&palette.length){ PAL_BYT={}; palette.forEach(p2=>{ PAL_BYT[p2.t]=p2; }); }
     prevHud(meta);
     if(treeOpen){ if(!hexEls.length) buildTree(); refreshWheel(); renderSheet(); } };

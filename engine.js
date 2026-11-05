@@ -142,6 +142,8 @@ function gateOKT(t,ever){ const pos=BRANCH_OF[t]; if(!pos||FREE0.has(t)||pos.i==
 
 const brushCosts=[200,500,1000,2500,6000,14000,32000,70000,160000,360000,800000,1800000,4000000,9000000,20000000,45000000,100000000,220000000,480000000,1050000000,2300000000,5000000000,11000000000,24000000000,52000000000,110000000000,240000000000,520000000000,1100000000000];  // 29 tiers → brush up to 30
 function upCost(L){ return Math.round(400*Math.pow(L,1.6)); }
+const BOMB_PWR={[TNT]:25,[NUKE]:120,[HBOMB]:350};   // bomb rough power for ranking (DMG only holds liquids)
+function powerOf(t){ if(DMG[t]!==undefined) return DMG[t]; if(BOMB_PWR[t]!==undefined) return BOMB_PWR[t]; if(DEFBYID[t]) return DEFBYID[t].dmg; return 0.3; }
 const TIER_MULT=[1,1.3,1.7,2.2];   // weapon upgrade damage tiers I/II/III
 const rnd=Math.random;   // authoritative single sim — no determinism needed
 
@@ -170,13 +172,28 @@ class Game {
   forfeit(side){ if(this.over) return; this.over=true; this.winner = side^1; }   // resign → opponent wins
   // ---- extreme bot (drives one side in 2v1bot mode) ----
   botInterval(){ return Math.max(5, 24 - this.wave*3); }   // very aggressive, speeds up each wave
-  botPick(){ const r=rnd(), w=this.wave;
-    if(w>=4 && r<0.16) return ANTIMATTER;
-    if(w>=3 && r<0.40) return PLASMA;
-    if(w>=2 && r<0.62) return MAGMA;
-    if(r<0.82) return LAVA; return ACID; }
+  botPick(){ const p=this.players[this.botSide], r=rnd(), w=this.wave;   // only what the bot actually owns
+    if(w>=4 && r<0.16 && p.unlocked.has(ANTIMATTER)) return ANTIMATTER;
+    if(w>=3 && r<0.40 && p.unlocked.has(PLASMA)) return PLASMA;
+    if(w>=2 && r<0.62 && p.unlocked.has(MAGMA)) return MAGMA;
+    if(w>=1 && r<0.82 && p.unlocked.has(LAVA)) return LAVA;
+    const owned=[...p.unlocked].filter(t=>t!==EMPTY&&powerOf(t)>1).sort((a,b)=>powerOf(a)-powerOf(b));
+    return owned[owned.length-1]||ACID; }
+  botShop(){                                                  // the bot's wallet: unlock the next chain weapon; level up with a cushion
+    const p=this.players[this.botSide];
+    if(p.coins>=this.botStartCash()){                          // richer than start: invest — weapon unlock first
+      for(const d of NEWDEFS){ const t=d.id;
+        if(p.unlocked.has(t)||!gateOKT(t,p.ever)) continue;
+        if(p.coins>=d.cost){ p.coins-=d.cost; p.unlocked.add(t); p.ever.add(t); break; }
+      }
+      if(p.coins>=upCost(p.level)*3) this.upgrade(this.botSide, "level");   // keep a cushion; levels make its city tough
+    }
+  }
+  botStartCash(){ const w2=this.maxWaves;                      // easy/medium/hard/extreme ≈ 0/100/1000/5000 by wave length
+    if(w2===Infinity) return 5000; if(w2>=50) return 1000; if(w2>=20) return 100; return 0; }
   botStep(){
     if(this.botSide<0 || this.over) return;
+    this.botShop();                                           // the bot's own cash: buys weapons, levels up
     if(++this.botTimer < this.botInterval()) return;
     this.botTimer=0;
     const foe=this.botSide^1;                               // attack the human team's city

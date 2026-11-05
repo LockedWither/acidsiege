@@ -114,6 +114,7 @@ class Room {
     stats.matches++; console.log(`[match #${stats.matches}] ${mode} ${waves||"6"}w — ${stats.online} online`);
     this.game = new Game(); this.game.botSide = cfg.bot;
     this.game.maxWaves = (waves===0||waves==="inf") ? Infinity : (+waves||6);   // 6/20/50/100/∞
+    if(cfg.bot>=0) this.game.players[cfg.bot].coins = this.game.botStartCash();   // the bot's own wallet, seeded by match length
     this.clients = clients;
     clients.forEach((c,i)=>{ c.room=this; c.side=cfg.sides[i];
       c.send(JSON.stringify({ t:"start", side:c.side, mode, waves:(this.game.maxWaves===Infinity?0:this.game.maxWaves), cols:COLS, rows:ROWS,
