@@ -804,8 +804,7 @@ function loseGame(){
   if(gameOver) return;                                      // only fire once
   gameOver=true; running=false;                             // freeze the sim
   if(CAMPAIGN){ campaignEnd(false); return; }              // campaign defeat → report back to the map
-  if(reviveCount()>0) showRevivePrompt();                   // offer a revive (1 token, regen 1 / 20 min)
-  else { clearSave(); showDefeat(); }                       // no revive → run is over, drop the save
+  clearSave(); showDefeat();                                // runs are final — no revive tokens
 }
 function campaignEnd(win, retreat){
   gameOver=true; running=false; sfx(win?"coin":"lose");
@@ -2643,16 +2642,6 @@ $("sbBrushSet").onclick=()=>{ const n=Math.max(1,Math.min(30,Math.floor(+$("sbBr
 $("sbUnlock").onclick=()=>{ PALETTE.forEach(p=>{ if(p.t!==EMPTY){ unlocked.add(p.t); everUnlocked.add(p.t); } }); renderTools(); };
 $("sbRebuild").onclick=()=>{ buildCities(); };
 
-/* ---- revive tokens (1 regenerates every 20 min, banked up to 3) ---- */
-const REVIVE_MS=20*60*1000, REVIVE_CAP=3;
-function reviveState(){ let s=null; try{ s=JSON.parse(localStorage.getItem("as_revive")); }catch{}
-  if(!s||typeof s.count!=="number") s={count:REVIVE_CAP, last:Date.now()};
-  const g=Math.floor((Date.now()-s.last)/REVIVE_MS);
-  if(g>0){ s.count=Math.min(REVIVE_CAP, s.count+g); s.last = s.count>=REVIVE_CAP ? Date.now() : s.last+g*REVIVE_MS; }
-  localStorage.setItem("as_revive", JSON.stringify(s)); return s; }
-function reviveCount(){ return reviveState().count; }
-function spendRevive(){ const s=reviveState(); if(s.count<=0) return false; if(s.count>=REVIVE_CAP) s.last=Date.now(); s.count--; localStorage.setItem("as_revive",JSON.stringify(s)); return true; }
-
 /* ---- server save of the last (non-death) game ---- */
 const CLIENT_ID=(()=>{ let id=localStorage.getItem("as_id"); if(!id){ id="p"+Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("as_id",id); } return id; })();
 function saveGame(){ if(gameOver||sandbox||CAMPAIGN) return; const state={coins,playerLevel,wave,razings,brushLevel,unlocked:[...unlocked],ever:[...everUnlocked]};   // World Conquest battles must NOT touch the single-player save
@@ -2668,26 +2657,6 @@ function applySave(s,force){ if(!s||CAMPAIGN||(running&&!force)) return;       /
 fetch("/load?id="+CLIENT_ID).then(r=>r.json()).then(applySave).catch(()=>{});
 setInterval(()=>{ if(running&&!gameOver) saveGame(); }, 30000);              // periodic checkpoint
 
-/* ---- revive overlay ---- */
-const reviveEl=document.createElement("div");
-reviveEl.style.cssText="position:fixed;inset:0;z-index:160;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:20px;background:rgba(4,12,16,.86);backdrop-filter:blur(5px)";
-reviveEl.innerHTML=`<div style="font-family:Bungee,Impact,sans-serif;font-size:clamp(30px,8vw,56px);color:#ff5347;text-shadow:0 0 24px rgba(255,83,71,.4)">CITY RAZED</div>
-  <div id="revInfo" style="color:#7fa6a0;font-size:15px;max-width:420px"></div>
-  <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">
-    <button id="revYes" style="font-family:Bungee,Impact,sans-serif;font-size:18px;padding:14px 26px;border:none;border-radius:14px;cursor:pointer;color:#06141b;background:linear-gradient(180deg,#8ef02a,#5fae1f)">REVIVE — 1 ⟳</button>
-    <button id="revNo" style="font-family:Bungee,Impact,sans-serif;font-size:16px;padding:14px 22px;border:none;border-radius:14px;cursor:pointer;color:#dff3ee;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)">GIVE UP</button>
-  </div>`;
-document.body.appendChild(reviveEl);
-function showRevivePrompt(){ document.getElementById("revInfo").textContent="Revive your city and keep going? You have "+reviveCount()+" revive token(s). One regenerates every 20 minutes."; reviveEl.style.display="flex"; }
-document.getElementById("revYes").onclick=()=>{
-  reviveEl.style.display="none";
-  if(spendRevive()){
-    for(let i=0;i<grid.length;i++){ const t=grid[i]; if(t!==WALL&&t!==CITY&&t!==PCITY){ grid[i]=EMPTY; health[i]=0; } }  // clear incoming fire
-    rebuildPCity(); gameOver=false; running=true; saveGame(); sfx("revive");
-  } else { clearSave(); showDefeat(); }
-};
-document.getElementById("revNo").onclick=()=>{ reviveEl.style.display="none"; clearSave(); showDefeat(); };
-
 /* ---- audio + juice ---- */
 let actx=null, muted=localStorage.getItem("as_mute")==="1";
 function actxGet(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch{} } if(actx&&actx.state==="suspended") actx.resume(); return actx; }
@@ -2701,7 +2670,6 @@ function sfx(name){ if(muted)return;
   else if(name==="unlock"){ tone(660,0.06,"triangle",0.05); setTimeout(()=>tone(990,0.1,"triangle",0.05),70); }
   else if(name==="lose"){ tone(330,0.25,"sawtooth",0.06); setTimeout(()=>tone(150,0.5,"sawtooth",0.06),120); }
   else if(name==="raze"){ tone(72,0.9,"sine",0.22); setTimeout(()=>tone(58,1.2,"sine",0.2),260); noiseBurst(0.7,0.14,220); }
-  else if(name==="revive"){ tone(440,0.1,"square",0.05); setTimeout(()=>tone(660,0.1,"square",0.05),90); setTimeout(()=>tone(990,0.18,"square",0.05),180); }
   else if(name==="place"){ tone(190+Math.random()*70,0.03,"sine",0.025); }
 }
 let shakeT=0, lastBoom=0;

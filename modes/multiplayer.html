@@ -174,7 +174,13 @@
       <button class="btn" id="upBtn">LEVEL UP — <span id="upCost">400</span></button>
       <button class="btn alt" id="brBtn">BRUSH — <span id="brCost">200</span></button>
     </div>
-    <div class="card"><h2>Chemicals</h2><button class="btn" id="treeBtn" style="border-radius:9px;padding:8px;font-weight:800;font-size:12px;color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic2));margin-bottom:8px;cursor:pointer">ARSENAL TREE</button><button class="btn alt" id="sellBtn" style="width:100%;border:none;border-radius:9px;padding:8px;font-weight:800;font-size:12px;color:#dff3ee;background:rgba(255,255,255,.06);border:1px solid var(--edge);margin-bottom:8px;cursor:pointer">SELL MODE: OFF</button><div class="tools" id="tools"></div></div>
+    <div class="card"><h2>Chemicals</h2>
+      <div id="toolChip" style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.04);border:1px solid var(--edge);border-radius:9px;padding:7px 9px;margin-bottom:7px">
+        <span id="tcDot" style="width:12px;height:12px;border-radius:4px;background:#8ef02a;flex:none"></span>
+        <b id="tcName" style="font-size:12px">Acid</b><span id="tcTier" style="font-size:10px;color:var(--toxic);font-weight:800"></span>
+      </div>
+      <button class="btn" id="treeBtn" style="border-radius:9px;padding:9px;font-weight:800;font-size:12px;color:#06141b;background:linear-gradient(180deg,var(--toxic),var(--toxic2));cursor:pointer">ARSENAL TREE</button>
+      <div id="toolHint" style="font-size:10px;color:var(--muted);margin-top:7px">click to select · double-click to buy/upgrade · sell from the sheet</div></div>
     <div class="card"><h2>Chat</h2><div class="chatlog" id="chatlog"></div>
       <div class="chatin"><input id="chatbox" maxlength="140" placeholder="Say something…"><button id="chatsend">Send</button></div></div>
   </aside>
@@ -244,7 +250,7 @@ function connect(mode){
 }
 function handle(m){
   if(m.t==="waiting"){ status("Waiting for players… "+(m.have||1)+"/"+(m.need||2)+" — open this URL in more tabs/devices"); }
-  else if(m.t==="start"){ COLS=m.cols; ROWS=m.rows; mySide=m.side; palette=m.palette; matchMaxWaves=m.waves||0; scored=false; initBuffers(); applyColors(); buildTools(); startGame(); }
+  else if(m.t==="start"){ COLS=m.cols; ROWS=m.rows; mySide=m.side; palette=m.palette; matchMaxWaves=m.waves||0; scored=false; initBuffers(); applyColors(); startGame(); }
   else if(m.t==="state"){ unpackRLE(m.grid); render(); hud(m.meta); }
   else if(m.t==="chat"){ addChat(m.from, m.text); }
   else if(m.t==="opponentLeft"){ status("A player left — match ended."); addChat("system","A player disconnected — match ended."); }
@@ -320,7 +326,7 @@ function hud(meta){
   document.getElementById("brCost").textContent=me.brushCost?fmtCoin(me.brushCost):"MAX";
   document.getElementById("upBtn").disabled=me.coins<me.upCost;
   document.getElementById("brBtn").disabled=me.brushCost==null||me.coins<me.brushCost;
-  unlocked=new Set(me.unlocked); refreshToolLocks(me);
+  unlocked=new Set(me.unlocked);
   if(meta.over && !gameOver){ gameOver=true; showResult(meta); }
 }
 function showResult(meta){
@@ -342,43 +348,7 @@ document.getElementById("upBtn").onclick=()=>send({t:"upgrade",what:"level"});
 document.getElementById("brBtn").onclick=()=>send({t:"upgrade",what:"brush"});
 
 // ---- tools ----
-const toolsEl=document.getElementById("tools");
 let sellMode=false;
-function buildTools(){ toolsEl.innerHTML=""; palette.forEach(p=>{
-    const el=document.createElement("div"); el.dataset.t=p.t; el.className="tool"; el.style.display="flex"; el.style.alignItems="center"; el.style.gap="6px";
-    const c=curColRGB(p);
-    el.innerHTML=`<span class="dot" style="background:rgb(${c[0]},${c[1]},${c[2]})"></span><span class="nm" style="flex:1">${p.nm} <b class="tier" style="color:var(--toxic)"></b></span><span class="cost"></span>`;
-    el.onclick=()=>{ const locked=p.cost>0&&!unlocked.has(p.t);
-      if(sellMode && p.cost>0 && unlocked.has(p.t)){ send({t:"sell",tool:p.t}); return; }
-      if(locked) send({t:"unlock",tool:p.t}); tool=p.t; markSel(); if(!locked) closeDrawer(); };
-    if(p.t!==0){
-      const ctr=document.createElement("span"); ctr.style.cssText="display:flex;gap:4px;align-items:center;flex:none";
-      const ci=document.createElement("input"); ci.type="color"; ci.value=rgbToHex(c); ci.title="Colour";
-      ci.style.cssText="width:20px;height:20px;border:none;background:none;padding:0;cursor:pointer";
-      ci.onclick=e=>e.stopPropagation();
-      ci.oninput=e=>{ skin[p.t]=hexToRgb(e.target.value); try{localStorage.setItem("as_skins",JSON.stringify(skin));}catch{} applyColors(); el.querySelector(".dot").style.background=e.target.value; };
-      ctr.appendChild(ci);
-      if((p.cost>0)|| p.t===3 || p.t===4 || p.t===2){   // damaging weapons get an upgrade button
-        const ub=document.createElement("button"); ub.className="ubtn"; ub.dataset.up="1";
-        ub.style.cssText="font-size:9px;padding:3px 5px;border-radius:6px;border:1px solid var(--edge);background:rgba(255,255,255,.06);color:#dff3ee;cursor:pointer;white-space:nowrap";
-        ub.onclick=e=>{ e.stopPropagation(); send({t:"upgrade",what:"weapon",tool:p.t}); };
-        ctr.appendChild(ub);
-      }
-      el.appendChild(ctr);
-    }
-    toolsEl.appendChild(el);
-  }); markSel(); }
-function markSel(){ [...toolsEl.children].forEach(el=>el.classList.toggle("sel",+el.dataset.t===tool)); }
-function refreshToolLocks(me){ meUpg=me.upg||{}; [...toolsEl.children].forEach(el=>{ const t=+el.dataset.t; const p=palette.find(q=>q.t===t); if(!p) return;
-    const locked=p.cost>0&&!unlocked.has(t); el.classList.toggle("locked",locked);
-    const sellable=sellMode&&p.cost>0&&unlocked.has(t);
-    el.querySelector(".cost").textContent = locked?fmtCoin(p.cost)+"c" : sellable?("+"+fmtCoin(Math.round(p.cost))+"c") : "";
-    const tier=meUpg[t]||0; const tb=el.querySelector(".tier"); if(tb) tb.textContent=tier?TIER_NAME[tier]:"";
-    const ub=el.querySelector('[data-up]'); if(ub){ if(tier>=3){ ub.textContent="MAX"; ub.disabled=true; }
-      else { const uc=upgCostMP(p); ub.textContent="⬆"+fmtCoin(uc); ub.disabled=locked||me.coins<uc; } }
-  }); }
-document.getElementById("sellBtn").onclick=()=>{ sellMode=!sellMode; document.getElementById("sellBtn").textContent="SELL MODE: "+(sellMode?"ON (tap to refund 100%)":"OFF"); };
-
 // ---- input (send placements, server uses your brush) ----
 let down=false, gx=0, gy=0, sendTimer=0;
 function toGrid(e){ const r=cv.getBoundingClientRect(); const cx=(e.touches?e.touches[0].clientX:e.clientX)-r.left, cy=(e.touches?e.touches[0].clientY:e.clientY)-r.top;
@@ -522,6 +492,13 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
       h.title.textContent=s.title;
     }
   }
+  function updateChip(){
+    const p=PAL_BYT[tool]; if(!p) return;
+    const c=curColRGB(p), dot=document.getElementById('tcDot'), nm=document.getElementById('tcName'), tr=document.getElementById('tcTier');
+    if(!dot||!nm) return;
+    dot.style.background=`rgb(${c[0]},${c[1]},${c[2]})`;
+    nm.textContent=p.nm; tr.textContent=(meUpg[tool]||0)?TIER_NAME[meUpg[tool]||0]:"";
+  }
   function renderSheet(){
     const t=sheetTool, p=PAL_BYT[t]; if(!p) return;
     const c=curColRGB(p), ownedNow=mpOwned(t), tier=meUpg[t]||0;
@@ -535,7 +512,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
       tsUp.disabled=tier>=3||meCoins<uc; }
     tsBuy.textContent=ownedNow?(t===tool?"EQUIPPED":"EQUIP"):(mpGateOK(t)?`UNLOCK — ${fmtCoin(p.cost)}c`:"GATED");
     tsBuy.disabled=ownedNow?(t===tool):(!mpGateOK(t)||meCoins<p.cost);
-    tsSell.style.display=(sellMode&&p.cost>0&&unlocked.has(t))?"":"none";
+    tsSell.style.display=(p.cost>0&&unlocked.has(t))?"":"none";   // sell = a 100% refund: safe to always offer
     if(tsSell.style.display==="") tsSell.textContent=`SELL +${fmtCoin(Math.round(p.cost))}c`;
     tsCol.value=rgbToHex(c);
     tcN.textContent=fmtCoin(meCoins);
@@ -546,13 +523,13 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
   }
   function tapTool(t){
     const p=PAL_BYT[t]; if(!p) return;
-    if(sellMode&&p.cost>0&&unlocked.has(t)){ send({t:"sell",tool:t}); }
-    else if(mpOwned(t)){ tool=t; markSel(); }
+    if(!sellMode&&p.cost>0&&unlocked.has(t)&&t===sheetTool){ send({t:"sell",tool:t}); return; }   // second tap on the sheet tool = refund
+    else if(mpOwned(t)){ tool=t; }
     sheetTool=t; renderSheet();
   }
   function sheetAction(t2){
     const t=t2===undefined?sheetTool:t2, p=PAL_BYT[t]; if(!p) return;
-    if(mpOwned(t)){ tool=t; markSel(); renderSheet(); return; }
+    if(mpOwned(t)){ tool=t; sheetTool=t; renderSheet(); return; }
     if(!mpGateOK(t)){ tsMsg.textContent="Gated — unlock the previous tier first"; return; }
     send({t:"unlock",tool:t});
   }
@@ -568,7 +545,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
   addEventListener("keydown",e=>{ if(e.key==="Escape"&&treeOpen) closeTree(); });
   tsBuy.onclick=()=>sheetAction();
   tsUp.onclick=()=>upgradeTool(sheetTool);
-  tsSell.onclick=()=>{ if(!sellMode) return; tapTool(sheetTool); };
+  tsSell.onclick=()=>{ send({t:'sell',tool:sheetTool}); };
   tsCol.oninput=e=>{ skin[sheetTool]=hexToRgb(e.target.value); try{localStorage.setItem("as_skins",JSON.stringify(skin));}catch{} applyColors(); renderSheet(); };
   document.getElementById("treeBtn").addEventListener("click",openTree);
   window.__mecoins=0;
@@ -701,6 +678,7 @@ chatbox.addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
     window.__mpPrevCoins=meCoins;
     if(!Object.keys(PAL_BYT).length&&palette.length){ PAL_BYT={}; palette.forEach(p2=>{ PAL_BYT[p2.t]=p2; }); }
     prevHud(meta);
+    try{ updateChip(); }catch{}
     if(treeOpen){ if(!hexEls.length) buildTree(); refreshWheel(); renderSheet(); } };
   const prevHandle=handle;
   handle=function(m){ if(m.t==="start"&&m.branches){ branches=m.branches; BRANCH_OF={};
