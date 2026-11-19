@@ -55,9 +55,6 @@ const ROUTES = {                              // clean URLs → files
   "/online":      "/modes/multiplayer.html",
   "/world":       "/modes/world.html",
   "/conquer":     "/modes/world.html",
-  "/terms":       "/terms.html",
-  "/privacy":     "/privacy.html",
-  "/license":     "/license.html",
 };
 const server = http.createServer((req,res)=>{
   let url = req.url.split("?")[0];
